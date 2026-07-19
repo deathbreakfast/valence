@@ -29,7 +29,7 @@ path = "src/bin/valence-generate.rs"
 
 [dev-dependencies]
 insta = "1"
-valence = { workspace = true, features = ["mem"] }
+valence = { path = "../valence", package = "uf-valence", features = ["mem"] }
 
 [lints]
 workspace = true

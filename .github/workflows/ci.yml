@@ -30,6 +30,31 @@ jobs:
         run: cargo fmt --all -- --check
       - name: Clippy
         run: cargo clippy --workspace --all-targets -- -D warnings -A missing-docs
+      - name: Deny rustc warnings (isolated crates)
+        # Workspace feature unification can hide dead_code that only appears on
+        # single-crate builds (cargo publish / package verify). Match that surface.
+        run: |
+          export RUSTFLAGS="-D warnings"
+          for pkg in \
+            uf-valence-core \
+            uf-valence-schema-dsl \
+            uf-valence-telemetry \
+            uf-valence-macros \
+            uf-valence-backend-sql \
+            uf-valence-backend-mem \
+            uf-valence-codegen \
+            uf-valence
+          do
+            echo "==> cargo check -p $pkg"
+            cargo check -p "$pkg"
+          done
+          echo "==> uf-valence-core feature slices"
+          cargo check -p uf-valence-core --no-default-features --features instrumentation
+          cargo check -p uf-valence-core --no-default-features --features instrumentation,compiler-sql
+          cargo check -p uf-valence-core --no-default-features --features instrumentation,compiler-surreal
+          cargo check -p uf-valence-core --no-default-features --features instrumentation,compiler-mongodb
+          cargo check -p uf-valence-core --no-default-features --features instrumentation,compiler-redis
+          cargo check -p uf-valence-core --no-default-features --features instrumentation,compiler-indradb
       - name: Reclaim disk after clippy
         run: |
           # Clippy and tests share CARGO_TARGET_DIR; drop intermediates before the full test build.

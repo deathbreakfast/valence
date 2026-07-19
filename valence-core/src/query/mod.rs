@@ -2,12 +2,18 @@
 //!
 //! Entry type: [`QueryCore`]. Predicate helpers include [`StringPredicate`] and [`IntPredicate`].
 mod predicates;
+#[cfg(any(
+    feature = "compiler-sql",
+    feature = "compiler-mongodb",
+    feature = "compiler-redis",
+    feature = "compiler-indradb",
+))]
 mod sql_document;
 mod sql_helpers;
 mod sql_row_filter;
 mod types;
 
-#[cfg(test)]
+#[cfg(all(test, feature = "compiler-surreal"))]
 mod sql_emit_tests;
 
 pub use predicates::{

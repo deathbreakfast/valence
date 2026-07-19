@@ -1,10 +1,4 @@
 impl QueryCore {
-    fn next_param_key(param_counter: &mut usize) -> String {
-        let key = format!("param_{}", *param_counter);
-        *param_counter += 1;
-        key
-    }
-
     fn int_clause_sql(
         field: &str,
         pred: &IntPredicate,

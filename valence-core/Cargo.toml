@@ -44,7 +44,7 @@ regex = "1"
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
-valence-backend-mem = { workspace = true }
+valence-backend-mem = { path = "../valence-backend-mem", package = "uf-valence-backend-mem" }
 
 [lints]
 workspace = true

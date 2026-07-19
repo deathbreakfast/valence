@@ -50,9 +50,9 @@ valence-backend-postgres = { path = "valence-backend-postgres", package = "uf-va
 valence-backend-mongodb = { path = "valence-backend-mongodb", package = "uf-valence-backend-mongodb", version = "0.1.1" }
 valence-backend-indradb = { path = "valence-backend-indradb", package = "uf-valence-backend-indradb", version = "0.1.1" }
 valence-backend-redis = { path = "valence-backend-redis", package = "uf-valence-backend-redis", version = "0.1.1" }
-valence-backend-surreal = { path = "valence-backend-surreal", package = "uf-valence-backend-surreal", version = "0.1.1" }
+valence-backend-surreal = { path = "valence-backend-surreal", package = "uf-valence-backend-surreal", version = "0.1.1", default-features = false }
 valence-codegen = { path = "valence-codegen", package = "uf-valence-codegen", version = "0.1.1" }
-valence = { path = "valence", package = "uf-valence", version = "0.1.1" }
+valence = { path = "valence", package = "uf-valence", version = "0.1.1", default-features = false }
 surrealdb = { version = "3.1", default-features = false }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync"] }
 serde = { version = "1", features = ["derive"] }

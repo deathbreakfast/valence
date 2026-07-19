@@ -1,7 +1,14 @@
-//! String parsing and SurrealQL fragments shared by [`super::QueryCore::to_surrealql`].
+//! String parsing and SQL/SurrealQL fragments shared by query emitters and hop execution.
 //!
 //! Kept separate from [`super::types`] so hop/connection SQL generation stays testable in isolation.
 
+#[cfg(any(
+    feature = "compiler-surreal",
+    feature = "compiler-sql",
+    feature = "compiler-mongodb",
+    feature = "compiler-redis",
+    feature = "compiler-indradb",
+))]
 use crate::error::Result;
 
 /// Extract record ID from a JSON value that may be a Thing (string or object) or plain id.
@@ -32,9 +39,16 @@ pub(super) fn extract_id_from_fk_value(value: Option<&serde_json::Value>) -> Opt
     None
 }
 
-/// Parse `SELECT <projection> FROM <table> [WHERE …]` produced by [`super::QueryCore::to_surrealql`].
+/// Parse `SELECT <projection> FROM <table> [WHERE …]` produced by query emitters.
 ///
 /// Returns `(table, where_sql)` where `where_sql` is `true` if there is no `WHERE` clause.
+#[cfg(any(
+    feature = "compiler-surreal",
+    feature = "compiler-sql",
+    feature = "compiler-mongodb",
+    feature = "compiler-redis",
+    feature = "compiler-indradb",
+))]
 pub(super) fn parse_select_from_subquery(sub_query: &str) -> Result<(&str, String)> {
     let s = sub_query.trim();
     let upper = s.to_uppercase();
@@ -78,11 +92,19 @@ pub(super) fn parse_select_from_subquery(sub_query: &str) -> Result<(&str, Strin
 }
 
 /// Parse `SELECT * FROM <table> [WHERE …]` for simple connection subqueries.
+#[cfg(any(
+    feature = "compiler-surreal",
+    feature = "compiler-sql",
+    feature = "compiler-mongodb",
+    feature = "compiler-redis",
+    feature = "compiler-indradb",
+))]
 pub(super) fn parse_select_star_subquery_for_exists(sub_query: &str) -> Result<(&str, String)> {
     parse_select_from_subquery(sub_query)
 }
 
 /// Build correlated `(SELECT id … LIMIT 1)` for HasOneForward hops from a trait union subquery.
+#[cfg(feature = "compiler-surreal")]
 pub(super) fn hasone_forward_exists_sql(
     sub_query: &str,
     fk_field: &str,
@@ -108,6 +130,13 @@ pub(super) fn hasone_forward_exists_sql(
 }
 
 /// Strip `ORDER BY`, `GROUP BY`, `LIMIT`, `OFFSET` tails from a WHERE clause fragment.
+#[cfg(any(
+    feature = "compiler-surreal",
+    feature = "compiler-sql",
+    feature = "compiler-mongodb",
+    feature = "compiler-redis",
+    feature = "compiler-indradb",
+))]
 pub(super) fn trim_after_where_clauses(mut s: &str) -> &str {
     const SEPARATORS: &[&str] = &[" ORDER BY ", " GROUP BY ", " LIMIT ", " OFFSET "];
     loop {
@@ -126,6 +155,7 @@ pub(super) fn trim_after_where_clauses(mut s: &str) -> &str {
 }
 
 /// SurrealQL: build `type::record(string::split(<string> path, ':')[0], join([1..], ':'))`.
+#[cfg(feature = "compiler-surreal")]
 pub(super) fn surreal_type_record_from_colon_strand(parent_field_path: &str) -> String {
     format!(
         "type::record(string::split(<string> {parent_field_path}, ':')[0], array::join(string::split(<string> {parent_field_path}, ':')[1..], ':'))"

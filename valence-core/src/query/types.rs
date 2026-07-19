@@ -94,10 +94,47 @@ include!("impl_query_core_builder_filter.rs");
 include!("impl_query_core_builder_window.rs");
 include!("impl_query_core_builder_compose.rs");
 include!("impl_query_core_builder_execute.rs");
+
+// Query compilers share parameter-key allocation; dialect emitters are feature-gated so
+// default (SQL-only) and Surreal-only builds stay free of dead_code warnings.
+#[cfg(any(
+    feature = "compiler-surreal",
+    feature = "compiler-sql",
+    feature = "compiler-mongodb",
+    feature = "compiler-redis",
+    feature = "compiler-indradb",
+))]
+include!("impl_query_core_sql_shared.rs");
+
+#[cfg(feature = "compiler-surreal")]
 include!("impl_query_core_sql_predicates.rs");
+#[cfg(feature = "compiler-surreal")]
 include!("impl_query_core_sql_connections.rs");
-include!("impl_query_core_sql_connections_sql.rs");
+#[cfg(feature = "compiler-surreal")]
 include!("impl_query_core_sql_clauses.rs");
+#[cfg(feature = "compiler-surreal")]
+include!("impl_query_core_sql_emit_surreal.rs");
+
+#[cfg(any(
+    feature = "compiler-sql",
+    feature = "compiler-mongodb",
+    feature = "compiler-redis",
+    feature = "compiler-indradb",
+))]
+include!("impl_query_core_sql_connections_sql.rs");
+#[cfg(any(
+    feature = "compiler-sql",
+    feature = "compiler-mongodb",
+    feature = "compiler-redis",
+    feature = "compiler-indradb",
+))]
 include!("impl_query_core_sql_emit.rs");
+#[cfg(any(
+    feature = "compiler-sql",
+    feature = "compiler-mongodb",
+    feature = "compiler-redis",
+    feature = "compiler-indradb",
+))]
 include!("impl_query_core_sql_emit_sql.rs");
+
 include!("impl_query_core_fetch.rs");

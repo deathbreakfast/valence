@@ -31,6 +31,9 @@ surreal-remote = ["surreal", "valence-backend-surreal/remote"]
 surreal-inventory = ["surreal", "valence-backend-surreal/inventory"]
 surreal-connect-env = ["surreal", "valence-backend-surreal/connect-env"]
 telemetry-console = ["dep:valence-telemetry"]
+# Compatibility aliases for older orbital / kit crates.
+leptos-integration = []
+ssr = ["mem", "surreal"]
 
 [dependencies]
 valence-core = { workspace = true }

@@ -83,16 +83,28 @@ impl MongoBackend {
     }
 
     /// Connect using env defaults via builder (shorthand).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::Internal`] when env config is incomplete, or [`Error::Database`] on connect failure.
     pub async fn from_env() -> Result<Self> {
         Self::builder().from_env_defaults().build().await
     }
 
     /// Connect to MongoDB at `uri` using database `database`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::Database`] when the MongoDB connection fails.
     pub async fn connect(uri: &str, database: &str) -> Result<Self> {
         Self::builder().uri(uri).database(database).build().await
     }
 
     /// Connect using explicit config.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::Database`] when the MongoDB connection fails.
     pub async fn connect_with_config(config: MongoConfig) -> Result<Self> {
         let client = Client::with_uri_str(&config.uri)
             .await
@@ -240,7 +252,7 @@ impl DatabaseBackend for MongoBackend {
                 let limit = descriptor
                     .get("limit")
                     .and_then(|v| v.as_u64())
-                    .map(|n| n as usize);
+                    .map(|n| usize::try_from(n).unwrap_or(usize::MAX));
                 let mut rows = self.rows_for_table(collection, limit).await?;
                 rows = valence_core::query::apply_equality_where(rows, compiled);
                 rows = valence_core::query::apply_order_limit_offset(rows, &compiled.query_string);
@@ -446,6 +458,7 @@ impl DatabaseBackend for MongoBackend {
     }
 }
 
+#[allow(clippy::needless_pass_by_value)] // map_err adapter; value only Display'd
 fn map_duplicate_key(e: mongodb::error::Error) -> Error {
     if e.to_string().contains("duplicate key") {
         Error::Database("duplicate unique index value".into())
@@ -472,7 +485,10 @@ fn bson_to_json(bson: mongodb::bson::Bson) -> Value {
 }
 
 fn row_from_body(table: &str, id: &str, body: Value) -> Value {
-    let mut obj = body.as_object().cloned().unwrap_or_default();
+    let mut obj = match body {
+        Value::Object(map) => map,
+        _ => Map::new(),
+    };
     obj.insert("id".into(), record_id_json(table, id));
     Value::Object(obj)
 }

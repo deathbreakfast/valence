@@ -22,6 +22,9 @@ fn query_err_is_missing_table(msg: &str) -> bool {
 }
 
 /// Resolve backend for ad-hoc compiled queries used while building the deletion graph.
+/// # Errors
+///
+/// Returns an error when the requested operation cannot be completed.
 pub fn backend_for_deletion_query(v: &Valence, table: &str) -> Result<Arc<dyn DatabaseBackend>> {
     match v.backend_for_table(table) {
         Ok(b) => Ok(b),
@@ -42,26 +45,33 @@ fn strip_surreal_thing_decorations(s: &str) -> String {
     t
 }
 
-pub fn bare_id_from_query_cell(value: &Value) -> Result<String> {
+/// # Errors
+///
+/// Returns an error when the requested operation cannot be completed.
+pub fn bare_id_from_query_cell(value: &Value) -> String {
     if let Some(s) = value.as_str() {
         let bare = strip_surreal_thing_decorations(s);
         if let Some((_table, id)) = bare.split_once(':') {
             if !id.is_empty() {
-                return Ok(strip_surreal_thing_decorations(id));
+                return strip_surreal_thing_decorations(id);
             }
         }
-        return Ok(bare);
+        return bare;
     }
     if let Some(obj) = value.as_object() {
         if let Some(id) = obj.get("id").and_then(|v| v.as_str()) {
-            return Ok(strip_surreal_thing_decorations(id));
+            return strip_surreal_thing_decorations(id);
         }
     }
     let s = value.to_string();
     let tail = s.rsplit(':').next().unwrap_or(&s);
-    Ok(strip_surreal_thing_decorations(tail))
+    strip_surreal_thing_decorations(tail)
 }
 
+#[allow(
+    clippy::cast_possible_truncation,
+    reason = "backend count values may be represented as floating-point JSON"
+)]
 async fn run_count_query(
     backend: &dyn DatabaseBackend,
     compiled: crate::compiled_query::CompiledQuery,
@@ -93,12 +103,15 @@ async fn run_id_query(
     };
     let mut out = Vec::new();
     for cell in rows {
-        out.push(bare_id_from_query_cell(&cell)?);
+        out.push(bare_id_from_query_cell(&cell));
     }
     Ok(out)
 }
 
 /// Count M2M edge rows where `in` points at `(root_table, bare_root_id)`.
+/// # Errors
+///
+/// Returns an error when the requested operation cannot be completed.
 pub async fn count_m2m_edges_from_root(
     v: &Valence,
     edge_table: &str,
@@ -133,6 +146,9 @@ pub async fn count_where_thing_eq(
     run_count_query(backend.as_ref(), compiled).await
 }
 
+/// # Errors
+///
+/// Returns an error when the requested operation cannot be completed.
 pub async fn select_child_ids_hasmany(
     v: &Valence,
     child_table: &str,
@@ -154,6 +170,9 @@ pub async fn select_child_ids_hasmany(
     run_id_query(backend.as_ref(), compiled).await
 }
 
+/// # Errors
+///
+/// Returns an error when the requested operation cannot be completed.
 pub async fn select_hasone_cascade_children(
     v: &Valence,
     other: &str,

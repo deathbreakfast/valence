@@ -21,11 +21,20 @@ impl FleetRedisBackend {
     }
 
     /// Connect using env defaults via builder (shorthand).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`valence_core::Error::Internal`] when env config is incomplete, or
+    /// [`valence_core::Error::Database`] on connect failure.
     pub async fn from_env() -> Result<Self> {
         Self::builder().from_env_defaults().build().await
     }
 
     /// Connect to every URL with shared key prefix.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`valence_core::Error::Database`] when any node connection fails.
     pub async fn connect_with_urls(urls: Vec<String>, key_prefix: String) -> Result<Self> {
         let mut backends = Vec::with_capacity(urls.len());
         for url in urls {
@@ -169,6 +178,10 @@ impl DatabaseBackend for FleetRedisBackend {
 }
 
 /// Install a fleet backend as `Arc<dyn DatabaseBackend>`.
+///
+/// # Errors
+///
+/// Propagates builder/`build` errors (missing config or connection failure).
 pub async fn connect_fleet_arc(
     builder: FleetRedisBackendBuilder,
 ) -> Result<Arc<dyn DatabaseBackend>> {

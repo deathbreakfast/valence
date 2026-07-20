@@ -10,7 +10,7 @@ use crate::query_compiler::QueryCompiler;
 use crate::CompiledQuery;
 
 /// Resolves a [`QueryCompiler`] for a storage engine slug.
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct QueryCompilerRegistry {
     compilers: HashMap<&'static str, Arc<dyn QueryCompiler>>,
 }
@@ -20,14 +20,6 @@ impl std::fmt::Debug for QueryCompilerRegistry {
         f.debug_struct("QueryCompilerRegistry")
             .field("engines", &self.compilers.keys().collect::<Vec<_>>())
             .finish()
-    }
-}
-
-impl Default for QueryCompilerRegistry {
-    fn default() -> Self {
-        Self {
-            compilers: HashMap::new(),
-        }
     }
 }
 
@@ -89,6 +81,9 @@ impl QueryCompilerRegistry {
     }
 
     /// Compile `core` for `engine_id`, or return a clear error when the feature is disabled.
+    /// # Errors
+    ///
+    /// Returns an error when the requested operation cannot be completed.
     pub fn compile(&self, engine_id: &str, core: &QueryCore) -> Result<CompiledQuery> {
         let compiler = self.get(engine_id).ok_or_else(|| {
             Error::Internal(format!(
@@ -108,6 +103,9 @@ pub fn global_compiler_registry() -> &'static QueryCompilerRegistry {
 }
 
 /// Compile `core` for the given backend engine id.
+/// # Errors
+///
+/// Returns an error when the requested operation cannot be completed.
 pub fn compile_for_engine(engine_id: &str, core: &QueryCore) -> Result<CompiledQuery> {
     global_compiler_registry().compile(engine_id, core)
 }

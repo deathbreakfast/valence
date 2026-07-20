@@ -149,6 +149,10 @@ pub fn shared_router_with_embedded_logical_names(
 /// # Ok(())
 /// # }
 /// ```
+///
+/// # Errors
+///
+/// Currently infallible; `Result` reserved for future registration failures.
 pub fn bootstrap_embedded_router(
     db: SDb,
     logical_names: &[&str],
@@ -163,6 +167,10 @@ pub fn bootstrap_embedded_router(
 
 #[cfg(feature = "inventory")]
 /// Bootstrap an embedded router using schema inventory discovery.
+///
+/// # Errors
+///
+/// Currently infallible; `Result` reserved for future registration failures.
 pub fn bootstrap_embedded_router_from_inventory(
     db: SDb,
     options: RegisterEmbeddedLogicalNamesOptions,
@@ -174,6 +182,13 @@ pub fn bootstrap_embedded_router_from_inventory(
 
 #[cfg(test)]
 mod tests {
+    #![allow(
+        clippy::unwrap_used,
+        clippy::expect_used,
+        clippy::print_stdout,
+        clippy::print_stderr
+    )]
+
     use super::*;
     use surrealdb::engine::local::Mem;
 

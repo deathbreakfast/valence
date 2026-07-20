@@ -28,6 +28,9 @@ use helpers::system_valence;
 pub struct OwnershipService;
 
 /// Ensure ownership lookup indexes exist when the active backend supports them (idempotent).
+/// # Errors
+///
+/// Returns an error when the requested operation cannot be completed.
 pub async fn ensure_lookup_indexes(v: &Valence) -> Result<()> {
     let sys = system_valence(v);
     let q = concat!(

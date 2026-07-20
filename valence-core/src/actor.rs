@@ -31,6 +31,7 @@ impl Actor {
         }
     }
 
+    #[must_use]
     pub fn initialize_system_context() -> Self {
         Actor::System {
             operation: "initialize_system_context".to_string(),

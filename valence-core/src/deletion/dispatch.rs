@@ -40,6 +40,9 @@ pub fn register_noop_deletion_dispatcher_for_tests() {
 }
 
 /// Invoke the dispatcher if configured.
+/// # Errors
+///
+/// Returns an error when the requested operation cannot be completed.
 pub async fn dispatch(req: DeletionRequest) -> Result<()> {
     match DISPATCHER.get() {
         Some(f) => (f)(req).await,

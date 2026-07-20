@@ -14,6 +14,7 @@ pub struct ValenceEntity {
 }
 
 impl ValenceEntity {
+    #[must_use]
     pub fn new(
         table: String,
         id: String,

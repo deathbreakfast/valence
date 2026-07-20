@@ -11,6 +11,11 @@ pub(super) fn connection_target_type(conn: &SchemaConnection) -> syn::Type {
         .model_path
         .clone()
         .unwrap_or_else(|| format!("crate::generated::{target_table_pascal}"));
-    parse_str(&target_type_path)
-        .unwrap_or_else(|_| parse_str("crate::generated::Unknown").expect("fallback"))
+    parse_str(&target_type_path).unwrap_or_else(|_| {
+        // Fallback type path is a compile-time constant; parse cannot fail.
+        #[allow(clippy::expect_used)]
+        {
+            parse_str("crate::generated::Unknown").expect("fallback type path")
+        }
+    })
 }

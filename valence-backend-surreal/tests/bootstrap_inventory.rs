@@ -1,5 +1,11 @@
 //! Inventory bootstrap smoke test.
 
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::print_stdout,
+    clippy::print_stderr
+)]
 use valence_core::router_key::router_key;
 
 use valence_backend_surreal::{

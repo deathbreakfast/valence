@@ -1,8 +1,8 @@
 //! Minimal in-memory storage engine for tests and embedded hosts.
 
 use std::collections::{HashMap, HashSet};
-use std::sync::RwLock;
 
+use tokio::sync::{RwLock, RwLockReadGuard};
 use valence_core::{BackendCapabilities, CompiledQuery, DatabaseBackend, Error, RecordId, Result};
 
 /// Stable engine slug for router keys (`inmemory_mem:logical_name`).
@@ -58,24 +58,11 @@ impl InMemoryBackend {
         Self::default()
     }
 
-    fn table_records(
+    async fn table_records_read(
         &self,
         _table: &str,
-    ) -> Result<std::sync::RwLockWriteGuard<'_, HashMap<String, HashMap<String, serde_json::Value>>>>
-    {
-        self.tables
-            .write()
-            .map_err(|_| Error::Internal("mem backend lock poisoned".into()))
-    }
-
-    fn table_records_read(
-        &self,
-        _table: &str,
-    ) -> Result<std::sync::RwLockReadGuard<'_, HashMap<String, HashMap<String, serde_json::Value>>>>
-    {
-        self.tables
-            .read()
-            .map_err(|_| Error::Internal("mem backend lock poisoned".into()))
+    ) -> RwLockReadGuard<'_, HashMap<String, HashMap<String, serde_json::Value>>> {
+        self.tables.read().await
     }
 }
 
@@ -122,8 +109,12 @@ impl DatabaseBackend for InMemoryBackend {
                         .unwrap_or("")
                         .trim();
                     if !table.is_empty() {
-                        let tables = self.table_records_read(table)?;
-                        let count = tables.get(table).map(|m| m.len() as i64).unwrap_or(0);
+                        let count = {
+                            let tables = self.table_records_read(table).await;
+                            tables
+                                .get(table)
+                                .map_or(0, |m| i64::try_from(m.len()).unwrap_or(i64::MAX))
+                        };
                         return Ok(vec![serde_json::json!(count)]);
                     }
                 }
@@ -137,15 +128,17 @@ impl DatabaseBackend for InMemoryBackend {
                         .unwrap_or("")
                         .trim();
                     if !table.is_empty() {
-                        let tables = self.table_records_read(table)?;
-                        let rows: Vec<serde_json::Value> = tables
-                            .get(table)
-                            .map(|m| {
-                                m.keys()
-                                    .map(|id| serde_json::Value::String(id.clone()))
-                                    .collect()
-                            })
-                            .unwrap_or_default();
+                        let rows = {
+                            let tables = self.table_records_read(table).await;
+                            tables
+                                .get(table)
+                                .map(|m| {
+                                    m.keys()
+                                        .map(|id| serde_json::Value::String(id.clone()))
+                                        .collect::<Vec<_>>()
+                                })
+                                .unwrap_or_default()
+                        };
                         return Ok(rows);
                     }
                 }
@@ -159,11 +152,13 @@ impl DatabaseBackend for InMemoryBackend {
                         .unwrap_or("")
                         .trim();
                     if !table.is_empty() {
-                        let tables = self.table_records_read(table)?;
-                        let mut rows: Vec<serde_json::Value> = tables
-                            .get(table)
-                            .map(|m| m.values().cloned().collect())
-                            .unwrap_or_default();
+                        let mut rows = {
+                            let tables = self.table_records_read(table).await;
+                            tables
+                                .get(table)
+                                .map(|m| m.values().cloned().collect::<Vec<_>>())
+                                .unwrap_or_default()
+                        };
                         if let Some(limit_idx) = upper.rfind(" LIMIT ") {
                             if let Ok(limit) = q[limit_idx + 7..].trim().parse::<usize>() {
                                 rows.truncate(limit);
@@ -181,11 +176,13 @@ impl DatabaseBackend for InMemoryBackend {
                     .unwrap_or("")
                     .trim();
                 if !table.is_empty() {
-                    let tables = self.table_records_read(table)?;
-                    let mut rows: Vec<serde_json::Value> = tables
-                        .get(table)
-                        .map(|m| m.values().cloned().collect())
-                        .unwrap_or_default();
+                    let mut rows = {
+                        let tables = self.table_records_read(table).await;
+                        tables
+                            .get(table)
+                            .map(|m| m.values().cloned().collect::<Vec<_>>())
+                            .unwrap_or_default()
+                    };
                     rows = crate::query_filter::apply_equality_where(rows, compiled);
                     rows =
                         crate::query_filter::apply_order_limit_offset(rows, &compiled.query_string);
@@ -205,7 +202,7 @@ impl DatabaseBackend for InMemoryBackend {
     }
 
     async fn get_record(&self, table: &str, id: &str) -> Result<Option<serde_json::Value>> {
-        let tables = self.table_records_read(table)?;
+        let tables = self.table_records_read(table).await;
         Ok(tables.get(table).and_then(|rows| rows.get(id).cloned()))
     }
 
@@ -214,8 +211,6 @@ impl DatabaseBackend for InMemoryBackend {
         table: &str,
         content: serde_json::Value,
     ) -> Result<serde_json::Value> {
-        let mut tables = self.table_records(table)?;
-        let rows = tables.entry(table.to_string()).or_default();
         let id = storage_id_from_content(&content).unwrap_or_else(uuid_simple);
         let mut record = content;
         if let Some(obj) = record.as_object_mut() {
@@ -224,7 +219,12 @@ impl DatabaseBackend for InMemoryBackend {
                 obj.insert("id".into(), record_id_json(table, &id));
             }
         }
-        rows.insert(id, record.clone());
+        self.tables
+            .write()
+            .await
+            .entry(table.to_string())
+            .or_default()
+            .insert(id, record.clone());
         Ok(record)
     }
 
@@ -234,7 +234,7 @@ impl DatabaseBackend for InMemoryBackend {
         id: &str,
         content: serde_json::Value,
     ) -> Result<serde_json::Value> {
-        let mut tables = self.table_records(table)?;
+        let mut tables = self.tables.write().await;
         let rows = tables
             .get_mut(table)
             .ok_or_else(|| Error::NotFound(format!("table {table}")))?;
@@ -242,6 +242,7 @@ impl DatabaseBackend for InMemoryBackend {
             return Err(Error::NotFound(format!("{table}:{id}")));
         }
         rows.insert(id.to_string(), content.clone());
+        drop(tables);
         Ok(content)
     }
 
@@ -251,7 +252,7 @@ impl DatabaseBackend for InMemoryBackend {
         id: &str,
         patch: serde_json::Value,
     ) -> Result<serde_json::Value> {
-        let mut tables = self.table_records(table)?;
+        let mut tables = self.tables.write().await;
         let rows = tables.entry(table.to_string()).or_default();
         let existing = rows
             .entry(id.to_string())
@@ -261,7 +262,9 @@ impl DatabaseBackend for InMemoryBackend {
                 base.insert(k.clone(), v.clone());
             }
         }
-        Ok(existing.clone())
+        let merged = existing.clone();
+        drop(tables);
+        Ok(merged)
     }
 
     async fn upsert_record(
@@ -270,19 +273,21 @@ impl DatabaseBackend for InMemoryBackend {
         id: &str,
         content: serde_json::Value,
     ) -> Result<serde_json::Value> {
-        let mut tables = self.table_records(table)?;
-        let rows = tables.entry(table.to_string()).or_default();
         let mut record = content;
         if let Some(obj) = record.as_object_mut() {
             obj.insert("id".into(), record_id_json(table, id));
         }
-        rows.insert(id.to_string(), record.clone());
+        self.tables
+            .write()
+            .await
+            .entry(table.to_string())
+            .or_default()
+            .insert(id.to_string(), record.clone());
         Ok(record)
     }
 
     async fn delete_record(&self, table: &str, id: &str) -> Result<()> {
-        let mut tables = self.table_records(table)?;
-        if let Some(rows) = tables.get_mut(table) {
+        if let Some(rows) = self.tables.write().await.get_mut(table) {
             rows.remove(id);
         }
         Ok(())
@@ -290,11 +295,9 @@ impl DatabaseBackend for InMemoryBackend {
 
     async fn relate_edge(&self, from: &RecordId, edge_table: &str, to: &RecordId) -> Result<()> {
         let key = edge_key(edge_table, from);
-        let mut edges = self
-            .edges
+        self.edges
             .write()
-            .map_err(|_| Error::Internal("mem edges lock poisoned".into()))?;
-        edges
+            .await
             .entry(key)
             .or_default()
             .insert((to.table().to_string(), to.id().to_string()));
@@ -303,11 +306,7 @@ impl DatabaseBackend for InMemoryBackend {
 
     async fn unrelate_edge(&self, from: &RecordId, edge_table: &str, to: &RecordId) -> Result<()> {
         let key = edge_key(edge_table, from);
-        let mut edges = self
-            .edges
-            .write()
-            .map_err(|_| Error::Internal("mem edges lock poisoned".into()))?;
-        if let Some(set) = edges.get_mut(&key) {
+        if let Some(set) = self.edges.write().await.get_mut(&key) {
             set.remove(&(to.table().to_string(), to.id().to_string()));
         }
         Ok(())
@@ -315,10 +314,7 @@ impl DatabaseBackend for InMemoryBackend {
 
     async fn get_edge_targets(&self, from: &RecordId, edge_table: &str) -> Result<Vec<RecordId>> {
         let key = edge_key(edge_table, from);
-        let edges = self
-            .edges
-            .read()
-            .map_err(|_| Error::Internal("mem edges lock poisoned".into()))?;
+        let edges = self.edges.read().await;
         Ok(edges
             .get(&key)
             .map(|set| {
@@ -367,6 +363,8 @@ fn uuid_simple() -> String {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::expect_used, clippy::unwrap_used)]
+
     use super::*;
 
     #[tokio::test]

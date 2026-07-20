@@ -28,6 +28,7 @@ pub struct SchemaContext {
 
 impl SchemaContext {
     /// Build context from a parsed schema file (after trait merge on `schema`).
+    #[allow(clippy::unnecessary_wraps)] // Result kept for uniform generator API
     pub fn from_parsed(parsed: ParsedSchemaFile) -> Result<Self, Box<dyn std::error::Error>> {
         let schema = parsed.schema;
         let table_name = schema.name.clone();

@@ -13,6 +13,8 @@ use crate::owner_ref::OwnerRef;
 use crate::ports::actor::ActorFactory;
 use crate::ports::endpoints::DatabaseEndpointResolver;
 use crate::ports::secrets::SecretProvider;
+use crate::record_id::RecordId;
+use crate::request_cache::RequestPermissionCache;
 use crate::router::DatabaseRouter;
 use crate::router_key::router_key;
 use crate::schema::SchemaRegistry;
@@ -30,6 +32,7 @@ pub struct Valence {
     endpoint_resolver: Arc<dyn DatabaseEndpointResolver>,
     actor: Actor,
     owner_override: Option<OwnerRef>,
+    permission_cache: Option<RequestPermissionCache>,
 }
 
 impl Valence {
@@ -41,10 +44,16 @@ impl Valence {
         &self.router
     }
 
+    /// # Errors
+    ///
+    /// Returns an error when the requested operation cannot be completed.
     pub fn active_backend(&self) -> Result<Arc<dyn DatabaseBackend>> {
         self.router.resolve(&self.active_backend_key)
     }
 
+    /// # Errors
+    ///
+    /// Returns an error when the requested operation cannot be completed.
     pub fn backend_for_table(&self, table: &str) -> Result<Arc<dyn DatabaseBackend>> {
         let Some(meta) = SchemaRegistry::global().get_schema(table) else {
             return self.active_backend();
@@ -79,6 +88,7 @@ impl Valence {
         &self.actor
     }
 
+    #[must_use]
     pub fn with_actor(&self, actor: Actor) -> Self {
         Self {
             actor,
@@ -86,6 +96,7 @@ impl Valence {
         }
     }
 
+    #[must_use]
     pub fn with_owner_override(&self, owner: OwnerRef) -> Self {
         Self {
             owner_override: Some(owner),
@@ -97,6 +108,55 @@ impl Valence {
         self.owner_override.as_ref()
     }
 
+    /// Request-scoped permission check cache, when enabled on the builder.
+    pub fn permission_cache(&self) -> Option<&RequestPermissionCache> {
+        self.permission_cache.as_ref()
+    }
+
+    /// Navigate ManyToMany edges and return target [`RecordId`] values.
+    /// # Errors
+    ///
+    /// Returns an error when the requested operation cannot be completed.
+    pub async fn get_many_to_many_target_record_ids(
+        &self,
+        from: &RecordId,
+        edge_table: &str,
+    ) -> Result<Vec<RecordId>> {
+        let backend = self.active_backend()?;
+        backend.get_edge_targets(from, edge_table).await
+    }
+
+    /// Create a graph edge between two records in `edge_table`.
+    /// # Errors
+    ///
+    /// Returns an error when the requested operation cannot be completed.
+    pub async fn relate_edge(
+        &self,
+        edge_table: &str,
+        from: &RecordId,
+        to: &RecordId,
+    ) -> Result<()> {
+        let backend = self.active_backend()?;
+        backend.relate_edge(from, edge_table, to).await
+    }
+
+    /// Delete a graph edge between two records in `edge_table`.
+    /// # Errors
+    ///
+    /// Returns an error when the requested operation cannot be completed.
+    pub async fn unrelate_edge(
+        &self,
+        edge_table: &str,
+        from: &RecordId,
+        to: &RecordId,
+    ) -> Result<()> {
+        let backend = self.active_backend()?;
+        backend.unrelate_edge(from, edge_table, to).await
+    }
+
+    /// # Errors
+    ///
+    /// Returns an error when the requested operation cannot be completed.
     pub async fn ensure_unique_field_index(&self, table: &str, field: &str) -> Result<()> {
         let backend = self.backend_for_table(table)?;
         backend.define_unique_index(table, field).await

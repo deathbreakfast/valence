@@ -17,6 +17,9 @@ use super::OwnershipService;
 
 impl OwnershipService {
     /// Pending-deletion gate for `Model::get`: absent ownership row passes; lookup errors pass.
+    /// # Errors
+    ///
+    /// Returns an error when the requested operation cannot be completed.
     pub async fn pending_deletion_gate(
         valence_model: &str,
         bare_id: &str,
@@ -39,6 +42,13 @@ impl OwnershipService {
     }
 
     /// Apply the pending-deletion gate from a pre-fetched [`OwnershipGateStatus`] (no I/O).
+    /// # Errors
+    ///
+    /// Returns an error when the requested operation cannot be completed.
+    #[allow(
+        clippy::needless_pass_by_value,
+        reason = "the public API intentionally owns the status value for forward compatibility"
+    )]
     pub fn apply_pending_deletion_gate(
         valence_model: &str,
         bare_id: &str,
@@ -56,6 +66,9 @@ impl OwnershipService {
     }
 
     /// Unified `Model::get` fetch: one compiled query for row + ownership gate status (cache-aware).
+    /// # Errors
+    ///
+    /// Returns an error when the requested operation cannot be completed.
     pub async fn fetch_record_with_ownership_gate(
         valence_model: &str,
         record_id: &str,
@@ -97,6 +110,9 @@ impl OwnershipService {
     }
 
     /// Single-trip backend fetch for row + ownership status (no read cache).
+    /// # Errors
+    ///
+    /// Returns an error when the requested operation cannot be completed.
     pub async fn fetch_record_with_ownership_gate_uncached(
         backend: &Arc<dyn DatabaseBackend>,
         table: &str,
@@ -142,6 +158,9 @@ impl OwnershipService {
     }
 
     /// Privacy check plus pending-deletion gate using a bundled ownership status.
+    /// # Errors
+    ///
+    /// Returns an error when the requested operation cannot be completed.
     pub async fn check_privacy_with_bundled_gate<F>(
         privacy_fut: F,
         valence_model: &str,
@@ -157,6 +176,9 @@ impl OwnershipService {
 
     /// Run `check_read_privacy` and the pending-deletion gate with identical semantics to the
     /// legacy sequential path: privacy deny first, then `PendingDeletion` over privacy allow.
+    /// # Errors
+    ///
+    /// Returns an error when the requested operation cannot be completed.
     pub async fn check_privacy_with_pending_gate<F>(
         privacy_fut: F,
         valence_model: &str,

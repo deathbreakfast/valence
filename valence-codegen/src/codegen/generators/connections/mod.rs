@@ -26,6 +26,7 @@ use self::trait_target_has_one::push_has_one_trait_target_methods;
 
 /// Generate connection navigation methods for models with HasOne connections
 /// (FK on this model). Also generates IdHolder impl.
+#[allow(clippy::unnecessary_wraps)] // Result kept for uniform generator API
 pub fn generate_connections(
     schema: &SchemaContext,
 ) -> Result<TokenStream, Box<dyn std::error::Error>> {

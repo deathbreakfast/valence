@@ -305,8 +305,7 @@ pub fn extended_store_available_with_wire(
         StorageAdapter::SurrealRocksdb => {
             cfg!(feature = "surreal-rocksdb")
                 && std::env::var("VALENCE_BENCH_ROCKSDB")
-                    .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
-                    .unwrap_or(false)
+                    .is_ok_and(|v| v == "1" || v.eq_ignore_ascii_case("true"))
         }
     }
 }

@@ -1,5 +1,6 @@
 //! Temp schema file helper for codegen integration tests.
 
+#![allow(clippy::unwrap_used, clippy::expect_used)]
 use std::fs;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};

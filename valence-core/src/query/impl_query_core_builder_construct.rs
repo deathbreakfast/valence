@@ -1,5 +1,6 @@
 impl QueryCore {
     /// Create a new query core for a table
+    #[must_use]
     pub fn new(table: String) -> Self {
         Self {
             table,
@@ -18,6 +19,7 @@ impl QueryCore {
     }
 
     /// Create a QueryCore with model type information
+    #[must_use]
     pub fn with_model_type(table: impl Into<String>, model_type: impl Into<String>) -> Self {
         Self {
             table: table.into(),

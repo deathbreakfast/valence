@@ -70,11 +70,19 @@ impl PostgresBackend {
     }
 
     /// Connect using env defaults via builder (shorthand).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if `DATABASE_URL` is missing or the connection fails.
     pub async fn from_env() -> Result<Self> {
         Self::builder().from_env_defaults().build().await
     }
 
     /// Connect using a Postgres connection URL.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::Database`] if connecting or ensuring the edges schema fails.
     pub async fn connect(url: &str) -> Result<Self> {
         let pool = PgPool::connect(url)
             .await

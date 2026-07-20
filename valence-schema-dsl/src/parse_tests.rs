@@ -1,5 +1,7 @@
 //! Unit tests for [`SchemaSpec`] parsing and [`SchemaSpec::to_schema`] lowering.
 
+#![allow(clippy::expect_used, clippy::unwrap_used, clippy::manual_let_else)]
+
 use crate::parse::*;
 
 #[test]

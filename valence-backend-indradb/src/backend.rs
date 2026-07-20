@@ -1,12 +1,12 @@
 //! IndraDB embedded graph backend using in-memory datastore only.
 
 use std::collections::{HashMap, HashSet};
-use std::sync::RwLock;
 
 use indradb::{
     Edge, Identifier, Json, MemoryDatastore, PipePropertyQuery, QueryExt, QueryOutputValue,
     RangeVertexQuery, SpecificVertexQuery, Vertex,
 };
+use tokio::sync::RwLock;
 use uuid::Uuid;
 use valence_core::{
     BackendCapabilities, CompiledQuery, Database, DatabaseBackend, DatabaseFromEngine, Error,
@@ -86,10 +86,12 @@ impl IndradbBackend {
         }
     }
 
+    #[allow(clippy::needless_pass_by_value)] // map_err adapter; value only Display'd
     fn id_err(e: indradb::ValidationError) -> Error {
         Error::Validation(format!("invalid indradb identifier: {e:?}"))
     }
 
+    #[allow(clippy::needless_pass_by_value)] // map_err adapter; value only Display'd
     fn db_err(e: indradb::Error) -> Error {
         Error::Database(e.to_string())
     }
@@ -147,16 +149,13 @@ impl IndradbBackend {
             .map_err(Self::db_err)
     }
 
-    fn check_unique_fields(
+    async fn check_unique_fields(
         &self,
         table: &str,
         record: &serde_json::Value,
         exclude_id: Option<&str>,
     ) -> Result<()> {
-        let indexes = self
-            .unique_indexes
-            .read()
-            .map_err(|_| Error::Internal("indradb unique index lock poisoned".into()))?;
+        let indexes = self.unique_indexes.read().await.clone();
         for ((idx_table, field), values) in indexes.iter() {
             if idx_table != table {
                 continue;
@@ -182,11 +181,8 @@ impl IndradbBackend {
         Ok(())
     }
 
-    fn track_unique_fields(&self, table: &str, record: &serde_json::Value) -> Result<()> {
-        let mut indexes = self
-            .unique_indexes
-            .write()
-            .map_err(|_| Error::Internal("indradb unique index lock poisoned".into()))?;
+    async fn track_unique_fields(&self, table: &str, record: &serde_json::Value) {
+        let mut indexes = self.unique_indexes.write().await;
         for ((idx_table, field), values) in indexes.iter_mut() {
             if idx_table != table {
                 continue;
@@ -195,14 +191,11 @@ impl IndradbBackend {
                 values.insert(value.to_string());
             }
         }
-        Ok(())
+        drop(indexes);
     }
 
-    fn untrack_unique_fields(&self, table: &str, record: &serde_json::Value) -> Result<()> {
-        let mut indexes = self
-            .unique_indexes
-            .write()
-            .map_err(|_| Error::Internal("indradb unique index lock poisoned".into()))?;
+    async fn untrack_unique_fields(&self, table: &str, record: &serde_json::Value) {
+        let mut indexes = self.unique_indexes.write().await;
         for ((idx_table, field), values) in indexes.iter_mut() {
             if idx_table != table {
                 continue;
@@ -211,7 +204,7 @@ impl IndradbBackend {
                 values.remove(value);
             }
         }
-        Ok(())
+        drop(indexes);
     }
 
     fn rows_for_table(&self, table: &str) -> Result<Vec<serde_json::Value>> {
@@ -243,7 +236,7 @@ impl IndradbBackend {
             .ok_or_else(|| Error::Internal("missing vertex_type in indradb query".into()))?;
         let mut rows = self.rows_for_table(table)?;
         if let Some(limit) = descriptor.get("limit").and_then(|v| v.as_u64()) {
-            rows.truncate(limit as usize);
+            rows.truncate(usize::try_from(limit).unwrap_or(usize::MAX));
         }
         Ok(rows)
     }
@@ -325,7 +318,7 @@ impl DatabaseBackend for IndradbBackend {
         table: &str,
         content: serde_json::Value,
     ) -> Result<serde_json::Value> {
-        self.check_unique_fields(table, &content, None)?;
+        self.check_unique_fields(table, &content, None).await?;
         let id = storage_id_from_content(&content).unwrap_or_else(uuid_simple);
         let mut record = content;
         if let Some(obj) = record.as_object_mut() {
@@ -335,7 +328,7 @@ impl DatabaseBackend for IndradbBackend {
             }
         }
         self.write_body(table, &id, record.clone())?;
-        self.track_unique_fields(table, &record)?;
+        self.track_unique_fields(table, &record).await;
         Ok(record)
     }
 
@@ -349,11 +342,11 @@ impl DatabaseBackend for IndradbBackend {
             return Err(Error::NotFound(format!("{table}:{id}")));
         }
         if let Some(existing) = self.get_record(table, id).await? {
-            self.untrack_unique_fields(table, &existing)?;
+            self.untrack_unique_fields(table, &existing).await;
         }
-        self.check_unique_fields(table, &content, Some(id))?;
+        self.check_unique_fields(table, &content, Some(id)).await?;
         self.write_body(table, id, content.clone())?;
-        self.track_unique_fields(table, &content)?;
+        self.track_unique_fields(table, &content).await;
         Ok(content)
     }
 
@@ -368,16 +361,16 @@ impl DatabaseBackend for IndradbBackend {
             .await?
             .unwrap_or_else(|| serde_json::json!({}));
         if let Some(existing) = self.get_record(table, id).await? {
-            self.untrack_unique_fields(table, &existing)?;
+            self.untrack_unique_fields(table, &existing).await;
         }
         if let (Some(base), Some(patch_obj)) = (record.as_object_mut(), patch.as_object()) {
             for (k, v) in patch_obj {
                 base.insert(k.clone(), v.clone());
             }
         }
-        self.check_unique_fields(table, &record, Some(id))?;
+        self.check_unique_fields(table, &record, Some(id)).await?;
         self.write_body(table, id, record.clone())?;
-        self.track_unique_fields(table, &record)?;
+        self.track_unique_fields(table, &record).await;
         Ok(record)
     }
 
@@ -388,21 +381,21 @@ impl DatabaseBackend for IndradbBackend {
         content: serde_json::Value,
     ) -> Result<serde_json::Value> {
         if let Some(existing) = self.get_record(table, id).await? {
-            self.untrack_unique_fields(table, &existing)?;
+            self.untrack_unique_fields(table, &existing).await;
         }
-        self.check_unique_fields(table, &content, Some(id))?;
+        self.check_unique_fields(table, &content, Some(id)).await?;
         let mut record = content;
         if let Some(obj) = record.as_object_mut() {
             obj.insert("id".into(), record_id_json(table, id));
         }
         self.write_body(table, id, record.clone())?;
-        self.track_unique_fields(table, &record)?;
+        self.track_unique_fields(table, &record).await;
         Ok(record)
     }
 
     async fn delete_record(&self, table: &str, id: &str) -> Result<()> {
         if let Some(existing) = self.get_record(table, id).await? {
-            self.untrack_unique_fields(table, &existing)?;
+            self.untrack_unique_fields(table, &existing).await;
         }
         let vertex_id = Self::vertex_uuid(table, id);
         self.db
@@ -479,21 +472,34 @@ impl DatabaseBackend for IndradbBackend {
     }
 
     async fn define_unique_index(&self, table: &str, field: &str) -> Result<()> {
-        let mut indexes = self
-            .unique_indexes
-            .write()
-            .map_err(|_| Error::Internal("indradb unique index lock poisoned".into()))?;
+        let needs_populate = {
+            let indexes = self.unique_indexes.read().await;
+            indexes
+                .get(&(table.to_string(), field.to_string()))
+                .is_none_or(|entry| entry.is_empty())
+        };
+        let seeded = if needs_populate {
+            let rows = self.rows_for_table(table)?;
+            let mut values = HashSet::new();
+            for row in rows {
+                if let Some(value) = row.get(field).and_then(|v| v.as_str()) {
+                    values.insert(value.to_string());
+                }
+            }
+            Some(values)
+        } else {
+            None
+        };
+        let mut indexes = self.unique_indexes.write().await;
         let entry = indexes
             .entry((table.to_string(), field.to_string()))
             .or_default();
         if entry.is_empty() {
-            let rows = self.rows_for_table(table)?;
-            for row in rows {
-                if let Some(value) = row.get(field).and_then(|v| v.as_str()) {
-                    entry.insert(value.to_string());
-                }
+            if let Some(values) = seeded {
+                *entry = values;
             }
         }
+        drop(indexes);
         Ok(())
     }
 }

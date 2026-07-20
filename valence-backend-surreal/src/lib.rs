@@ -48,6 +48,8 @@ pub use remote::SurrealRemoteBackend;
 
 #[cfg(all(test, feature = "embedded-mem"))]
 mod instrumentation_smoke {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
+
     use std::sync::Arc;
 
     use surrealdb::engine::local::Mem;

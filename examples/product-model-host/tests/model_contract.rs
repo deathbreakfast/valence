@@ -1,5 +1,11 @@
 //! Model contract: create → get → merge → delete queue on mem backend.
 
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::print_stdout,
+    clippy::print_stderr
+)]
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};
@@ -60,7 +66,10 @@ async fn product_model_crud_and_delete_queue() {
     Project::delete(project_id, &valence)
         .await
         .expect("delete queue");
-    let reqs = captured.lock().unwrap();
-    assert_eq!(reqs.len(), 1);
-    assert_eq!(reqs[0].root_table, "project");
+    let (len, root_table) = {
+        let reqs = captured.lock().unwrap();
+        (reqs.len(), reqs[0].root_table.clone())
+    };
+    assert_eq!(len, 1);
+    assert_eq!(root_table, "project");
 }

@@ -28,13 +28,19 @@
 //! );
 //! ```
 
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::print_stdout,
+    clippy::print_stderr
+)]
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::RwLock;
+use tokio::sync::RwLock;
 use valence_core::row_json::{record_id_json, thing_to_id_only};
 use valence_core::{
-    BackendCapabilities, CompiledQuery, Database, DatabaseBackend, DatabaseFromEngine, Error,
-    RecordId, Result,
+    BackendCapabilities, CompiledQuery, Database, DatabaseBackend, DatabaseFromEngine, RecordId,
+    Result,
 };
 
 /// Open engine slug for router keys (`acme_stub:…`).
@@ -78,12 +84,8 @@ impl DatabaseBackend for AcmeStubBackend {
     async fn get_record(&self, table: &str, id: &str) -> Result<Option<serde_json::Value>> {
         let bare = thing_to_id_only(id.to_string());
         let key = format!("{table}:{bare}");
-        Ok(self
-            .store
-            .read()
-            .map_err(|_| Error::Internal("lock".into()))?
-            .get(&key)
-            .cloned())
+        let store = self.store.read().await;
+        Ok(store.get(&key).cloned())
     }
 
     async fn create_record(
@@ -91,11 +93,10 @@ impl DatabaseBackend for AcmeStubBackend {
         table: &str,
         content: serde_json::Value,
     ) -> Result<serde_json::Value> {
-        let id = content
-            .get("id")
-            .and_then(|v| v.as_str())
-            .map(str::to_string)
-            .unwrap_or_else(|| format!("acme_{}", self.next_id.fetch_add(1, Ordering::Relaxed)));
+        let id = content.get("id").and_then(|v| v.as_str()).map_or_else(
+            || format!("acme_{}", self.next_id.fetch_add(1, Ordering::Relaxed)),
+            str::to_string,
+        );
         let mut out = content;
         if let Some(obj) = out.as_object_mut() {
             obj.insert("id".into(), record_id_json(table, &id));
@@ -103,10 +104,7 @@ impl DatabaseBackend for AcmeStubBackend {
             out = serde_json::json!({ "id": record_id_json(table, &id) });
         }
         let key = format!("{table}:{id}");
-        self.store
-            .write()
-            .map_err(|_| Error::Internal("lock".into()))?
-            .insert(key, out.clone());
+        self.store.write().await.insert(key, out.clone());
         Ok(out)
     }
 
@@ -117,10 +115,7 @@ impl DatabaseBackend for AcmeStubBackend {
         content: serde_json::Value,
     ) -> Result<serde_json::Value> {
         let key = format!("{table}:{id}");
-        self.store
-            .write()
-            .map_err(|_| Error::Internal("lock".into()))?
-            .insert(key, content.clone());
+        self.store.write().await.insert(key, content.clone());
         Ok(content)
     }
 
@@ -131,10 +126,7 @@ impl DatabaseBackend for AcmeStubBackend {
         patch: serde_json::Value,
     ) -> Result<serde_json::Value> {
         let key = format!("{table}:{id}");
-        let mut store = self
-            .store
-            .write()
-            .map_err(|_| Error::Internal("lock".into()))?;
+        let mut store = self.store.write().await;
         let mut record = store
             .get(&key)
             .cloned()
@@ -147,6 +139,7 @@ impl DatabaseBackend for AcmeStubBackend {
             }
         }
         store.insert(key, record.clone());
+        drop(store);
         Ok(record)
     }
 
@@ -161,10 +154,7 @@ impl DatabaseBackend for AcmeStubBackend {
 
     async fn delete_record(&self, table: &str, id: &str) -> Result<()> {
         let key = format!("{table}:{id}");
-        self.store
-            .write()
-            .map_err(|_| Error::Internal("lock".into()))?
-            .remove(&key);
+        self.store.write().await.remove(&key);
         Ok(())
     }
 

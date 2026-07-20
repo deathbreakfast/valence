@@ -10,6 +10,9 @@ use crate::instrumentation::labels::{EdgeWriteOp, WriteOp};
 use crate::instrumentation::metrics;
 
 impl InstrumentedBackend {
+    /// # Errors
+    ///
+    /// Returns an error when the requested operation cannot be completed.
     pub(super) async fn measured_create_record(
         &self,
         table: &str,
@@ -36,6 +39,9 @@ impl InstrumentedBackend {
         }
     }
 
+    /// # Errors
+    ///
+    /// Returns an error when the requested operation cannot be completed.
     pub(super) async fn measured_update_record(
         &self,
         table: &str,
@@ -63,6 +69,9 @@ impl InstrumentedBackend {
         }
     }
 
+    /// # Errors
+    ///
+    /// Returns an error when the requested operation cannot be completed.
     pub(super) async fn measured_merge_record(
         &self,
         table: &str,
@@ -90,6 +99,9 @@ impl InstrumentedBackend {
         }
     }
 
+    /// # Errors
+    ///
+    /// Returns an error when the requested operation cannot be completed.
     pub(super) async fn measured_upsert_record(
         &self,
         table: &str,
@@ -117,6 +129,9 @@ impl InstrumentedBackend {
         }
     }
 
+    /// # Errors
+    ///
+    /// Returns an error when the requested operation cannot be completed.
     pub(super) async fn measured_delete_record(&self, table: &str, id: &str) -> Result<()> {
         let label = self.telemetry_label();
         metrics::record_write(table, label, WriteOp::Delete);
@@ -139,6 +154,9 @@ impl InstrumentedBackend {
         }
     }
 
+    /// # Errors
+    ///
+    /// Returns an error when the requested operation cannot be completed.
     pub(super) async fn measured_relate_edge(
         &self,
         from: &RecordId,
@@ -166,6 +184,9 @@ impl InstrumentedBackend {
         }
     }
 
+    /// # Errors
+    ///
+    /// Returns an error when the requested operation cannot be completed.
     pub(super) async fn measured_unrelate_edge(
         &self,
         from: &RecordId,

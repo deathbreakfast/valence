@@ -46,6 +46,7 @@ impl MongoBackendBuilder {
     }
 
     /// Fill unset fields from `VALENCE_MONGODB_*` environment variables.
+    #[must_use]
     pub fn from_env_defaults(mut self) -> Self {
         if self.uri.is_none() {
             self.uri = mongodb_uri_from_env();
@@ -60,12 +61,14 @@ impl MongoBackendBuilder {
     }
 
     /// MongoDB connection URI.
+    #[must_use]
     pub fn uri(mut self, uri: impl Into<String>) -> Self {
         self.uri = Some(uri.into());
         self
     }
 
     /// Database name for Valence collections.
+    #[must_use]
     pub fn database(mut self, database: impl Into<String>) -> Self {
         self.database = Some(database.into());
         self
@@ -77,6 +80,10 @@ impl MongoBackendBuilder {
     }
 
     /// Resolve configuration without connecting.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::Internal`] when no MongoDB URI is configured.
     pub fn resolve(self) -> Result<MongoConfig> {
         let builder = self.from_env_defaults();
         let uri = builder.uri.ok_or_else(|| {
@@ -93,6 +100,10 @@ impl MongoBackendBuilder {
     }
 
     /// Connect and return a [`super::backend::MongoBackend`].
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::Internal`] when config is incomplete, or [`Error::Database`] on connect failure.
     pub async fn build(self) -> Result<super::backend::MongoBackend> {
         let config = self.resolve()?;
         super::backend::MongoBackend::connect_with_config(config).await

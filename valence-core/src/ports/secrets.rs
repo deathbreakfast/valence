@@ -20,6 +20,9 @@ use crate::error::{Error, Result};
 /// ```
 pub trait SecretProvider: Send + Sync {
     /// Return `Ok(None)` when the key is absent.
+    /// # Errors
+    ///
+    /// Returns an error when the requested operation cannot be completed.
     fn get_secret(&self, key: &str) -> Result<Option<String>>;
 }
 

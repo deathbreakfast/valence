@@ -1,5 +1,6 @@
 //! Emit-parity checks: codegen metadata must honor DSL `database:`, policies, ownership, composite_key.
 
+#![allow(clippy::unwrap_used, clippy::expect_used)]
 use std::collections::HashMap;
 
 use crate::codegen::generate_from_schema_file;

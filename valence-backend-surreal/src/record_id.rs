@@ -25,6 +25,10 @@ pub fn valence_from_surreal(record: surrealdb::types::RecordId) -> RecordId {
 }
 
 /// Extract the bare id string from a SurrealDB record id wire form.
+///
+/// # Errors
+///
+/// Returns [`Error::Validation`] when the id portion is empty.
 pub fn extract_id_from_surreal_record(record: &surrealdb::types::RecordId) -> Result<String> {
     let wire = match surrealdb::types::Value::RecordId(record.clone()).into_json_value() {
         serde_json::Value::String(s) => s,
@@ -34,6 +38,10 @@ pub fn extract_id_from_surreal_record(record: &surrealdb::types::RecordId) -> Re
 }
 
 /// Strip the first `table:` prefix from a Surreal thing display string; return the id portion.
+///
+/// # Errors
+///
+/// Returns [`Error::Validation`] when the id portion is empty.
 pub fn extract_id_from_record_display(s: &str) -> Result<String> {
     let id = s.split_once(':').map_or(s, |(_, id_part)| id_part).trim();
     let id = id
@@ -48,6 +56,10 @@ pub fn extract_id_from_record_display(s: &str) -> Result<String> {
 }
 
 /// Parse a row from `SELECT VALUE id` (JSON) into the record id string (no `table:` prefix).
+///
+/// # Errors
+///
+/// Returns [`Error::Validation`] / [`Error::Internal`] for empty or unexpected id shapes.
 pub fn extract_id_from_select_value(v: &serde_json::Value) -> Result<String> {
     if let Ok(rid) = serde_json::from_value::<RecordId>(v.clone()) {
         return Ok(rid.id().to_string());
@@ -64,6 +76,13 @@ pub fn extract_id_from_select_value(v: &serde_json::Value) -> Result<String> {
 
 #[cfg(test)]
 mod tests {
+    #![allow(
+        clippy::unwrap_used,
+        clippy::expect_used,
+        clippy::print_stdout,
+        clippy::print_stderr
+    )]
+
     use super::*;
 
     #[test]

@@ -1,5 +1,11 @@
 //! Hop-chain host: Org→Project→Task→Note on hop_a..hop_d.
 
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::print_stdout,
+    clippy::print_stderr
+)]
 use valence::{Database, DatabaseFromEngine};
 
 pub const HOP_A: &str = "hop_a";

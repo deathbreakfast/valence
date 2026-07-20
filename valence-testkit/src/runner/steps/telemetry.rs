@@ -5,7 +5,7 @@ use crate::runner::RunMode;
 use crate::scenario::ScenarioStep;
 
 pub(super) async fn run(
-    session: &mut BootstrapSession,
+    session: &BootstrapSession,
     step: &ScenarioStep,
     mode: RunMode,
 ) -> Result<(), String> {

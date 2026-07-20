@@ -38,7 +38,10 @@ pub fn ensure_table(table: &str) -> String {
 
 /// Build a JSON row object from stored body + id.
 pub fn row_from_body(table: &str, id: &str, body: Value) -> Value {
-    let mut obj = body.as_object().cloned().unwrap_or_default();
+    let mut obj = match body {
+        Value::Object(map) => map,
+        _ => Map::new(),
+    };
     obj.insert(
         "id".into(),
         Value::Object(Map::from_iter([
@@ -51,5 +54,8 @@ pub fn row_from_body(table: &str, id: &str, body: Value) -> Value {
 
 /// Merge content fields into body map for insert/update.
 pub fn upsert_body_fields(content: Value) -> Map<String, Value> {
-    content.as_object().cloned().unwrap_or_default()
+    match content {
+        Value::Object(map) => map,
+        _ => Map::new(),
+    }
 }

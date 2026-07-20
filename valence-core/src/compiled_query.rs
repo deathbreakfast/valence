@@ -7,6 +7,7 @@ pub struct CompiledQuery {
 }
 
 impl CompiledQuery {
+    #[must_use]
     pub fn new(query_string: String, params: Vec<(String, serde_json::Value)>) -> Self {
         Self {
             query_string,

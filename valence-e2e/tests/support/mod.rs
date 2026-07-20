@@ -1,5 +1,11 @@
 //! E2e support — inventory schema fixture for surreal-inventory scenarios.
 
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::print_stdout,
+    clippy::print_stderr
+)]
 #![allow(dead_code)]
 
 use valence::prelude::*;

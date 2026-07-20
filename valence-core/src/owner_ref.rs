@@ -35,6 +35,7 @@ pub struct OwnerRef {
 }
 
 impl OwnerRef {
+    #[must_use]
     pub fn system() -> Self {
         Self {
             owner_id: "system".to_string(),
@@ -42,6 +43,7 @@ impl OwnerRef {
         }
     }
 
+    #[must_use]
     pub fn from_actor(actor: &Actor) -> Self {
         match actor {
             Actor::User { user_id } => Self {

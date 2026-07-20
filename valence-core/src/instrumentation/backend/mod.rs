@@ -20,6 +20,7 @@ pub struct InstrumentedBackend {
 }
 
 impl InstrumentedBackend {
+    #[must_use]
     pub fn new(inner: Arc<dyn DatabaseBackend>) -> Self {
         Self { inner }
     }
@@ -257,7 +258,7 @@ mod tests {
         let inner = Arc::new(MockBackend {
             gets: AtomicUsize::new(0),
         });
-        let wrapped = wrap_backend(inner.clone());
+        let wrapped = wrap_backend(Arc::<MockBackend>::clone(&inner));
         let _ = wrapped.get_record("t", "id").await;
         assert_eq!(inner.gets.load(Ordering::SeqCst), 1);
     }

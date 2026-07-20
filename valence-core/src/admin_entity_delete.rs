@@ -10,6 +10,14 @@ use crate::query::QueryCore;
 use crate::runtime::Valence;
 use crate::schema::SchemaRegistry;
 
+/// # Errors
+///
+/// Returns an error when the requested operation cannot be completed.
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    reason = "deletion metrics require a usize count after clamping negative values"
+)]
 pub async fn queue_delete_entity(table: &str, id: &str, v: &Valence) -> Result<()> {
     if table_skips_pending_deletion_filter(table) {
         return Err(Error::Validation(format!(
@@ -22,9 +30,8 @@ pub async fn queue_delete_entity(table: &str, id: &str, v: &Valence) -> Result<(
         .get_schema(table)
         .ok_or_else(|| Error::NotFound(format!("unknown table {table}")))?;
 
-    let existing = match QueryCore::get_record_json(table, id, v).await? {
-        Some(j) => j,
-        None => return Ok(()),
+    let Some(existing) = QueryCore::get_record_json(table, id, v).await? else {
+        return Ok(());
     };
 
     PrivacyEvaluator::check_entity_read(schema, &existing, v).await?;

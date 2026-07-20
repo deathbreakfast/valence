@@ -39,6 +39,9 @@ impl fmt::Display for OnDelete {
     }
 }
 
+/// # Errors
+///
+/// Returns an error when the requested operation cannot be completed.
 pub fn id_from_model<T>(model: &T) -> Result<String>
 where
     T: IdHolder,
@@ -53,10 +56,16 @@ pub trait IdHolder {
     fn record_id(&self) -> Option<&RecordId>;
 }
 
+/// # Errors
+///
+/// Returns an error when the requested operation cannot be completed.
 pub fn extract_id_from_record(r: &RecordId) -> Result<String> {
     Ok(r.id().to_string())
 }
 
+/// # Errors
+///
+/// Returns an error when the requested operation cannot be completed.
 pub fn extract_id_from_record_display(s: &str) -> Result<String> {
     let id = s.split_once(':').map_or(s, |(_, id_part)| id_part).trim();
     let id = id
@@ -70,6 +79,9 @@ pub fn extract_id_from_record_display(s: &str) -> Result<String> {
     Ok(id.to_string())
 }
 
+/// # Errors
+///
+/// Returns an error when the requested operation cannot be completed.
 pub fn extract_id_from_select_value(v: &serde_json::Value) -> Result<String> {
     if let Ok(rid) = serde_json::from_value::<RecordId>(v.clone()) {
         return extract_id_from_record(&rid);

@@ -188,6 +188,7 @@ fn schema_trait_impl_bundle(
     }
 }
 
+#[allow(clippy::unnecessary_wraps)] // Result kept for uniform generator API
 pub fn generate_trait_impls(
     schema: &SchemaContext,
     trait_defs: &HashMap<String, ParsedTraitDef>,

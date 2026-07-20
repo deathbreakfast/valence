@@ -99,7 +99,7 @@ pub async fn execute_select_postgres(
         .iter()
         .map(|r| {
             let id: String = r.try_get(0).unwrap_or_default();
-            let body: Value = r.try_get(1).unwrap_or(Value::Object(Map::new()));
+            let body: Value = r.try_get(1).unwrap_or_else(|_| Value::Object(Map::new()));
             (id, body.to_string())
         })
         .collect();

@@ -117,7 +117,7 @@ fn surreal_any_from_json_item(item: &serde_json::Value) -> SurrealAny {
     serde_json::from_value(item.clone()).unwrap_or(SurrealAny::Null)
 }
 
-fn surreal_any_from_json_value(json: serde_json::Value) -> SurrealAny {
+fn surreal_any_from_json_value(json: &serde_json::Value) -> SurrealAny {
     if json.is_null() {
         return SurrealAny::Null;
     }
@@ -150,7 +150,7 @@ fn surreal_any_from_json_value(json: serde_json::Value) -> SurrealAny {
 }
 
 fn surreal_any_from_fallback(other: Value) -> SurrealAny {
-    surreal_any_from_json_value(other.into_json_value())
+    surreal_any_from_json_value(&other.into_json_value())
 }
 
 pub fn value_to_surreal_any(v: Value) -> SurrealAny {

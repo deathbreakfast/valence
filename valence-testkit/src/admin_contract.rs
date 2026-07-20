@@ -140,14 +140,16 @@ pub async fn run_admin_contract(backend: Arc<dyn DatabaseBackend>) -> Result<()>
         .clear();
     queue_delete_entity("smoke", "s1", &v).await?;
 
-    let runs = dispatched
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
-    assert_eq!(runs.len(), 1, "delete dispatch should fire once");
-    assert_eq!(runs[0].root_table, "smoke");
-    assert_eq!(runs[0].root_record_id, "s1");
-    let run_id = runs[0].run_id.clone();
-    drop(runs);
+    // Drop the std MutexGuard before awaiting so the future stays Send.
+    let run_id = {
+        let runs = dispatched
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        assert_eq!(runs.len(), 1, "delete dispatch should fire once");
+        assert_eq!(runs[0].root_table, "smoke");
+        assert_eq!(runs[0].root_record_id, "s1");
+        runs[0].run_id.clone()
+    };
 
     let persisted = DeletionService::get_run_json(&run_id, &v)
         .await?

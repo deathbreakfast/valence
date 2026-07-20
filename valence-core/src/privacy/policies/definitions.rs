@@ -11,7 +11,9 @@ use super::checks::{
 
 /// Common privacy policies that can be reused across schemas
 pub mod common {
-    use super::*;
+    use super::{
+        authenticated_check, block_all_check, public_read_check, system_only_check, PrivacyRule,
+    };
 
     pub const PUBLIC_READ: PrivacyRule = PrivacyRule {
         name: "public_read",
@@ -40,7 +42,7 @@ pub mod common {
 
 /// Helper module for owner-based policies
 pub mod owner {
-    use super::*;
+    use super::{owner_by_id_check, owner_by_user_field_check, Actor, JsonValue, PrivacyRule};
 
     pub fn owner_by_id() -> PrivacyRule {
         PrivacyRule {

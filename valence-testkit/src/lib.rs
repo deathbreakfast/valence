@@ -5,6 +5,12 @@
 //! Internal test harness; not a stable public API.
 
 #![allow(missing_docs)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::print_stdout,
+    clippy::print_stderr
+)]
 // Step dispatch keeps a uniform `async fn` signature across modules; some arms
 // are sync-only today.
 #![allow(clippy::unused_async)]
@@ -14,6 +20,13 @@
 #![allow(clippy::unwrap_or_default)]
 #![allow(clippy::implicit_clone)]
 #![allow(clippy::enum_glob_use)]
+// Internal test harness: Result APIs and fluent builders are not a published surface.
+#![allow(
+    clippy::missing_errors_doc,
+    clippy::missing_panics_doc,
+    clippy::return_self_not_must_use,
+    clippy::unnecessary_wraps
+)]
 
 mod admin_contract;
 mod backend_contract;

@@ -9,6 +9,9 @@ const MAX_ATTEMPTS: u32 = 12;
 const BASE_DELAY_MS: u64 = 4;
 
 /// Retry an async Valence operation when [`is_retryable_transaction_contention`](crate::error::Error::is_retryable_transaction_contention) applies.
+/// # Errors
+///
+/// Returns an error when the requested operation cannot be completed.
 pub async fn retry_on_database_tx_conflict<F, Fut, T>(
     operation: &'static str,
     mut f: F,

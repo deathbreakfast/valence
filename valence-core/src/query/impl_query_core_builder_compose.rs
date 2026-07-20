@@ -1,5 +1,6 @@
 impl QueryCore {
     /// OR-combine another query's WHERE conditions with this one.
+    #[must_use]
     pub fn union_with(mut self, other: QueryCore) -> Self {
         if other.where_clauses.is_empty()
             && other.or_groups.is_empty()
@@ -32,6 +33,7 @@ impl QueryCore {
     }
 
     /// AND-combine another query's WHERE conditions with this one.
+    #[must_use]
     pub fn join_with(mut self, other: QueryCore) -> Self {
         if let Some(hop) = other.hop_source {
             self.where_clauses.push(WhereClause::Hop(hop));

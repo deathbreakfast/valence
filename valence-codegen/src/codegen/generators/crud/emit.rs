@@ -9,12 +9,12 @@ use super::emit_model_ops::{
     emit_ownership_support_tokens,
 };
 
-pub(super) fn emit_crud_tokens(ctx: CrudEmitCtx<'_>) -> TokenStream {
-    let model = emit_model_trait_impl(&ctx);
-    let helpers = emit_model_privacy_and_unique_impl(&ctx);
-    let ownership = emit_ownership_support_tokens(&ctx);
-    let batch_creatable = emit_batch_creatable_tokens(&ctx);
-    let mutable = emit_mutable_builder_and_composite(&ctx);
+pub(super) fn emit_crud_tokens(ctx: &CrudEmitCtx<'_>) -> TokenStream {
+    let model = emit_model_trait_impl(ctx);
+    let helpers = emit_model_privacy_and_unique_impl(ctx);
+    let ownership = emit_ownership_support_tokens(ctx);
+    let batch_creatable = emit_batch_creatable_tokens(ctx);
+    let mutable = emit_mutable_builder_and_composite(ctx);
     quote! {
         #model
         #helpers

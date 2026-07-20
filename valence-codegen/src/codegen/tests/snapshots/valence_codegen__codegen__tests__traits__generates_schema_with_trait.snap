@@ -398,10 +398,15 @@ impl valence::Model for TestTraitA {
     }
 }
 impl TestTraitA {
-    fn __schema_metadata() -> &'static valence::SchemaMetadataStruct {
+    fn __schema_metadata() -> valence::Result<&'static valence::SchemaMetadataStruct> {
         valence::SchemaRegistry::global()
             .get_schema("test_trait_a")
-            .expect(concat!("SchemaRegistry missing entry for ", "test_trait_a"))
+            .ok_or_else(|| {
+                valence::Error::Internal(
+                    concat!("SchemaRegistry missing entry for ", "test_trait_a")
+                        .to_string(),
+                )
+            })
     }
     async fn __assert_unique_constraints_for_record(
         record: &serde_json::Value,
@@ -481,7 +486,7 @@ impl TestTraitA {
     ) -> valence::Result<()> {
         let record = serde_json::json!(self);
         valence::PrivacyEvaluator::check_entity_access(
-                Self::__schema_metadata(),
+                Self::__schema_metadata()?,
                 valence::PrivacyOperation::Read,
                 &record,
                 valence,
@@ -494,7 +499,7 @@ impl TestTraitA {
     ) -> valence::Result<()> {
         let record = serde_json::json!(self);
         valence::PrivacyEvaluator::check_entity_access(
-                Self::__schema_metadata(),
+                Self::__schema_metadata()?,
                 valence::PrivacyOperation::Create,
                 &record,
                 valence,
@@ -507,7 +512,7 @@ impl TestTraitA {
     ) -> valence::Result<()> {
         let record = serde_json::json!(self);
         valence::PrivacyEvaluator::check_entity_access(
-                Self::__schema_metadata(),
+                Self::__schema_metadata()?,
                 valence::PrivacyOperation::Update,
                 &record,
                 valence,
@@ -520,7 +525,7 @@ impl TestTraitA {
     ) -> valence::Result<()> {
         let record = serde_json::json!(self);
         valence::PrivacyEvaluator::check_entity_access(
-                Self::__schema_metadata(),
+                Self::__schema_metadata()?,
                 valence::PrivacyOperation::Delete,
                 &record,
                 valence,

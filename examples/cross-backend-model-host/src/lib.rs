@@ -1,5 +1,11 @@
 //! Cross-backend model host: project and task on different storage engines.
 
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::print_stdout,
+    clippy::print_stderr
+)]
 use valence::{Database, DatabaseFromEngine, KnownEngines};
 
 /// Project table routes to primary mem backend.

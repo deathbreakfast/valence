@@ -1,5 +1,11 @@
 //! RocksDB persistence smoke test.
 
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::print_stdout,
+    clippy::print_stderr
+)]
 use std::time::Duration;
 
 use surrealdb::engine::local::RocksDb;

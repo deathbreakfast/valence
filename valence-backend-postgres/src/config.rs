@@ -18,6 +18,7 @@ impl PostgresBackendBuilder {
     }
 
     /// Fill unset URL from `DATABASE_URL`.
+    #[must_use]
     pub fn from_env_defaults(mut self) -> Self {
         if self.url.is_none() {
             self.url = postgres_url_from_env();
@@ -26,6 +27,7 @@ impl PostgresBackendBuilder {
     }
 
     /// Postgres connection URL.
+    #[must_use]
     pub fn url(mut self, url: impl Into<String>) -> Self {
         self.url = Some(url.into());
         self
@@ -37,6 +39,10 @@ impl PostgresBackendBuilder {
     }
 
     /// Resolve URL without connecting.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::Internal`] when no URL is set and `DATABASE_URL` is unset or empty.
     pub fn resolve(self) -> Result<String> {
         let builder = self.from_env_defaults();
         builder
@@ -45,6 +51,10 @@ impl PostgresBackendBuilder {
     }
 
     /// Connect and return a [`super::backend::PostgresBackend`].
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if URL resolution or the database connection fails.
     pub async fn build(self) -> Result<super::backend::PostgresBackend> {
         let url = self.resolve()?;
         super::backend::PostgresBackend::connect(&url).await

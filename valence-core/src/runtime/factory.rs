@@ -15,6 +15,9 @@ use valence_telemetry::TelemetrySink;
 /// Factory for reconstructing [`Valence`] instances outside request context.
 pub trait ValenceFactory: Send + Sync + 'static {
     /// Build a request-scoped [`Valence`] from a JSON actor payload.
+    /// # Errors
+    ///
+    /// Returns an error when the requested operation cannot be completed.
     fn build(&self, actor_json: &Value) -> Result<Valence>;
 }
 
@@ -35,6 +38,7 @@ pub struct RouterValenceFactoryConfig {
 
 impl RouterValenceFactoryConfig {
     /// Create a config with only the required default backend key.
+    #[must_use]
     pub fn new(default_backend_key: impl Into<String>) -> Self {
         Self {
             default_backend_key: default_backend_key.into(),
@@ -55,6 +59,7 @@ pub struct RouterValenceFactory {
 
 impl RouterValenceFactory {
     /// Wrap a shared router and host wiring template.
+    #[must_use]
     pub fn new(router: Arc<DatabaseRouter>, config: RouterValenceFactoryConfig) -> Self {
         Self { router, config }
     }

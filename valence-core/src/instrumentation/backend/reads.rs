@@ -11,6 +11,9 @@ use crate::instrumentation::labels::ReadOp;
 use crate::instrumentation::metrics;
 
 impl InstrumentedBackend {
+    /// # Errors
+    ///
+    /// Returns an error when the requested operation cannot be completed.
     pub(super) async fn measured_execute_compiled_query(
         &self,
         compiled: &CompiledQuery,
@@ -37,6 +40,9 @@ impl InstrumentedBackend {
         }
     }
 
+    /// # Errors
+    ///
+    /// Returns an error when the requested operation cannot be completed.
     pub(super) async fn measured_get_record(
         &self,
         table: &str,
@@ -63,6 +69,9 @@ impl InstrumentedBackend {
         }
     }
 
+    /// # Errors
+    ///
+    /// Returns an error when the requested operation cannot be completed.
     pub(super) async fn measured_get_edge_targets(
         &self,
         from: &RecordId,

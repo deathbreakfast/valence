@@ -11,13 +11,11 @@ pub(super) fn push_has_many_trait_target_method(
     conn: &SchemaConnection,
     methods: &mut Vec<TokenStream>,
 ) {
-    let target_trait = match conn.target_trait.as_deref() {
-        Some(t) => t,
-        None => return,
+    let Some(target_trait) = conn.target_trait.as_deref() else {
+        return;
     };
-    let reverse_field = match conn.reverse_field.as_deref() {
-        Some(r) => r,
-        None => return,
+    let Some(reverse_field) = conn.reverse_field.as_deref() else {
+        return;
     };
 
     let conn_name = &conn.from_field;

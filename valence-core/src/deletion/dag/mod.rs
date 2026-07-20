@@ -301,6 +301,9 @@ async fn bfs_cascade_expansion(
 
 impl DeletionDag {
     /// Compute cascade nodes and `Restrict` violations for deleting `(root_table, root_record_id)`.
+    /// # Errors
+    ///
+    /// Returns an error when the requested operation cannot be completed.
     pub async fn compute(root_table: &str, root_record_id: &str, v: &Valence) -> Result<Self> {
         Self::compute_with_registry(
             root_table,
@@ -313,6 +316,9 @@ impl DeletionDag {
     }
 
     /// Like [`Self::compute`], but uses the provided registries (for tests and tooling).
+    /// # Errors
+    ///
+    /// Returns an error when the requested operation cannot be completed.
     pub async fn compute_with_registry(
         root_table: &str,
         root_record_id: &str,

@@ -23,7 +23,9 @@ macro_rules! include_generated_models {
                 clippy::single_match_else,
                 clippy::unnecessary_trailing_comma,
                 clippy::unused_async,
-                clippy::elidable_lifetime_names
+                clippy::elidable_lifetime_names,
+                clippy::missing_errors_doc,
+                clippy::return_self_not_must_use
             )]
             include!(concat!(env!("OUT_DIR"), "/generated_models.rs"));
         }

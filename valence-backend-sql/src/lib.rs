@@ -6,10 +6,12 @@ mod document;
 #[allow(missing_docs)]
 mod edges;
 mod merge;
-#[allow(missing_docs)]
+#[allow(missing_docs, clippy::missing_errors_doc)]
+// internal ops; errors are Error::Database/Validation
 mod postgres_ops;
 mod query;
-#[allow(missing_docs)]
+#[allow(missing_docs, clippy::missing_errors_doc)]
+// internal ops; errors are Error::Database/Validation
 mod sqlite_ops;
 
 pub use document::{ensure_table, row_from_body, upsert_body_fields, EDGES_TABLE, ID_COLUMN};

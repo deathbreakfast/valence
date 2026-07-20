@@ -18,6 +18,7 @@ use inventory::{
 };
 use quote::quote_schema_metadata_method;
 
+#[allow(clippy::unnecessary_wraps)] // Result kept for uniform generator API
 pub fn generate_schema_metadata_method(
     schema: &SchemaContext,
 ) -> Result<TokenStream, Box<dyn std::error::Error>> {

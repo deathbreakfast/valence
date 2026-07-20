@@ -1,5 +1,8 @@
 impl QueryCore {
     /// Convert the query to parameterized SQL (SQLite/Postgres/mem SQL subset).
+    /// # Errors
+    ///
+    /// Returns an error when the requested operation cannot be completed.
     pub(crate) fn to_sql(&self) -> Result<(String, Vec<(String, serde_json::Value)>)> {
         let select_clause = super::sql_document::sql_select_clause(self.projection.as_ref());
         let mut query = format!("SELECT {select_clause} FROM {}", self.table);
@@ -52,7 +55,9 @@ impl QueryCore {
         }
         if !group_sqls.is_empty() {
             if group_sqls.len() == 1 {
-                where_parts.push(group_sqls.into_iter().next().unwrap());
+                if let Some(group_sql) = group_sqls.into_iter().next() {
+                    where_parts.push(group_sql);
+                }
             } else {
                 where_parts.push(format!("({})", group_sqls.join(" OR ")));
             }

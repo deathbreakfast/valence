@@ -1,5 +1,11 @@
 //! Admin runtime catalog — all available storage adapters.
 
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::print_stdout,
+    clippy::print_stderr
+)]
 use valence_testkit::{
     all_storage_adapters, run_admin_contract_for, run_admin_contract_mem,
     run_admin_contract_surreal_mem,

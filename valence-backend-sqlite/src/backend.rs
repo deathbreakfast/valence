@@ -64,11 +64,19 @@ pub struct SqliteBackend {
 
 impl SqliteBackend {
     /// Connect to an in-memory SQLite database.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the in-memory connection or edges schema setup fails.
     pub async fn connect_memory() -> Result<Self> {
         Self::connect(":memory:").await
     }
 
     /// Connect to a SQLite database at `path` (`:memory:` for ephemeral).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::Database`] if connecting or ensuring the edges schema fails.
     pub async fn connect(path: &str) -> Result<Self> {
         let options = SqliteConnectOptions::from_str(path)
             .or_else(|_| SqliteConnectOptions::from_str(&format!("sqlite:{path}")))

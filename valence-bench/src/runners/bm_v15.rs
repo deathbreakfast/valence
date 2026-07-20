@@ -9,11 +9,7 @@ use crate::runners::RunContext;
 pub async fn run(ctx: &RunContext) -> Result<BenchReport> {
     let pair = HopPair {
         primary: StorageAdapter::Mem,
-        secondary: if matches!(ctx.matrix.storage, StorageAdapter::Sqlite) {
-            StorageAdapter::Sqlite
-        } else {
-            StorageAdapter::Sqlite
-        },
+        secondary: StorageAdapter::Sqlite,
     };
     let start = std::time::Instant::now();
     run_hop_pair_contract(pair, Some(&ctx.wire)).await?;

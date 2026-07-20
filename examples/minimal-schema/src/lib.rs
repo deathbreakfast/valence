@@ -1,5 +1,11 @@
 //! Compile check: `valence_schema!` against facade types.
 
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::print_stdout,
+    clippy::print_stderr
+)]
 use valence::prelude::*;
 
 valence_schema! {

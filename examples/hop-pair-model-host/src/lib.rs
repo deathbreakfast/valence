@@ -1,5 +1,11 @@
 //! Hop-pair model host: Project on hop_a, Task on hop_b (any physical backends).
 
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::print_stdout,
+    clippy::print_stderr
+)]
 use valence::{Database, DatabaseFromEngine};
 
 /// Abstract engine id for the primary (Project) table.

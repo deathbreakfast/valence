@@ -55,7 +55,7 @@ pub fn generate_from_schema_file(
                     .any(|c| c.name == conn.name)
                 {
                     let mut merged = conn.clone();
-                    merged.from_table = parsed_file.schema.name.clone();
+                    merged.from_table.clone_from(&parsed_file.schema.name);
                     parsed_file.schema.connections.push(merged);
                 }
             }

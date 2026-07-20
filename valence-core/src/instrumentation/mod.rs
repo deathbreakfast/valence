@@ -46,4 +46,3 @@ pub fn record_side_effect_dispatch(_table: &str, _kind: &str) {}
 
 /// Side-effect handler failure hook (codegen `dispatch_side_effects`).
 pub fn record_side_effect_error(_table: &str, _message: &str) {}
-

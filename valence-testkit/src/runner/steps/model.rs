@@ -139,8 +139,7 @@ async fn query_filter_eq(session: &mut BootstrapSession, mode: RunMode) -> Resul
     // Unique names so prior catalog scenarios on shared wire DBs cannot collide.
     let tag = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_nanos())
-        .unwrap_or(0);
+        .map_or(0, |d| d.as_nanos());
     let alpha = format!("alpha-filter-{tag}");
     let beta = format!("beta-filter-{tag}");
     seed_named(session, &[&alpha, &beta]).await?;

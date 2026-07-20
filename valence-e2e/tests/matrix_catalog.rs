@@ -1,5 +1,11 @@
 //! Matrix-driven catalog tests for Valence e2e.
 
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::print_stdout,
+    clippy::print_stderr
+)]
 #[cfg(feature = "surreal-inventory")]
 mod support;
 

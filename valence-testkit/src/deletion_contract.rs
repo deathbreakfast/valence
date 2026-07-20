@@ -73,11 +73,15 @@ pub async fn run_deletion_contract(backend: Arc<dyn DatabaseBackend>) -> Result<
     })
     .await?;
 
-    let reqs = captured
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
-    assert_eq!(reqs.len(), 1);
-    assert_eq!(reqs[0].run_id, "capture-check");
+    let (len, run_id) = {
+        let reqs = captured
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        (reqs.len(), reqs[0].run_id.clone())
+    };
+    drop(captured);
+    assert_eq!(len, 1);
+    assert_eq!(run_id, "capture-check");
 
     Ok(())
 }

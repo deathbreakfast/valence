@@ -12,6 +12,9 @@ use crate::privacy::types::{PrivacyOperation, PrivacyPolicy, PrivacyRule};
 
 impl PrivacyEvaluator {
     /// Filter fields from a record based on field-level privacy policies.
+    /// # Errors
+    ///
+    /// Returns an error when the requested operation cannot be completed.
     pub fn filter_entity_fields(
         schema: &SchemaMetadata,
         raw_data: &serde_json::Value,
@@ -115,6 +118,9 @@ impl PrivacyEvaluator {
     }
 
     /// Check entity-level access for any CRUD operation.
+    /// # Errors
+    ///
+    /// Returns an error when the requested operation cannot be completed.
     pub async fn check_entity_access(
         schema: &SchemaMetadata,
         op: PrivacyOperation,
@@ -203,6 +209,9 @@ impl PrivacyEvaluator {
     }
 
     /// Convenience wrapper for the read operation (used by `QueryCore::get_entity`).
+    /// # Errors
+    ///
+    /// Returns an error when the requested operation cannot be completed.
     pub async fn check_entity_read(
         schema: &SchemaMetadata,
         raw_data: &serde_json::Value,

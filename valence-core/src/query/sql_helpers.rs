@@ -49,6 +49,9 @@ pub(super) fn extract_id_from_fk_value(value: Option<&serde_json::Value>) -> Opt
     feature = "compiler-redis",
     feature = "compiler-indradb",
 ))]
+/// # Errors
+///
+/// Returns an error when the requested operation cannot be completed.
 pub(super) fn parse_select_from_subquery(sub_query: &str) -> Result<(&str, String)> {
     let s = sub_query.trim();
     let upper = s.to_uppercase();
@@ -99,6 +102,9 @@ pub(super) fn parse_select_from_subquery(sub_query: &str) -> Result<(&str, Strin
     feature = "compiler-redis",
     feature = "compiler-indradb",
 ))]
+/// # Errors
+///
+/// Returns an error when the requested operation cannot be completed.
 pub(super) fn parse_select_star_subquery_for_exists(sub_query: &str) -> Result<(&str, String)> {
     parse_select_from_subquery(sub_query)
 }
@@ -168,7 +174,7 @@ pub(super) fn backend_schema_table(from_clause_table: &str) -> &str {
         .split_once(',')
         .map(|(first, _)| first.trim())
         .filter(|s| !s.is_empty())
-        .unwrap_or(from_clause_table.trim())
+        .unwrap_or_else(|| from_clause_table.trim())
 }
 
 fn compare_json_values(a: &serde_json::Value, b: &serde_json::Value) -> std::cmp::Ordering {

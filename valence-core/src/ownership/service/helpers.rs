@@ -100,6 +100,7 @@ impl OwnershipGateStatus {
         matches!(self, Self::Status(s) if s == "pending_deletion")
     }
 
+    #[must_use]
     pub(crate) fn from_optional_status(raw: Option<Value>) -> Self {
         match raw.and_then(|v| v.as_str().map(str::to_string)) {
             Some(s) => Self::Status(s),
@@ -138,6 +139,11 @@ pub fn schema_skipped_for_owner_summary(table: &str, schema: &crate::Schema) -> 
     skip_ownership_for_table(table) || schema.ownership.as_ref().is_some_and(|o| o.system_owned)
 }
 
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    reason = "backend count values may be represented as floating-point JSON"
+)]
 pub fn parse_count_from_row(row: &Value) -> u64 {
     row.get("n")
         .or_else(|| row.get("count"))
@@ -208,6 +214,9 @@ pub fn normalize_record_id_for_ownership(entity_id: &str) -> String {
 }
 
 /// Build transfer audit row JSON and append to `valence_ownership_transfer`.
+/// # Errors
+///
+/// Returns an error when the requested operation cannot be completed.
 pub async fn append_transfer_history_row(
     valence_model: &str,
     record_id: &str,

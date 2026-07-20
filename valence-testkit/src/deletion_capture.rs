@@ -10,28 +10,26 @@ use valence_core::Result;
 static CAPTURE: OnceLock<Arc<Mutex<Vec<DeletionRequest>>>> = OnceLock::new();
 
 fn captured_requests() -> Arc<Mutex<Vec<DeletionRequest>>> {
-    CAPTURE
-        .get_or_init(|| {
-            let captured = Arc::new(Mutex::new(Vec::new()));
-            let hook_target = Arc::clone(&captured);
-            let dispatcher: Box<
-                dyn Fn(DeletionRequest) -> Pin<Box<dyn Future<Output = Result<()>> + Send>>
-                    + Send
-                    + Sync,
-            > = Box::new(move |req| {
-                let hook_target = Arc::clone(&hook_target);
-                Box::pin(async move {
-                    hook_target
-                        .lock()
-                        .unwrap_or_else(|poisoned| poisoned.into_inner())
-                        .push(req);
-                    Ok(())
-                })
-            });
-            register_deletion_dispatcher(dispatcher);
-            captured
-        })
-        .clone()
+    Arc::clone(CAPTURE.get_or_init(|| {
+        let captured = Arc::new(Mutex::new(Vec::new()));
+        let hook_target = Arc::clone(&captured);
+        let dispatcher: Box<
+            dyn Fn(DeletionRequest) -> Pin<Box<dyn Future<Output = Result<()>> + Send>>
+                + Send
+                + Sync,
+        > = Box::new(move |req| {
+            let hook_target = Arc::clone(&hook_target);
+            Box::pin(async move {
+                hook_target
+                    .lock()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner())
+                    .push(req);
+                Ok(())
+            })
+        });
+        register_deletion_dispatcher(dispatcher);
+        captured
+    }))
 }
 
 /// Return the process-wide captured deletion requests and clear prior entries.

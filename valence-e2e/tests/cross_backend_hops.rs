@@ -1,5 +1,11 @@
 //! Cross-backend hop contract — Cartesian pairs + nested chains.
 
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::print_stdout,
+    clippy::print_stderr
+)]
 use valence_testkit::{
     directed_pairs, hop_quads_representative, hop_triples_representative,
     run_cross_backend_hop_contract, run_hop_chain_contract, run_hop_pair_contract,

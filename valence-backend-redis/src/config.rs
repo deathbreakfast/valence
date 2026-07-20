@@ -49,6 +49,7 @@ impl RedisBackendBuilder {
     }
 
     /// Fill unset fields from `VALENCE_REDIS_*` environment variables.
+    #[must_use]
     pub fn from_env_defaults(mut self) -> Self {
         if self.url.is_none() {
             self.url = redis_url_from_env();
@@ -63,12 +64,14 @@ impl RedisBackendBuilder {
     }
 
     /// Redis connection URL.
+    #[must_use]
     pub fn url(mut self, url: impl Into<String>) -> Self {
         self.url = Some(url.into());
         self
     }
 
     /// Key prefix for Valence namespacing.
+    #[must_use]
     pub fn key_prefix(mut self, prefix: impl Into<String>) -> Self {
         self.key_prefix = Some(prefix.into());
         self
@@ -80,6 +83,10 @@ impl RedisBackendBuilder {
     }
 
     /// Resolve configuration without connecting.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::Internal`] when no Redis URL is configured.
     pub fn resolve(self) -> Result<RedisConfig> {
         let builder = self.from_env_defaults();
         let url = builder.url.ok_or_else(|| {
@@ -96,6 +103,10 @@ impl RedisBackendBuilder {
     }
 
     /// Connect and return a [`super::backend::RedisBackend`].
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::Internal`] when config is incomplete, or [`Error::Database`] on connect failure.
     pub async fn build(self) -> Result<super::backend::RedisBackend> {
         let config = self.resolve()?;
         super::backend::RedisBackend::connect_with_config(config).await
@@ -116,6 +127,7 @@ impl FleetRedisBackendBuilder {
     }
 
     /// Fill unset fields from `VALENCE_REDIS_URLS` / `VALENCE_REDIS_KEY_PREFIX`.
+    #[must_use]
     pub fn from_env_defaults(mut self) -> Self {
         if self.urls.is_none() {
             self.urls = fleet_urls_from_env().ok();
@@ -130,12 +142,14 @@ impl FleetRedisBackendBuilder {
     }
 
     /// Standalone Redis node URLs.
+    #[must_use]
     pub fn urls(mut self, urls: impl IntoIterator<Item = impl Into<String>>) -> Self {
         self.urls = Some(urls.into_iter().map(|u| u.into()).collect());
         self
     }
 
     /// Shared key prefix for all fleet nodes.
+    #[must_use]
     pub fn key_prefix(mut self, prefix: impl Into<String>) -> Self {
         self.key_prefix = Some(prefix.into());
         self
@@ -147,6 +161,10 @@ impl FleetRedisBackendBuilder {
     }
 
     /// Resolve fleet settings.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::Internal`] when fleet URLs are missing or empty.
     pub fn resolve(self) -> Result<(Vec<String>, String)> {
         let builder = self.from_env_defaults();
         let urls = builder.urls.filter(|u| !u.is_empty()).ok_or_else(|| {
@@ -161,6 +179,10 @@ impl FleetRedisBackendBuilder {
     }
 
     /// Connect fleet backend.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::Internal`] when URLs are missing, or [`Error::Database`] on connect failure.
     pub async fn build(self) -> Result<super::fleet::FleetRedisBackend> {
         let (urls, prefix) = self.resolve()?;
         super::fleet::FleetRedisBackend::connect_with_urls(urls, prefix).await

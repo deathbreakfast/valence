@@ -9,6 +9,7 @@ use crate::codegen::utils::to_pascal_case;
 
 /// Generate `*FieldChanges` struct, its `compute` method, and side-effect dispatch
 /// helper for a model.
+#[allow(clippy::unnecessary_wraps)] // Result kept for uniform generator API
 pub fn generate_side_effects(
     schema: &SchemaContext,
 ) -> Result<TokenStream, Box<dyn std::error::Error>> {

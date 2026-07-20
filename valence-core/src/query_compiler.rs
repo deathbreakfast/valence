@@ -6,5 +6,8 @@ use crate::query::QueryCore;
 
 /// Compiles [`QueryCore`] for one database dialect.
 pub trait QueryCompiler: Send + Sync {
+    /// # Errors
+    ///
+    /// Returns an error when the requested operation cannot be completed.
     fn compile(&self, core: &QueryCore) -> Result<CompiledQuery>;
 }

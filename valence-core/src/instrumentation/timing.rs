@@ -11,6 +11,7 @@ pub struct MutationTimer {
 }
 
 impl MutationTimer {
+    #[must_use]
     pub fn start(operation: &'static str) -> Self {
         Self {
             operation,
@@ -29,12 +30,17 @@ pub struct QueryTimer {
 }
 
 impl QueryTimer {
+    #[must_use]
     pub fn start(_primary_table: impl Into<String>, _query_target: impl Into<String>) -> Self {
         Self {
             start: Instant::now(),
         }
     }
 
+    #[allow(
+        clippy::cast_possible_truncation,
+        reason = "telemetry duration is intentionally bounded by i64 milliseconds"
+    )]
     pub fn elapsed_ms(&self) -> i64 {
         self.start.elapsed().as_millis() as i64
     }

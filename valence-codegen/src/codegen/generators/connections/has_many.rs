@@ -13,9 +13,8 @@ pub(super) fn push_has_many_method_for_connection(
     conn: &SchemaConnection,
     methods: &mut Vec<TokenStream>,
 ) {
-    let reverse_field = match &conn.reverse_field {
-        Some(r) => r,
-        None => return,
+    let Some(reverse_field) = &conn.reverse_field else {
+        return;
     };
     let conn_name = &conn.from_field;
     let target_type = connection_target_type(conn);

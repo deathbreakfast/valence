@@ -37,6 +37,8 @@
 //!   (use `valence-backend-*` and separate host adapters)
 //! - Host-owned codegen lives in `valence-codegen`, not here
 
+#![cfg_attr(test, allow(clippy::expect_used, clippy::unwrap_used))]
+
 extern crate self as valence_core;
 
 pub mod actor;
@@ -66,6 +68,7 @@ pub mod read_cache;
 pub mod record_id;
 pub mod reference;
 pub mod registry;
+pub mod request_cache;
 pub mod router;
 pub mod router_key;
 pub mod row_json;
@@ -144,6 +147,7 @@ pub use read_cache::{
 };
 pub use record_id::RecordId;
 pub use reference::{Reference, ReferencedEntity, WithReference};
+pub use request_cache::RequestPermissionCache;
 pub use router::DatabaseRouter;
 pub use router_key::router_key;
 pub use runtime::{

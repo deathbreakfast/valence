@@ -20,6 +20,9 @@ use super::OwnershipService;
 
 impl OwnershipService {
     /// Resolve the backend that stores `valence_data_ownership` rows for `valence_model`.
+    /// # Errors
+    ///
+    /// Returns an error when the requested operation cannot be completed.
     pub(crate) fn ownership_backend(
         valence_model: &str,
         v: &Valence,
@@ -69,6 +72,9 @@ impl OwnershipService {
     }
 
     /// Load ownership JSON for a row, if present.
+    /// # Errors
+    ///
+    /// Returns an error when the requested operation cannot be completed.
     pub async fn get_ownership_json(
         valence_model: &str,
         record_id: &str,
@@ -84,6 +90,9 @@ impl OwnershipService {
     }
 
     /// Subset of `bare_record_ids` that currently have `status = pending_deletion` in ownership.
+    /// # Errors
+    ///
+    /// Returns an error when the requested operation cannot be completed.
     pub async fn pending_deletion_bare_ids_subset(
         valence_model: &str,
         bare_record_ids: &[String],
@@ -166,6 +175,9 @@ impl OwnershipService {
     }
 
     /// Roll up ownership sidecar rows for `owner_id` / `owner_type` across registered schemas.
+    /// # Errors
+    ///
+    /// Returns an error when the requested operation cannot be completed.
     pub async fn owner_data_summary(
         owner_id: &str,
         owner_type: &str,
@@ -189,8 +201,7 @@ impl OwnershipService {
             let owner_id = owner_id.to_string();
             let owner_type = owner_type.to_string();
             let v = v.clone();
-            let permit = semaphore
-                .clone()
+            let permit = Arc::clone(&semaphore)
                 .acquire_owned()
                 .await
                 .map_err(|e| Error::Internal(e.to_string()))?;
@@ -248,6 +259,9 @@ impl OwnershipService {
     }
 
     /// Recent transfer rows for the ownership row of `valence_model` / `record_id`.
+    /// # Errors
+    ///
+    /// Returns an error when the requested operation cannot be completed.
     pub async fn transfer_history(
         valence_model: &str,
         record_id: &str,

@@ -11,6 +11,7 @@ pub struct RecordId {
 }
 
 impl RecordId {
+    #[must_use]
     pub fn new(table: impl Into<String>, id: impl Into<String>) -> Self {
         Self {
             table: table.into(),

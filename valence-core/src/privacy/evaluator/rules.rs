@@ -8,6 +8,9 @@ use crate::privacy::types::{PrivacyOperation, PrivacyPolicy};
 
 impl PrivacyEvaluator {
     /// Evaluate entity-level privacy policies for any operation.
+    /// # Errors
+    ///
+    /// Returns an error when the requested operation cannot be completed.
     pub fn evaluate(
         policies: &PrivacyPolicy,
         record: &serde_json::Value,
@@ -61,6 +64,9 @@ impl PrivacyEvaluator {
         ))
     }
 
+    /// # Errors
+    ///
+    /// Returns an error when the requested operation cannot be completed.
     pub(super) async fn evaluate_policy_rule(
         rule: &crate::schema_api::SchemaPolicyRule,
         op: PrivacyOperation,
@@ -88,6 +94,9 @@ impl PrivacyEvaluator {
         Ok(matched)
     }
 
+    /// # Errors
+    ///
+    /// Returns an error when the requested operation cannot be completed.
     pub(super) async fn eval_rules_any_match(
         rules: &[&crate::schema_api::SchemaPolicyRule],
         op: PrivacyOperation,

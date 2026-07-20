@@ -34,12 +34,20 @@ pub fn sql_with_positional_placeholders(
 }
 
 /// Decode a SQL row `(id, body)` into Valence JSON record shape.
+///
+/// # Errors
+///
+/// Currently infallible; returns `Ok` with an empty object body if JSON parse fails.
 pub fn row_to_json(table: &str, id: &str, body_text: &str) -> Result<Value> {
     let body: Value = serde_json::from_str(body_text).unwrap_or_else(|_| Value::Object(Map::new()));
     Ok(super::document::row_from_body(table, id, body))
 }
 
 /// Parse SELECT results from generic JSON rows returned by driver layer.
+///
+/// # Errors
+///
+/// Currently infallible; malformed row shapes are skipped or passed through.
 pub fn decode_select_rows(rows: Vec<Value>, default_table: &str) -> Result<Vec<Value>> {
     let mut out = Vec::new();
     for row in rows {
@@ -47,7 +55,7 @@ pub fn decode_select_rows(rows: Vec<Value>, default_table: &str) -> Result<Vec<V
             if let (Some(id), Some(body)) = (obj.get("id"), obj.get("body")) {
                 let id_str = id.as_str().unwrap_or_default();
                 let body_val = if let Some(s) = body.as_str() {
-                    serde_json::from_str(s).unwrap_or(Value::Object(Map::new()))
+                    serde_json::from_str(s).unwrap_or_else(|_| Value::Object(Map::new()))
                 } else {
                     body.clone()
                 };
@@ -70,7 +78,14 @@ pub fn first_count(rows: &[Value]) -> i64 {
         .and_then(|v| {
             v.as_i64()
                 .or_else(|| v.get("count").and_then(|c| c.as_i64()))
-                .or_else(|| v.as_f64().map(|f| f as i64))
+                .or_else(|| {
+                    v.as_f64().map(|f| {
+                        #[allow(clippy::cast_possible_truncation)] // count aggregation
+                        {
+                            f as i64
+                        }
+                    })
+                })
         })
         .unwrap_or(0)
 }
@@ -87,6 +102,10 @@ pub fn extract_ids(rows: &[Value]) -> Vec<String> {
 }
 
 /// Validate compiled query is read-only SELECT.
+///
+/// # Errors
+///
+/// Returns [`Error::Internal`] when the query is not a `SELECT`.
 pub fn ensure_read_only(query: &str) -> Result<()> {
     let upper = query.trim().to_uppercase();
     if upper.starts_with("SELECT ") {
@@ -99,6 +118,10 @@ pub fn ensure_read_only(query: &str) -> Result<()> {
 }
 
 /// Normalize compiled query for SQLite execution (`?` placeholders).
+///
+/// # Errors
+///
+/// Returns [`Error::Internal`] when the compiled query is not read-only.
 pub fn prepare_compiled(compiled: &CompiledQuery) -> Result<(String, Vec<Value>)> {
     ensure_read_only(&compiled.query_string)?;
     Ok(sql_with_positional_placeholders(
@@ -152,6 +175,10 @@ pub fn rewrite_json_extract_for_postgres(sql: &str) -> String {
 }
 
 /// Normalize compiled query for Postgres execution (`$1`, `$2`, … placeholders).
+///
+/// # Errors
+///
+/// Returns [`Error::Internal`] when the compiled query is not read-only.
 pub fn prepare_compiled_postgres(compiled: &CompiledQuery) -> Result<(String, Vec<Value>)> {
     ensure_read_only(&compiled.query_string)?;
     let rewritten = rewrite_json_extract_for_postgres(&compiled.query_string);
@@ -195,6 +222,8 @@ pub fn sql_with_postgres_placeholders(
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::expect_used, clippy::unwrap_used)]
+
     use super::*;
     use serde_json::json;
 

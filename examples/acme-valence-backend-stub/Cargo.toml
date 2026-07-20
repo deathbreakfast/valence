@@ -9,6 +9,7 @@ description = "Example third-party Valence storage adapter (matrix acme-stub row
 [dependencies]
 async-trait = { workspace = true }
 serde_json = { workspace = true }
+tokio = { workspace = true }
 valence-core = { workspace = true }
 
 [dev-dependencies]

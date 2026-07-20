@@ -4,6 +4,12 @@
 //! cargo run -p valence --example quickstart --features mem
 //! ```
 
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::print_stdout,
+    clippy::print_stderr
+)]
 use std::sync::Arc;
 
 use valence::{

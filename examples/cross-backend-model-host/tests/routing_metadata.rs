@@ -1,5 +1,11 @@
 //! Generated models must register schema `database:` evaluators (not DEFAULT_IN_MEMORY).
 
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::print_stdout,
+    clippy::print_stderr
+)]
 use cross_backend_model_host::{ProjectSchema, TaskSchema, PROJECT_DB, TASK_DB};
 use valence::DatabaseEvaluator;
 

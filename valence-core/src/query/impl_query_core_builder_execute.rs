@@ -1,5 +1,8 @@
 impl QueryCore {
     /// Compile the query for the active backend and execute it
+    /// # Errors
+    ///
+    /// Returns an error when the requested operation cannot be completed.
     pub async fn execute<T>(self, valence: &Valence) -> Result<Vec<T>>
     where
         T: DeserializeOwned + Serialize,
@@ -53,6 +56,7 @@ impl QueryCore {
         Self::execute_on_table(self, valence).await
     }
 
+    #[allow(clippy::cast_possible_wrap, reason = "telemetry accepts signed row counts while collection lengths are usize")]
     async fn execute_on_table<T>(self, valence: &Valence) -> Result<Vec<T>>
     where
         T: DeserializeOwned + Serialize,
@@ -139,6 +143,9 @@ impl QueryCore {
     }
 
     /// Execute as a distinct-value query, returning a flat `Vec<String>`.
+    /// # Errors
+    ///
+    /// Returns an error when the requested operation cannot be completed.
     pub async fn distinct_values(mut self, field: &str, valence: &Valence) -> Result<Vec<String>> {
         self.projection = Some(vec![format!("VALUE {}", field)]);
         self.group_by = vec![field.to_string()];
@@ -199,17 +206,17 @@ impl QueryCore {
             let row_json =
                 serde_json::to_value(&row).map_err(|e| Error::Internal(e.to_string()))?;
             for (from_field, to_table) in &connection_exists {
-                let target_id = if let Some(id) = extract_id_from_fk_value(row_json.get(from_field)) { id } else {
+                let Some(target_id) = extract_id_from_fk_value(row_json.get(from_field)) else {
                     exclude = true;
                     break;
                 };
-                let raw_data =
-                    if let Some(d) = Self::get_record_json(to_table.as_str(), target_id.as_str(), valence)
-                        .await? { d } else {
-                        exclude = true;
-                        break;
-                    };
-                let schema = if let Some(s) = SchemaRegistry::global().get_schema(to_table.as_str()) { s } else {
+                let Some(raw_data) =
+                    Self::get_record_json(to_table.as_str(), target_id.as_str(), valence).await?
+                else {
+                    exclude = true;
+                    break;
+                };
+                let Some(schema) = SchemaRegistry::global().get_schema(to_table.as_str()) else {
                     exclude = true;
                     break;
                 };
@@ -239,9 +246,8 @@ impl QueryCore {
         use crate::privacy::PrivacyEvaluator;
         use crate::schema::SchemaRegistry;
 
-        let schema = match SchemaRegistry::global().get_schema(&self.table) {
-            Some(s) => s,
-            None => return Ok(results),
+        let Some(schema) = SchemaRegistry::global().get_schema(&self.table) else {
+            return Ok(results);
         };
 
         let concurrency = 1usize;

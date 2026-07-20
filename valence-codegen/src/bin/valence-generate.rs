@@ -1,9 +1,10 @@
 //! Host-side CLI for `build.rs` scripts (avoids listing `valence-codegen` as a build-dependency
 //! when cross-compiling the frontend to wasm32).
 
+use std::io::Write as _;
 use std::path::PathBuf;
 
-fn main() {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut args = std::env::args();
     let _program = args.next();
     let Some(schemas_dir) = args.next() else {
@@ -23,20 +24,23 @@ fn main() {
         usage();
     }
 
-    valence_codegen::generate_models(valence_codegen::CodegenConfig {
+    valence_codegen::generate_models(&valence_codegen::CodegenConfig {
         schemas_dir: PathBuf::from(schemas_dir),
         out_dir: PathBuf::from(out_dir),
         file_suffix: &file_suffix,
         trait_file_suffix: &trait_file_suffix,
-    })
-    .expect("valence codegen failed");
+    })?;
+
+    Ok(())
 }
 
 fn usage() -> ! {
-    eprintln!(
+    let _ = writeln!(
+        std::io::stderr(),
         "usage: valence-generate <schemas_dir> <out_dir> [<file_suffix> <trait_file_suffix>]"
     );
-    eprintln!(
+    let _ = writeln!(
+        std::io::stderr(),
         "defaults: file_suffix={} trait_file_suffix={}",
         valence_codegen::DEFAULT_SCHEMA_SUFFIX,
         valence_codegen::DEFAULT_TRAIT_SUFFIX

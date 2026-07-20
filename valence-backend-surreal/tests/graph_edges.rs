@@ -1,5 +1,11 @@
 //! Graph edge query tests for embedded Surreal backend.
 
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::print_stdout,
+    clippy::print_stderr
+)]
 use surrealdb::engine::local::Mem;
 use valence_backend_surreal::{SDb, SurrealEmbeddedBackend};
 use valence_core::compiled_query::CompiledQuery;

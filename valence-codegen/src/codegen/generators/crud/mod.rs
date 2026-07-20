@@ -81,7 +81,7 @@ pub fn generate_crud_operations(
             )
         })?;
 
-    Ok(emit_crud_tokens(CrudEmitCtx {
+    Ok(emit_crud_tokens(&CrudEmitCtx {
         struct_name,
         schema_struct_name,
         mutable_name,

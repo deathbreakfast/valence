@@ -76,16 +76,28 @@ impl RedisBackend {
     }
 
     /// Connect using env defaults via builder (shorthand).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::Internal`] when env config is incomplete, or [`Error::Database`] on connect failure.
     pub async fn from_env() -> Result<Self> {
         Self::builder().from_env_defaults().build().await
     }
 
     /// Connect to Redis at `url` with default key prefix.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::Database`] when the Redis connection fails.
     pub async fn connect(url: &str) -> Result<Self> {
         Self::builder().url(url).build().await
     }
 
     /// Connect using explicit config.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::Database`] when the Redis connection fails.
     pub async fn connect_with_config(config: RedisConfig) -> Result<Self> {
         let client =
             redis::Client::open(config.url.as_str()).map_err(|e| Error::Database(e.to_string()))?;
@@ -98,6 +110,7 @@ impl RedisBackend {
         })
     }
 
+    #[allow(clippy::needless_pass_by_value)] // map_err adapter; value only Display'd
     fn map_err(e: redis::RedisError) -> Error {
         Error::Database(e.to_string())
     }
@@ -189,7 +202,7 @@ impl RedisBackend {
         let limit = descriptor
             .get("limit")
             .and_then(|v| v.as_u64())
-            .map(|n| n as usize);
+            .map(|n| usize::try_from(n).unwrap_or(usize::MAX));
         Ok((table.to_string(), limit))
     }
 
@@ -241,9 +254,8 @@ impl DatabaseBackend for RedisBackend {
             }
         }
 
-        let (table, _limit, id_only) = match Self::parse_sql_select(q) {
-            Ok(parsed) => parsed,
-            Err(_) => return Ok(vec![]),
+        let Ok((table, _limit, id_only)) = Self::parse_sql_select(q) else {
+            return Ok(vec![]);
         };
         if table.is_empty() {
             return Ok(vec![]);
@@ -437,7 +449,10 @@ impl DatabaseBackend for RedisBackend {
 }
 
 fn row_from_body(table: &str, id: &str, body: Value) -> Value {
-    let mut obj = body.as_object().cloned().unwrap_or_default();
+    let mut obj = match body {
+        Value::Object(map) => map,
+        _ => Map::new(),
+    };
     obj.insert("id".into(), record_id_json(table, id));
     Value::Object(obj)
 }

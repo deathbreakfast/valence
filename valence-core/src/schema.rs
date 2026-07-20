@@ -20,6 +20,7 @@ pub struct SchemaMetadata {
 pub type SchemaMetadataStruct = SchemaMetadata;
 
 impl SchemaMetadata {
+    #[must_use]
     pub fn new(
         table_name: &'static str,
         version: &'static str,
@@ -40,6 +41,7 @@ impl SchemaMetadata {
         }
     }
 
+    #[must_use]
     pub fn from_schema(schema: &'static Schema) -> Self {
         Self {
             table_name: schema.name.as_str(),
@@ -86,12 +88,14 @@ pub struct SchemaRegistry {
 }
 
 impl SchemaRegistry {
+    #[must_use]
     pub fn new() -> Self {
         Self {
             inner: HashMap::new(),
         }
     }
 
+    #[must_use]
     pub fn auto_discover() -> Self {
         let mut registry = Self::new();
         for init in inventory::iter::<SchemaMetadataInit> {
@@ -103,10 +107,14 @@ impl SchemaRegistry {
         registry
     }
 
+    /// # Panics
+    ///
+    /// Panics if the global registry has already been initialized.
     pub fn set_global(registry: SchemaRegistry) {
-        GLOBAL_REGISTRY
-            .set(registry)
-            .expect("SchemaRegistry::set_global called more than once");
+        assert!(
+            GLOBAL_REGISTRY.set(registry).is_ok(),
+            "SchemaRegistry::set_global called more than once"
+        );
     }
 
     pub fn global() -> &'static SchemaRegistry {

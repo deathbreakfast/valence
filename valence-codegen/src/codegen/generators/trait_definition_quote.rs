@@ -329,6 +329,7 @@ fn quote_trait_definition_bundle(p: &TraitDefinitionPieces) -> TokenStream {
     }
 }
 
+#[allow(clippy::unnecessary_wraps)] // Result kept for uniform generator API
 pub fn generate_trait_definition(
     trait_def: &ParsedTraitDef,
 ) -> Result<TokenStream, Box<dyn std::error::Error>> {

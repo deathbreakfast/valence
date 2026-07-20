@@ -149,7 +149,7 @@ pub async fn get_record_sqlite(
         row_from_body(
             table,
             &id,
-            serde_json::from_str(&body).unwrap_or(Value::Object(Map::new())),
+            serde_json::from_str(&body).unwrap_or_else(|_| Value::Object(Map::new())),
         )
     }))
 }
@@ -175,7 +175,7 @@ pub async fn create_record_sqlite(
     Ok(row_from_body(
         table,
         &id,
-        serde_json::from_str(&body_text).unwrap_or(Value::Object(Map::new())),
+        serde_json::from_str(&body_text).unwrap_or_else(|_| Value::Object(Map::new())),
     ))
 }
 
@@ -202,7 +202,7 @@ pub async fn update_record_sqlite(
     Ok(row_from_body(
         table,
         id,
-        serde_json::from_str(&body_text).unwrap_or(Value::Object(Map::new())),
+        serde_json::from_str(&body_text).unwrap_or_else(|_| Value::Object(Map::new())),
     ))
 }
 

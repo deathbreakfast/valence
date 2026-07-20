@@ -33,6 +33,7 @@ pub struct DeletionDag {
 }
 
 impl DeletionDag {
+    #[must_use]
     pub(crate) fn nodes_from_visited(
         root_table: &str,
         root_record_id: &str,

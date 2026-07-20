@@ -134,7 +134,7 @@ impl BootstrapSession {
             ));
         }
 
-        self.telemetry_sink = telemetry_for_matrix(&self.matrix, &self.recording);
+        self.telemetry_sink = telemetry_for_matrix(self.matrix, &self.recording);
         if matches!(self.matrix.telemetry, TelemetryAdapter::Recording) {
             install_telemetry_sink(Arc::clone(&self.telemetry_sink));
         }
@@ -142,7 +142,7 @@ impl BootstrapSession {
         self.default_backend_key = Some(default_key.clone());
         self.router = Some(Arc::clone(&router));
 
-        let mut config = RouterValenceFactoryConfig::new(default_key.clone());
+        let mut config = RouterValenceFactoryConfig::new(default_key);
         config.telemetry_sink = Some(Arc::clone(&self.telemetry_sink));
         self.factory = Some(RouterValenceFactory::arc(router, config));
         self.ready = true;
@@ -206,11 +206,7 @@ impl BootstrapSession {
         let backend: Arc<dyn DatabaseBackend> = Arc::new(InMemoryBackend::new());
         let backend = maybe_wrap_backend(backend, self.matrix.telemetry);
         let mut router = DatabaseRouter::new();
-        let default_logical = self
-            .logical_names
-            .first()
-            .map(|s| s.as_str())
-            .unwrap_or("default");
+        let default_logical = self.logical_names.first().map_or("default", |s| s.as_str());
         for name in &self.logical_names {
             let key = router_key(name, ENGINE_ID);
             router.register(key, Arc::clone(&backend));
@@ -238,11 +234,7 @@ impl BootstrapSession {
             );
             let backend = maybe_wrap_backend(backend, self.matrix.telemetry);
             let mut router = DatabaseRouter::new();
-            let default_logical = self
-                .logical_names
-                .first()
-                .map(|s| s.as_str())
-                .unwrap_or("default");
+            let default_logical = self.logical_names.first().map_or("default", |s| s.as_str());
             for name in &self.logical_names {
                 let key = router_key(name, ENGINE_ID);
                 router.register(key, Arc::clone(&backend));
@@ -278,11 +270,7 @@ impl BootstrapSession {
             );
             let backend = maybe_wrap_backend(backend, self.matrix.telemetry);
             let mut router = DatabaseRouter::new();
-            let default_logical = self
-                .logical_names
-                .first()
-                .map(|s| s.as_str())
-                .unwrap_or("default");
+            let default_logical = self.logical_names.first().map_or("default", |s| s.as_str());
             for name in &self.logical_names {
                 let key = router_key(name, ENGINE_ID);
                 router.register(key, Arc::clone(&backend));
@@ -318,11 +306,7 @@ impl BootstrapSession {
             );
             let backend = maybe_wrap_backend(backend, self.matrix.telemetry);
             let mut router = DatabaseRouter::new();
-            let default_logical = self
-                .logical_names
-                .first()
-                .map(|s| s.as_str())
-                .unwrap_or("default");
+            let default_logical = self.logical_names.first().map_or("default", |s| s.as_str());
             for name in &self.logical_names {
                 let key = router_key(name, ENGINE_ID);
                 router.register(key, Arc::clone(&backend));
@@ -347,11 +331,7 @@ impl BootstrapSession {
             let backend: Arc<dyn DatabaseBackend> = Arc::new(IndradbBackend::new());
             let backend = maybe_wrap_backend(backend, self.matrix.telemetry);
             let mut router = DatabaseRouter::new();
-            let default_logical = self
-                .logical_names
-                .first()
-                .map(|s| s.as_str())
-                .unwrap_or("default");
+            let default_logical = self.logical_names.first().map_or("default", |s| s.as_str());
             for name in &self.logical_names {
                 let key = router_key(name, ENGINE_ID);
                 router.register(key, Arc::clone(&backend));
@@ -401,11 +381,7 @@ impl BootstrapSession {
             };
             let backend = maybe_wrap_backend(backend, self.matrix.telemetry);
             let mut router = DatabaseRouter::new();
-            let default_logical = self
-                .logical_names
-                .first()
-                .map(|s| s.as_str())
-                .unwrap_or("default");
+            let default_logical = self.logical_names.first().map_or("default", |s| s.as_str());
             for name in &self.logical_names {
                 let key = router_key(name, ENGINE_ID);
                 router.register(key, Arc::clone(&backend));
@@ -484,10 +460,7 @@ impl BootstrapSession {
             }
 
             let default_key = router_key(
-                self.logical_names
-                    .first()
-                    .map(|s| s.as_str())
-                    .unwrap_or("default"),
+                self.logical_names.first().map_or("default", |s| s.as_str()),
                 ENGINE_ID,
             );
             Ok((router, default_key))
@@ -509,11 +482,7 @@ impl BootstrapSession {
             let backend: Arc<dyn DatabaseBackend> = Arc::new(AcmeStubBackend::new());
             let backend = maybe_wrap_backend(backend, self.matrix.telemetry);
             let mut router = DatabaseRouter::new();
-            let default_logical = self
-                .logical_names
-                .first()
-                .map(|s| s.as_str())
-                .unwrap_or("primary");
+            let default_logical = self.logical_names.first().map_or("primary", |s| s.as_str());
             for name in &self.logical_names {
                 let key = router_key(name, ENGINE_ID);
                 router.register(key, Arc::clone(&backend));
@@ -534,7 +503,7 @@ impl BootstrapSession {
     }
 }
 
-fn telemetry_for_matrix(matrix: &MatrixSpec, recording: &RecordingSink) -> Arc<dyn TelemetrySink> {
+fn telemetry_for_matrix(matrix: MatrixSpec, recording: &RecordingSink) -> Arc<dyn TelemetrySink> {
     match matrix.telemetry {
         TelemetryAdapter::Off => Arc::new(NoOpSink),
         TelemetryAdapter::Console => Arc::new(ConsoleSink),

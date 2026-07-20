@@ -3,6 +3,19 @@
 #![allow(dead_code)]
 #![allow(clippy::useless_format)]
 #![allow(clippy::needless_collect)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::print_stdout,
+    clippy::print_stderr
+)]
+// Benchmark harness: percentile casts and uniform Result-returning runners.
+#![allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::unnecessary_wraps,
+    clippy::trivially_copy_pass_by_ref
+)]
 
 mod experiments;
 mod matrix;

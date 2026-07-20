@@ -1,5 +1,13 @@
 //! End-to-end embedded bootstrap: connect → inventory router → [`valence::ValenceBuilder`].
 
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::print_stdout,
+    clippy::print_stderr
+)]
+
+use std::sync::Arc;
 use valence::prelude::*;
 use valence::{
     bootstrap_embedded_router_from_inventory, connect_embedded_at_path, EmbeddedEngine,
@@ -33,7 +41,7 @@ async fn main() {
 
     let default_key = valence::router_key("default", SURREAL_ENGINE_ID);
     let valence = Valence::builder()
-        .database_router(router.clone())
+        .database_router(Arc::clone(&router))
         .default_backend_key(default_key.clone())
         .build()
         .expect("valence");

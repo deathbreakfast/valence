@@ -22,6 +22,7 @@ fn is_surreal(engine_id: &str) -> bool {
     engine_id == KnownEngines::SURREALDB
 }
 
+#[allow(clippy::unnecessary_wraps)] // fallible when compiler-* features are disabled
 fn require_compiler(engine_id: &str, family: &str) -> Result<()> {
     let _ = family;
     if is_sql_family(engine_id) {
@@ -39,6 +40,9 @@ fn require_compiler(engine_id: &str, family: &str) -> Result<()> {
 }
 
 /// Count M2M edge rows where `in` points at `(root_table, bare_root_id)`.
+/// # Errors
+///
+/// Returns an error when the requested operation cannot be completed.
 pub fn count_m2m_edges_from_root(
     engine_id: &str,
     edge_table: &str,
@@ -82,6 +86,9 @@ pub fn count_m2m_edges_from_root(
 }
 
 /// Count rows in `from_table` whose FK equals the target record.
+/// # Errors
+///
+/// Returns an error when the requested operation cannot be completed.
 pub fn count_where_thing_eq(
     engine_id: &str,
     from_table: &str,
@@ -134,6 +141,9 @@ pub fn count_where_thing_eq(
 }
 
 /// Select child ids for HasMany reverse lookup.
+/// # Errors
+///
+/// Returns an error when the requested operation cannot be completed.
 pub fn select_child_ids_hasmany(
     engine_id: &str,
     child_table: &str,
@@ -187,6 +197,9 @@ pub fn select_child_ids_hasmany(
 }
 
 /// Select HasOne cascade children ids.
+/// # Errors
+///
+/// Returns an error when the requested operation cannot be completed.
 pub fn select_hasone_cascade_children(
     engine_id: &str,
     other: &str,

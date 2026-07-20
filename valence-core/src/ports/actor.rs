@@ -18,6 +18,7 @@ pub struct JsonActorContext {
 
 impl JsonActorContext {
     /// Wrap an opaque actor JSON value.
+    #[must_use]
     pub fn new(json: Value) -> Self {
         Self { json }
     }
@@ -50,6 +51,9 @@ impl ActorContext for JsonActorContext {
 #[async_trait]
 pub trait ActorFactory: Send + Sync {
     /// Construct a context from host-supplied actor JSON.
+    /// # Errors
+    ///
+    /// Returns an error when the requested operation cannot be completed.
     fn build(&self, actor_json: &Value) -> Result<Arc<dyn ActorContext>>;
 }
 

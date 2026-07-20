@@ -1,5 +1,11 @@
 //! Model runtime catalog — generated CRUD across storage adapters.
 
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::print_stdout,
+    clippy::print_stderr
+)]
 use valence_testkit::{
     all_storage_adapters, run_model_contract_acme_stub, run_model_contract_for,
     run_model_contract_mem, run_model_contract_surreal_mem, StorageAdapter,

@@ -10,7 +10,9 @@ pub(super) fn push_many_to_many_concrete_methods(
     conn: &SchemaConnection,
     methods: &mut Vec<TokenStream>,
 ) {
-    let edge_table = conn.edge_table.as_ref().unwrap();
+    let Some(edge_table) = conn.edge_table.as_ref() else {
+        return;
+    };
     let conn_name = &conn.from_field;
     let target_type = connection_target_type(conn);
 
@@ -52,7 +54,9 @@ pub(super) fn push_many_to_many_trait_target_methods(
     conn: &SchemaConnection,
     methods: &mut Vec<TokenStream>,
 ) {
-    let edge_table = conn.edge_table.as_ref().unwrap();
+    let Some(edge_table) = conn.edge_table.as_ref() else {
+        return;
+    };
     let conn_name = &conn.from_field;
     let get_method_name = format_ident!("get_{}_record_ids", conn_name);
     let edge_table_lit = edge_table.as_str();

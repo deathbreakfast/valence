@@ -13,7 +13,7 @@ pub enum PrivacyOperation {
     Delete,
 }
 /// Complete privacy policies for a model (all operation types)
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct PrivacyPolicies {
     pub read: PrivacyPolicy,
     pub create: PrivacyPolicy,
@@ -21,35 +21,13 @@ pub struct PrivacyPolicies {
     pub delete: PrivacyPolicy,
 }
 
-impl Default for PrivacyPolicies {
-    fn default() -> Self {
-        Self {
-            read: PrivacyPolicy::default(),
-            create: PrivacyPolicy::default(),
-            update: PrivacyPolicy::default(),
-            delete: PrivacyPolicy::default(),
-        }
-    }
-}
-
 /// Policy for a single operation type (read or write)
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct PrivacyPolicy {
     pub always_allow: Vec<PrivacyRule>,
     pub allow: Vec<PrivacyRule>,
     pub block: Vec<PrivacyRule>,
     pub always_block: Vec<PrivacyRule>,
-}
-
-impl Default for PrivacyPolicy {
-    fn default() -> Self {
-        Self {
-            always_allow: Vec::new(),
-            allow: Vec::new(),
-            block: Vec::new(),
-            always_block: Vec::new(),
-        }
-    }
 }
 
 /// A single privacy rule

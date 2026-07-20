@@ -27,6 +27,9 @@ use crate::error::Result;
 /// ```
 pub trait DatabaseEndpointResolver: Send + Sync {
     /// Return `Ok(None)` when the logical name has no mapped URL.
+    /// # Errors
+    ///
+    /// Returns an error when the requested operation cannot be completed.
     fn resolve_url(&self, logical_name: &str) -> Result<Option<String>>;
 }
 
@@ -48,6 +51,7 @@ pub struct StaticEndpointResolver {
 
 impl StaticEndpointResolver {
     /// Build from `(logical_name, url)` pairs with `'static` string slices.
+    #[must_use]
     pub fn new(urls: Vec<(&'static str, &'static str)>) -> Self {
         let pairs: Vec<(&str, String)> = urls
             .into_iter()
@@ -57,6 +61,7 @@ impl StaticEndpointResolver {
     }
 
     /// Build from `(logical_name, url)` pairs.
+    #[must_use]
     pub fn from_pairs(pairs: &[(&str, String)]) -> Self {
         let mut urls = HashMap::new();
         for (logical, url) in pairs {

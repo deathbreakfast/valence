@@ -13,6 +13,9 @@ use super::OwnershipService;
 
 impl OwnershipService {
     /// Insert or replace the active ownership row for `valence_model` / `record_id`.
+    /// # Errors
+    ///
+    /// Returns an error when the requested operation cannot be completed.
     pub async fn ensure_active_ownership(
         valence_model: &str,
         record_id: &str,
@@ -44,6 +47,9 @@ impl OwnershipService {
     }
 
     /// Set ownership status to `deleted` after the physical row has been removed (audit trail).
+    /// # Errors
+    ///
+    /// Returns an error when the requested operation cannot be completed.
     pub async fn mark_deleted_ownership(
         valence_model: &str,
         record_id: &str,
@@ -67,6 +73,9 @@ impl OwnershipService {
     }
 
     /// Mark ownership as pending deletion (called before the row delete side-effects).
+    /// # Errors
+    ///
+    /// Returns an error when the requested operation cannot be completed.
     pub async fn mark_pending_deletion(
         valence_model: &str,
         record_id: &str,
@@ -95,6 +104,9 @@ impl OwnershipService {
     }
 
     /// Transfer ownership and append a history row.
+    /// # Errors
+    ///
+    /// Returns an error when the requested operation cannot be completed.
     pub async fn transfer_ownership(
         valence_model: &str,
         record_id: &str,

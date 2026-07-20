@@ -54,6 +54,7 @@ fn struct_field_rust_type_tokens(
     scalar_field_type_tokens(field_type_str)
 }
 
+#[allow(clippy::unnecessary_wraps)] // Result kept for uniform generator API
 pub fn generate_struct(schema: &SchemaContext) -> Result<TokenStream, Box<dyn std::error::Error>> {
     let struct_name = format_ident!("{}", to_pascal_case(&schema.table_name));
     let model_name = to_pascal_case(&schema.table_name);

@@ -128,7 +128,10 @@ where
             ));
         }
     }
-    let row = rows.into_iter().next().expect("len checked");
+    let row = rows
+        .into_iter()
+        .next()
+        .ok_or_else(|| Error::Internal("create response length invariant violated".into()))?;
     if let Some(m) = try_value_as_record_map(&row) {
         if map_looks_like_surreal_thing_only(&m) {
             let id = thing_only_key_from_tb_id_map(&m)?;
@@ -363,6 +366,13 @@ pub type SurrealMemBackend = SurrealEmbeddedBackend;
 
 #[cfg(test)]
 mod tests {
+    #![allow(
+        clippy::unwrap_used,
+        clippy::expect_used,
+        clippy::print_stdout,
+        clippy::print_stderr
+    )]
+
     use super::*;
     use surrealdb::engine::local::Mem;
 

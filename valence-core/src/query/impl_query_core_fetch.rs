@@ -2,6 +2,7 @@ impl QueryCore {
     /// Set the projection fields for SELECT clause
     ///
     /// If not set, defaults to SELECT *.
+    #[must_use]
     pub fn select(mut self, fields: Vec<String>) -> Self {
         self.projection = Some(fields);
         self
@@ -11,6 +12,9 @@ impl QueryCore {
     ///
     /// Loads via [`DatabaseBackend::get_record`](crate::DatabaseBackend::get_record)
     /// using `table:id` wire form.
+    /// # Errors
+    ///
+    /// Returns an error when the requested operation cannot be completed.
     pub async fn get_id_only(
         table: impl Into<String>,
         id: impl AsRef<str>,
@@ -33,6 +37,9 @@ impl QueryCore {
     /// Get a record by ID and return it as `serde_json::Value`.
     ///
     /// Uses the table's resolved [`crate::backend::DatabaseBackend`] (same routing as CRUD).
+    /// # Errors
+    ///
+    /// Returns an error when the requested operation cannot be completed.
     pub async fn get_record_json(
         table: impl Into<String>,
         id: impl AsRef<str>,
@@ -47,6 +54,9 @@ impl QueryCore {
     /// Get the latest N record IDs from a table, ordered by ID descending
     ///
     /// This is useful for displaying sample records where only the ID is needed.
+    /// # Errors
+    ///
+    /// Returns an error when the requested operation cannot be completed.
     pub async fn latest_ids(
         table: impl Into<String>,
         limit: u32,
@@ -85,6 +95,9 @@ impl QueryCore {
     /// 4. Check entity-level privacy
     /// 5. Apply field-level privacy filtering
     /// 6. Return ValenceEntity
+    /// # Errors
+    ///
+    /// Returns an error when the requested operation cannot be completed.
     pub async fn get_entity(
         table: impl Into<String>,
         id: impl AsRef<str>,
@@ -111,9 +124,8 @@ impl QueryCore {
 
         // Step 3: Load full record
         let raw_data = Self::get_record_json(&table_str, id_str, valence).await?;
-        let raw_data = match raw_data {
-            Some(data) => data,
-            None => return Ok(None),
+        let Some(raw_data) = raw_data else {
+            return Ok(None);
         };
 
         // Step 4: Check entity-level privacy

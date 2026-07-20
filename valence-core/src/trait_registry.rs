@@ -13,6 +13,7 @@ pub struct TraitRegistry {
 }
 
 impl TraitRegistry {
+    #[must_use]
     pub fn new() -> Self {
         Self {
             inner: HashMap::new(),
@@ -20,6 +21,7 @@ impl TraitRegistry {
         }
     }
 
+    #[must_use]
     pub fn auto_discover() -> Self {
         let mut registry = Self::new();
         for init in inventory::iter::<TraitDefinitionInit> {
@@ -40,10 +42,14 @@ impl TraitRegistry {
         GLOBAL_TRAIT_REGISTRY.get_or_init(TraitRegistry::auto_discover)
     }
 
+    /// # Panics
+    ///
+    /// Panics if the global registry has already been initialized.
     pub fn set_global(registry: TraitRegistry) {
-        GLOBAL_TRAIT_REGISTRY
-            .set(registry)
-            .expect("TraitRegistry::set_global called more than once");
+        assert!(
+            GLOBAL_TRAIT_REGISTRY.set(registry).is_ok(),
+            "TraitRegistry::set_global called more than once"
+        );
     }
 
     pub fn get_definition(&self, trait_name: &str) -> Option<&'static TraitDefinition> {

@@ -51,6 +51,9 @@ fn global_cache() -> &'static Cache<(String, String), RecordOwnershipBundle> {
 }
 
 /// Point-get with optional read-through cache (raw row, pre-privacy).
+/// # Errors
+///
+/// Returns an error when the requested operation cannot be completed.
 pub async fn get_record_via_cache(
     backend: &Arc<dyn DatabaseBackend>,
     table: &str,
@@ -78,6 +81,9 @@ pub async fn get_record_via_cache(
 }
 
 /// Unified `Model::get` fetch: one backend round trip for row + ownership gate status (when cache cold).
+/// # Errors
+///
+/// Returns an error when the requested operation cannot be completed.
 pub async fn get_record_with_ownership_bundle_via_cache(
     backend: &Arc<dyn DatabaseBackend>,
     table: &str,

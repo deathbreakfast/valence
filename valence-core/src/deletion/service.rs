@@ -18,6 +18,9 @@ fn system_valence(v: &Valence) -> Valence {
 pub struct DeletionService;
 
 impl DeletionService {
+    /// # Errors
+    ///
+    /// Returns an error when the requested operation cannot be completed.
     pub async fn create_run(
         root_table: &str,
         root_record_id: &str,
@@ -46,6 +49,9 @@ impl DeletionService {
         Ok(run_id)
     }
 
+    /// # Errors
+    ///
+    /// Returns an error when the requested operation cannot be completed.
     pub async fn get_run_json(run_id: &str, v: &Valence) -> Result<Option<Value>> {
         let sys = system_valence(v);
         QueryCore::get_record_json("valence_deletion_run", run_id, &sys)

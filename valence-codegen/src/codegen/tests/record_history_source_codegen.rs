@@ -1,5 +1,6 @@
 //! Smoke-test record-history HistorySource / E2eHistorySourceA codegen.
 
+#![allow(clippy::unwrap_used, clippy::expect_used)]
 use std::collections::HashMap;
 use std::path::PathBuf;
 

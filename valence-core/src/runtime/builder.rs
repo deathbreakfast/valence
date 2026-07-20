@@ -7,6 +7,7 @@ use crate::error::{Error, Result};
 use crate::ports::actor::{ActorFactory, JsonActorFactory};
 use crate::ports::endpoints::{DatabaseEndpointResolver, NoopEndpointResolver};
 use crate::ports::secrets::{NoOpSecretProvider, SecretProvider};
+use crate::request_cache::RequestPermissionCache;
 use crate::router::DatabaseRouter;
 use crate::router_key::router_key;
 use std::sync::Arc;
@@ -55,10 +56,12 @@ pub struct ValenceBuilder {
     actor_factory: Option<Arc<dyn ActorFactory>>,
     endpoint_resolver: Option<Arc<dyn DatabaseEndpointResolver>>,
     actor: Option<Actor>,
+    permission_cache: Option<RequestPermissionCache>,
 }
 
 impl ValenceBuilder {
     /// Start with an empty router; call [`Self::add_backend`] before [`Self::build`].
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
@@ -76,6 +79,7 @@ impl ValenceBuilder {
     ///     .add_backend("default", Arc::new(InMemoryBackend::new()));
     /// let _ = builder.build().expect("build");
     /// ```
+    #[must_use]
     pub fn add_backend(
         mut self,
         logical_name: impl AsRef<str>,
@@ -88,6 +92,7 @@ impl ValenceBuilder {
     }
 
     /// Register a backend under an explicit router key (for pre-built heterogeneous routers).
+    #[must_use]
     pub fn add_backend_key(
         mut self,
         key: impl Into<String>,
@@ -102,6 +107,7 @@ impl ValenceBuilder {
     /// Inject a fully built router instead of registering backends on this builder.
     ///
     /// **Contract:** mutually exclusive with [`Self::add_backend`] / [`Self::add_backend_key`].
+    #[must_use]
     pub fn database_router(mut self, router: Arc<DatabaseRouter>) -> Self {
         self.injected_router = Some(router);
         self
@@ -110,38 +116,58 @@ impl ValenceBuilder {
     /// Set the active backend key used by generated models without per-table routing.
     ///
     /// **Contract:** required when more than one backend is registered; optional when exactly one.
+    #[must_use]
     pub fn default_backend_key(mut self, key: impl Into<String>) -> Self {
         self.default_backend_key = Some(key.into());
         self
     }
 
     /// Install a process-global telemetry sink (also stored on the built [`Valence`]).
+    #[must_use]
     pub fn telemetry_sink(mut self, sink: Arc<dyn TelemetrySink>) -> Self {
         self.telemetry_sink = Some(sink);
         self
     }
 
     /// Provide secret lookup for host-owned credential resolution.
+    #[must_use]
     pub fn secret_provider(mut self, provider: Arc<dyn SecretProvider>) -> Self {
         self.secret_provider = Some(provider);
         self
     }
 
     /// Build request-scoped [`crate::ActorContext`] values from JSON actor payloads.
+    #[must_use]
     pub fn actor_factory(mut self, factory: Arc<dyn ActorFactory>) -> Self {
         self.actor_factory = Some(factory);
         self
     }
 
     /// Resolve physical database URLs from logical names at bootstrap.
+    #[must_use]
     pub fn endpoint_resolver(mut self, resolver: Arc<dyn DatabaseEndpointResolver>) -> Self {
         self.endpoint_resolver = Some(resolver);
         self
     }
 
     /// Set the default actor for this runtime (defaults to anonymous).
+    #[must_use]
     pub fn with_actor(mut self, actor: Actor) -> Self {
         self.actor = Some(actor);
+        self
+    }
+
+    /// Enable a request-scoped permission check cache on the built [`Valence`].
+    #[must_use]
+    pub fn enable_permission_cache(mut self) -> Self {
+        self.permission_cache = Some(RequestPermissionCache::new());
+        self
+    }
+
+    /// Attach an existing permission check cache.
+    #[must_use]
+    pub fn with_permission_cache(mut self, cache: RequestPermissionCache) -> Self {
+        self.permission_cache = Some(cache);
         self
     }
 
@@ -149,6 +175,9 @@ impl ValenceBuilder {
     ///
     /// **Errors:** when no backends are registered, when both injected and local routers are used,
     /// or when multiple backends are registered without [`Self::default_backend_key`].
+    /// # Errors
+    ///
+    /// Returns an error when the requested operation cannot be completed.
     pub fn build(self) -> Result<Valence> {
         let router = if let Some(injected) = self.injected_router {
             if self.registered_keys.is_empty() {
@@ -202,6 +231,7 @@ impl ValenceBuilder {
                 .unwrap_or_else(|| Arc::new(NoopEndpointResolver)),
             actor,
             owner_override: None,
+            permission_cache: self.permission_cache,
         })
     }
 }

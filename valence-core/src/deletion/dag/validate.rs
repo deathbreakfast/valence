@@ -24,6 +24,9 @@ pub fn table_skips_pending_deletion_filter(table: &str) -> bool {
     skip_graph_table(table)
 }
 
+/// # Errors
+///
+/// Returns an error when the requested operation cannot be completed.
 pub fn assert_safe_ident(s: &str) -> Result<()> {
     if s.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
         Ok(())
@@ -35,6 +38,9 @@ pub fn assert_safe_ident(s: &str) -> Result<()> {
 }
 
 /// Record id string passed to `type::record($tb, $rid)` (bound parameter).
+/// # Errors
+///
+/// Returns an error when the requested operation cannot be completed.
 pub fn assert_safe_bare_thing_id(s: &str) -> Result<()> {
     if s.is_empty() {
         return Err(Error::Validation(

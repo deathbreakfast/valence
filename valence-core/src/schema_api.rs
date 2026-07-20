@@ -172,6 +172,10 @@ pub struct Schema {
     pub meta: SchemaMeta,
 }
 
+#[allow(
+    clippy::trivially_copy_pass_by_ref,
+    reason = "serde's `skip_serializing_if` callback signature passes field values by reference"
+)]
 fn is_false(value: &bool) -> bool {
     !*value
 }

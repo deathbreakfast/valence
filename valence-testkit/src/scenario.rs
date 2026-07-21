@@ -28,6 +28,26 @@ pub enum ScenarioStep {
         /// Minimum expected registrations.
         min: usize,
     },
+    /// Assert two router keys resolve to the same backend instance (shared `Arc`).
+    AssertRouterSharedBackend {
+        /// First compound router key.
+        key_a: String,
+        /// Second compound router key.
+        key_b: String,
+    },
+    /// Create a record via the backend at `create_key`, read it back via `read_key`.
+    ///
+    /// Behavioral multi-logical check: both keys must address the same backend.
+    CrudAcrossRouterKeys {
+        /// Compound router key used for the create.
+        create_key: String,
+        /// Compound router key used for the read-back.
+        read_key: String,
+        /// Table name.
+        table: String,
+        /// Record id.
+        id: String,
+    },
     /// Create + get a smoke record on the active backend.
     CrudSmoke {
         /// Table name.
@@ -156,42 +176,26 @@ impl ScenarioSpec {
     }
 
     pub fn router_multi_logical() -> Self {
-        Self {
-            id: "router-multi-logical".into(),
-            steps: vec![
-                ScenarioStep::BuildValence,
-                ScenarioStep::AssertRouterLen { min: 2 },
-                ScenarioStep::AssertRouterResolve {
-                    key: "surrealdb:default".to_string(),
-                },
-                ScenarioStep::AssertRouterResolve {
-                    key: "surrealdb:billing".to_string(),
-                },
-            ],
-        }
+        Self::router_multi_logical_engine(
+            valence_core::KnownEngines::SURREALDB,
+            &["default", "billing"],
+        )
     }
 
     pub fn router_multi_logical_acme() -> Self {
-        Self {
-            id: "router-multi-logical".into(),
-            steps: vec![
-                ScenarioStep::BuildValence,
-                ScenarioStep::AssertRouterLen { min: 2 },
-                ScenarioStep::AssertRouterResolve {
-                    key: "acme_stub:primary".to_string(),
-                },
-                ScenarioStep::AssertRouterResolve {
-                    key: "acme_stub:vault".to_string(),
-                },
-            ],
-        }
+        Self::router_multi_logical_engine("acme_stub", &["primary", "vault"])
     }
 
     pub fn router_multi_logical_mem() -> Self {
         Self::router_multi_logical_engine(valence_backend_mem::ENGINE_ID, &["default", "billing"])
     }
 
-    /// Multi-logical router smoke for any engine id.
+    /// Multi-logical router scenario for any engine id.
+    ///
+    /// Beyond resolve smoke, when two or more logical names are given this
+    /// asserts both keys share one backend instance and that a record created
+    /// via the first key reads back via the second (shared-backend behavior),
+    /// and that an unregistered logical under the same engine fails to resolve.
     pub fn router_multi_logical_engine(engine_id: &str, logical_names: &[&str]) -> Self {
         let mut steps = vec![
             ScenarioStep::BuildValence,
@@ -204,6 +208,23 @@ impl ScenarioSpec {
                 key: valence_core::router_key::router_key(name, engine_id),
             });
         }
+        if let [first, second, ..] = logical_names {
+            let key_a = valence_core::router_key::router_key(first, engine_id);
+            let key_b = valence_core::router_key::router_key(second, engine_id);
+            steps.push(ScenarioStep::AssertRouterSharedBackend {
+                key_a: key_a.clone(),
+                key_b: key_b.clone(),
+            });
+            steps.push(ScenarioStep::CrudAcrossRouterKeys {
+                create_key: key_a,
+                read_key: key_b,
+                table: "router_multi_smoke".into(),
+                id: "rml1".into(),
+            });
+        }
+        steps.push(ScenarioStep::AssertRouterResolveFails {
+            key: valence_core::router_key::router_key("nonexistent_logical", engine_id),
+        });
         Self {
             id: "router-multi-logical".into(),
             steps,

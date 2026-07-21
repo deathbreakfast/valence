@@ -66,19 +66,28 @@ if [[ "$DRY_RUN" -eq 1 ]]; then
 fi
 
 # Wire / rocksdb adapters need explicit crate features (env alone is not enough).
-AWS_EXTRA_FEATURES=()
+E2E_EXTRA_FEATURES=()
+BENCH_EXTRA_FEATURES=()
 if [[ -n "${DATABASE_URL:-}" ]]; then
-  AWS_EXTRA_FEATURES+=("postgres" "hybrid")
+  E2E_EXTRA_FEATURES+=("postgres" "hybrid")
+  BENCH_EXTRA_FEATURES+=("postgres" "hybrid")
 fi
 if [[ "${VALENCE_BENCH_ROCKSDB:-}" == "1" ]]; then
-  AWS_EXTRA_FEATURES+=("surreal-rocksdb")
+  E2E_EXTRA_FEATURES+=("surreal-rocksdb")
+  BENCH_EXTRA_FEATURES+=("surreal-rocksdb")
 fi
-FEATURES_ARGS=()
-if [[ ${#AWS_EXTRA_FEATURES[@]} -gt 0 ]]; then
-  IFS=,
-  FEATURES_ARGS=(--features "${AWS_EXTRA_FEATURES[*]}")
-  unset IFS
-fi
+features_args_from() {
+  local -n _feats=$1
+  if [[ ${#_feats[@]} -eq 0 ]]; then
+    return 0
+  fi
+  local IFS=,
+  echo --features "${_feats[*]}"
+}
+# shellcheck disable=SC2207
+E2E_FEATURES_ARGS=($(features_args_from E2E_EXTRA_FEATURES))
+# shellcheck disable=SC2207
+BENCH_FEATURES_ARGS=($(features_args_from BENCH_EXTRA_FEATURES))
 
 wipe_wire_stores() {
   echo "== wipe wire stores =="
@@ -120,7 +129,7 @@ if [[ "$DO_E2E" -eq 1 ]]; then
   for harness in admin_runtime_catalog model_runtime_catalog matrix_catalog cross_backend_hops; do
     wipe_wire_stores
     echo "== e2e harness ${harness} =="
-    if ! cargo test -p valence-e2e "${FEATURES_ARGS[@]}" --test "$harness" -- --test-threads=1; then
+    if ! cargo test -p valence-e2e "${E2E_FEATURES_ARGS[@]}" --test "$harness" -- --test-threads=1; then
       echo "E2E_HARNESS_FAIL:${harness}"
       e2e_rc=1
     else
@@ -160,7 +169,7 @@ run_slice() {
     fi
   fi
   echo "== bench matrix $slice storages=$storages =="
-  cargo run -p valence-bench "${RELEASE_FLAG[@]}" "${FEATURES_ARGS[@]}" -- matrix "$slice" --storage "$storages"
+  cargo run -p valence-bench "${RELEASE_FLAG[@]}" "${BENCH_FEATURES_ARGS[@]}" -- matrix "$slice" --storage "$storages"
 }
 
 if [[ -n "$BENCH_SLICE" ]]; then

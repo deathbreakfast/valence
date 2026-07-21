@@ -6,8 +6,9 @@ use std::sync::Arc;
 
 use valence_backend_mem::InMemoryBackend;
 use valence_core::{
-    register_backend_logical_names, register_backend_logical_names_slices, router_key,
-    DatabaseBackend, DatabaseRouter, RegisterBackendLogicalNamesOptions,
+    register_backend_logical_names, register_backend_logical_names_slices, router_key, Database,
+    DatabaseBackend, DatabaseEvaluator, DatabaseFromEngine, DatabaseRouter,
+    RegisterBackendLogicalNamesOptions, ResolverContext, Valence,
 };
 
 fn mem_backend() -> Arc<dyn DatabaseBackend> {
@@ -93,6 +94,50 @@ fn empty_input_is_noop() {
     );
     assert_eq!(router.len().expect("len"), 0);
     assert!(router.is_empty().expect("empty"));
+}
+
+#[tokio::test]
+async fn schema_evaluator_routes_to_billing_logical() {
+    // Same shape a schema declares: `database: Database::from_engine("billing", ENGINE_ID)`.
+    const BILLING_DB: DatabaseFromEngine =
+        Database::from_engine("billing", valence_backend_mem::ENGINE_ID);
+
+    let backend = mem_backend();
+    let mut router = DatabaseRouter::new();
+    register_backend_logical_names(
+        &mut router,
+        Arc::clone(&backend),
+        &["default", "billing"],
+        RegisterBackendLogicalNamesOptions::default(),
+    );
+
+    let resolved = BILLING_DB
+        .resolve(&ResolverContext::default(), &router)
+        .await
+        .expect("evaluator resolve");
+    assert!(Arc::ptr_eq(&resolved, &backend));
+    assert_eq!(BILLING_DB.logical_name(), "billing");
+}
+
+#[test]
+fn valence_boot_uses_billing_key_as_default() {
+    let backend = mem_backend();
+    let engine_id = backend.engine_id();
+    let mut router = DatabaseRouter::new();
+    register_backend_logical_names(
+        &mut router,
+        Arc::clone(&backend),
+        &["default", "billing"],
+        RegisterBackendLogicalNamesOptions::default(),
+    );
+    let billing_key = router_key("billing", engine_id);
+    let valence = Valence::builder()
+        .database_router(Arc::new(router))
+        .default_backend_key(billing_key)
+        .build()
+        .expect("valence build");
+    let active = valence.active_backend().expect("active backend");
+    assert!(Arc::ptr_eq(&active, &backend));
 }
 
 #[test]

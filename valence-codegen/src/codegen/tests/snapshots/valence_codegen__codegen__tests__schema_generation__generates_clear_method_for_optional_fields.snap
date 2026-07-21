@@ -408,15 +408,10 @@ impl valence::Model for TestNotification {
     }
 }
 impl TestNotification {
-    fn __schema_metadata() -> valence::Result<&'static valence::SchemaMetadataStruct> {
+    fn __schema_metadata() -> &'static valence::SchemaMetadataStruct {
         valence::SchemaRegistry::global()
             .get_schema("test_notification")
-            .ok_or_else(|| {
-                valence::Error::Internal(
-                    concat!("SchemaRegistry missing entry for ", "test_notification")
-                        .to_string(),
-                )
-            })
+            .expect(concat!("SchemaRegistry missing entry for ", "test_notification"))
     }
     async fn __assert_unique_constraints_for_record(
         record: &serde_json::Value,
@@ -496,7 +491,7 @@ impl TestNotification {
     ) -> valence::Result<()> {
         let record = serde_json::json!(self);
         valence::PrivacyEvaluator::check_entity_access(
-                Self::__schema_metadata()?,
+                Self::__schema_metadata(),
                 valence::PrivacyOperation::Read,
                 &record,
                 valence,
@@ -509,7 +504,7 @@ impl TestNotification {
     ) -> valence::Result<()> {
         let record = serde_json::json!(self);
         valence::PrivacyEvaluator::check_entity_access(
-                Self::__schema_metadata()?,
+                Self::__schema_metadata(),
                 valence::PrivacyOperation::Create,
                 &record,
                 valence,
@@ -522,7 +517,7 @@ impl TestNotification {
     ) -> valence::Result<()> {
         let record = serde_json::json!(self);
         valence::PrivacyEvaluator::check_entity_access(
-                Self::__schema_metadata()?,
+                Self::__schema_metadata(),
                 valence::PrivacyOperation::Update,
                 &record,
                 valence,
@@ -535,7 +530,7 @@ impl TestNotification {
     ) -> valence::Result<()> {
         let record = serde_json::json!(self);
         valence::PrivacyEvaluator::check_entity_access(
-                Self::__schema_metadata()?,
+                Self::__schema_metadata(),
                 valence::PrivacyOperation::Delete,
                 &record,
                 valence,

@@ -67,6 +67,20 @@ fn matrix_surreal_rocksdb_catalog() {
 }
 
 #[test]
+#[cfg(feature = "postgres")]
+fn matrix_postgres_catalog() {
+    // Entries skip individually with a reason when DATABASE_URL is not configured.
+    run_storage_catalog(StorageAdapter::Postgres);
+}
+
+#[test]
+#[cfg(feature = "hybrid")]
+fn matrix_hybrid_catalog() {
+    // Entries skip individually with a reason when DATABASE_URL is not configured.
+    run_storage_catalog(StorageAdapter::HybridIndraPg);
+}
+
+#[test]
 #[cfg(feature = "acme-stub")]
 fn matrix_acme_stub_catalog() {
     run_storage_catalog(StorageAdapter::AcmeStub);

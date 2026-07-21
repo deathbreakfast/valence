@@ -93,6 +93,9 @@ async fn graph_edge(session: &mut BootstrapSession, mode: RunMode) -> Result<(),
         return Ok(());
     }
     let table = "graph_edge_smoke";
+    // Wire stores are shared across matrix rows; clear leftovers from prior runs.
+    let _ = backend.delete_record(table, "n1").await;
+    let _ = backend.delete_record(table, "n2").await;
     backend
         .create_record(table, serde_json::json!({"id": "n1", "name": "left"}))
         .await

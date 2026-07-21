@@ -40,9 +40,10 @@ pub const PRIMARY: DatabaseFromEngine = Database::from_engine("primary", ENGINE_
 /// use std::sync::Arc;
 /// use valence_backend_hybrid::HybridBackend;
 /// use valence_backend_mem::InMemoryBackend;
+/// use valence_core::DatabaseBackend;
 ///
 /// # async fn demo() -> valence_core::Result<()> {
-/// let primary = Arc::new(InMemoryBackend::new());
+/// let primary: Arc<dyn DatabaseBackend> = Arc::new(InMemoryBackend::new());
 /// primary
 ///     .create_record("counter", serde_json::json!({"id": "1", "value": 7}))
 ///     .await?;

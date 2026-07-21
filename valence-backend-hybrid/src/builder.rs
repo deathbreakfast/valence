@@ -20,12 +20,13 @@ use crate::HybridBackend;
 /// ```no_run
 /// use std::sync::Arc;
 /// use valence_backend_hybrid::{CacheRules, HybridBackend};
-/// use valence_backend_postgres::PostgresBackend;
+/// use valence_backend_mem::InMemoryBackend;
+/// use valence_core::DatabaseBackend;
 ///
 /// # async fn demo() -> valence_core::Result<()> {
-/// let postgres = Arc::new(PostgresBackend::from_env().await?);
+/// let primary: Arc<dyn DatabaseBackend> = Arc::new(InMemoryBackend::new());
 /// let hybrid = HybridBackend::builder()
-///     .primary(postgres)
+///     .primary(primary)
 ///     .record_capacity(10_000)
 ///     .edge_capacity(100_000)
 ///     .record_rules(CacheRules::cache_all().exclude(["audit_log"]))

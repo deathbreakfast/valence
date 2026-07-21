@@ -15,6 +15,9 @@ fn is_sql_family(engine_id: &str) -> bool {
             | KnownEngines::MONGODB
             | KnownEngines::REDIS
             | KnownEngines::INDRADB
+            // Hybrid delegates non-hop compiled queries to its SQL primary,
+            // so deletion DAG queries use the SQL dialect.
+            | KnownEngines::HYBRID_INDRA_SQL
     )
 }
 

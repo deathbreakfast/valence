@@ -21,6 +21,8 @@ pub(super) async fn run_step(
         | ScenarioStep::AssertRouterResolve { .. }
         | ScenarioStep::AssertRouterResolveFails { .. }
         | ScenarioStep::AssertRouterLen { .. }
+        | ScenarioStep::AssertRouterSharedBackend { .. }
+        | ScenarioStep::CrudAcrossRouterKeys { .. }
         | ScenarioStep::BuildValenceFromFactory { .. }
         | ScenarioStep::SetEnv { .. }
         | ScenarioStep::AssertEndpointResolve { .. }
@@ -56,6 +58,8 @@ pub(super) fn step_label(step: &ScenarioStep) -> String {
         ScenarioStep::AssertRouterResolve { .. } => "assert_router_resolve".into(),
         ScenarioStep::AssertRouterResolveFails { .. } => "assert_router_resolve_fails".into(),
         ScenarioStep::AssertRouterLen { .. } => "assert_router_len".into(),
+        ScenarioStep::AssertRouterSharedBackend { .. } => "assert_router_shared_backend".into(),
+        ScenarioStep::CrudAcrossRouterKeys { .. } => "crud_across_router_keys".into(),
         ScenarioStep::CrudSmoke { .. } => "crud_smoke".into(),
         ScenarioStep::AssertGetMissing { .. } => "assert_get_missing".into(),
         ScenarioStep::AssertPrivacyReadDenied => "assert_privacy_read_denied".into(),

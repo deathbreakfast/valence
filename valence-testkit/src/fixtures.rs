@@ -71,10 +71,21 @@ pub fn authenticated_only_schema() -> &'static SchemaMetadata {
 }
 
 /// Invalid router compound key for the given storage slug (catalog sad-path).
+///
+/// Uses the storage adapter's own engine id so the sad path proves an
+/// unregistered logical name fails under the engine actually being tested.
 pub fn invalid_router_key(storage_slug: &str) -> String {
-    match storage_slug {
-        "surreal-mem" | "surreal-rocksdb" => "surrealdb:nonexistent_logical".to_string(),
-        "acme-stub" => "acme_stub:nonexistent_logical".to_string(),
-        _ => "inmemory_mem:nonexistent_logical".to_string(),
-    }
+    use valence_core::KnownEngines;
+    let engine_id = match storage_slug {
+        "sqlite" => KnownEngines::SQLITE,
+        "postgres" => KnownEngines::POSTGRES,
+        "mongodb" => KnownEngines::MONGODB,
+        "indradb" => KnownEngines::INDRADB,
+        "hybrid" => KnownEngines::HYBRID_INDRA_SQL,
+        "redis" => KnownEngines::REDIS,
+        "surreal-mem" | "surreal-rocksdb" => KnownEngines::SURREALDB,
+        "acme-stub" => "acme_stub",
+        _ => KnownEngines::INMEMORY_MEM,
+    };
+    valence_core::router_key("nonexistent_logical", engine_id)
 }

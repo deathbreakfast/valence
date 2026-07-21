@@ -19,6 +19,7 @@ default = [
 ]
 sqlite = ["valence-testkit/sqlite", "valence/sqlite"]
 postgres = ["valence-testkit/postgres", "valence/postgres"]
+hybrid = ["valence-testkit/hybrid", "valence/hybrid", "postgres"]
 mongodb = ["valence-testkit/mongodb", "valence/mongodb"]
 indradb = ["valence-testkit/indradb", "valence/indradb"]
 redis = ["valence-testkit/redis", "valence/redis"]

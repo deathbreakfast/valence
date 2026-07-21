@@ -66,10 +66,19 @@ pub async fn execute_select_postgres(
     for p in &params {
         q = bind_pg(q, p);
     }
-    let rows = q
-        .fetch_all(pool)
-        .await
-        .map_err(|e| Error::Database(e.to_string()))?;
+    let rows = match q.fetch_all(pool).await {
+        Ok(rows) => rows,
+        // 42P01 undefined_table: read-only compiled queries on a missing table
+        // return empty, matching the sqlite adapter's "no such table" behavior.
+        Err(e)
+            if e.as_database_error()
+                .and_then(|d| d.code())
+                .is_some_and(|code| code == "42P01") =>
+        {
+            return Ok(vec![]);
+        }
+        Err(e) => return Err(Error::Database(e.to_string())),
+    };
 
     if sql.contains("COUNT(") {
         let count = rows

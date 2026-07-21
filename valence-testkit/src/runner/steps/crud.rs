@@ -18,6 +18,8 @@ pub(super) async fn run(
         ScenarioStep::CrudSmoke { table, id } => {
             let valence = session.ensure_valence().map_err(|e| e.to_string())?;
             let backend = valence.active_backend().map_err(|e| e.to_string())?;
+            // Wire stores are shared across matrix rows; clear leftovers from prior runs.
+            let _ = backend.delete_record(table, id).await;
             backend
                 .create_record(table, serde_json::json!({"id": id, "name": "smoke"}))
                 .await
@@ -84,6 +86,9 @@ pub(super) async fn run(
                 return Ok(());
             }
             let table = "m2m_smoke_node";
+            // Wire stores are shared across matrix rows; clear leftovers from prior runs.
+            let _ = backend.delete_record(table, "a").await;
+            let _ = backend.delete_record(table, "b").await;
             backend
                 .create_record(table, serde_json::json!({"id": "a", "name": "a"}))
                 .await

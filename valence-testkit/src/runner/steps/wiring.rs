@@ -54,6 +54,69 @@ pub(super) async fn run(
                 return Err(format!("router len {len} < min {min}"));
             }
         }
+        ScenarioStep::AssertRouterSharedBackend { key_a, key_b } => {
+            if mode == RunMode::Benchmark {
+                return Ok(());
+            }
+            let router = session
+                .router()
+                .ok_or_else(|| "missing router".to_string())?;
+            let a = router.resolve(key_a).map_err(|e| e.to_string())?;
+            let b = router.resolve(key_b).map_err(|e| e.to_string())?;
+            if !std::sync::Arc::ptr_eq(&a, &b) {
+                return Err(format!(
+                    "expected {key_a} and {key_b} to share one backend instance"
+                ));
+            }
+        }
+        ScenarioStep::CrudAcrossRouterKeys {
+            create_key,
+            read_key,
+            table,
+            id,
+        } => {
+            let router = session
+                .router()
+                .ok_or_else(|| "missing router".to_string())?;
+            let writer = router.resolve(create_key).map_err(|e| e.to_string())?;
+            let reader = router.resolve(read_key).map_err(|e| e.to_string())?;
+            // Wire stores are shared across matrix rows; clear leftovers from prior runs.
+            let _ = writer.delete_record(table, id).await;
+            writer
+                .create_record(table, serde_json::json!({"id": id, "name": "cross-key"}))
+                .await
+                .map_err(|e| e.to_string())?;
+            let fetched = reader
+                .get_record(table, id)
+                .await
+                .map_err(|e| e.to_string())?
+                .ok_or_else(|| {
+                    format!("record created via {create_key} not visible via {read_key}")
+                })?;
+            if mode == RunMode::Correctness
+                && fetched.get("name").and_then(|v| v.as_str()) != Some("cross-key")
+            {
+                return Err(format!(
+                    "record read via {read_key} lost content written via {create_key}"
+                ));
+            }
+            // Delete via the *other* key and verify the write path is shared too.
+            reader
+                .delete_record(table, id)
+                .await
+                .map_err(|e| e.to_string())?;
+            if mode == RunMode::Correctness {
+                let gone = writer
+                    .get_record(table, id)
+                    .await
+                    .map_err(|e| e.to_string())?;
+                if gone.is_some() {
+                    return Err(format!(
+                        "record deleted via {read_key} still visible via {create_key}"
+                    ));
+                }
+            }
+        }
         ScenarioStep::BuildValenceFromFactory { actor_json } => {
             let factory = session
                 .factory()

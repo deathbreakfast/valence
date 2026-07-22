@@ -37,5 +37,9 @@ valence-backend-postgres = { workspace = true, optional = true }
 valence-backend-hybrid = { workspace = true, optional = true }
 valence-testkit = { path = "../valence-testkit" }
 
+# Optional dep is only referenced via the `hybrid` feature (`dep:valence-backend-hybrid`).
+[package.metadata.cargo-machete]
+ignored = ["valence-backend-hybrid"]
+
 [lints]
 workspace = true

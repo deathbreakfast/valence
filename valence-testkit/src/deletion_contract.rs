@@ -128,17 +128,21 @@ mod tests {
 
     #[tokio::test]
     async fn dispatch_errors_without_registration_when_unregistered() {
-        if !is_deletion_dispatcher_registered() {
-            let err = dispatch(DeletionRequest {
-                run_id: "x".into(),
-                root_table: "t".into(),
-                root_record_id: "1".into(),
-                actor_json: serde_json::Value::Null,
-            })
-            .await
-            .expect_err("expected dispatch error");
-            assert!(matches!(err, Error::Internal(_)));
+        // Process-global OnceLock dispatcher: serialize against sibling harness tests.
+        let _harness_guard = lock_harness().await;
+        if is_deletion_dispatcher_registered() {
+            // Another test in this process already installed a dispatcher.
+            return;
         }
+        let err = dispatch(DeletionRequest {
+            run_id: "x".into(),
+            root_table: "t".into(),
+            root_record_id: "1".into(),
+            actor_json: serde_json::Value::Null,
+        })
+        .await
+        .expect_err("expected dispatch error");
+        assert!(matches!(err, Error::Internal(_)));
     }
 
     #[tokio::test]
@@ -158,6 +162,7 @@ mod tests {
 
     #[tokio::test]
     async fn noop_dispatcher_satisfies_dispatch() {
+        let _harness_guard = lock_harness().await;
         register_noop_deletion_dispatcher_for_tests();
         dispatch(DeletionRequest {
             run_id: "noop".into(),

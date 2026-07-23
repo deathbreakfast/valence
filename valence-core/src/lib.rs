@@ -127,7 +127,10 @@ pub use evaluator::{
     Database, DatabaseEvaluator, DatabaseFromEngine, ResolverContext, DEFAULT_IN_MEMORY,
     DEFAULT_IN_MEMORY_ROUTER_KEY,
 };
-pub use iter::{IterDescriptor, IterEvaluation, IterExecuteFn, IterShouldRunFn};
+pub use iter::{
+    find_iter_descriptor, iter_descriptors_for_table, IterDescriptor, IterEvaluation,
+    IterExecuteFn, IterShouldRunFn,
+};
 pub use known_engines::KnownEngines;
 pub use model::{FieldOperation, Model, PrivacyError, SchemaMetadata};
 pub use owner_ref::{OwnerKind, OwnerRef, OwnershipConfig};
@@ -137,10 +140,10 @@ pub use ports::endpoints::{
     DatabaseEndpointResolver, EnvEndpointResolver, NoopEndpointResolver, StaticEndpointResolver,
 };
 pub use ports::secrets::{EnvSecretProvider, NoOpSecretProvider, SecretProvider};
-pub use privacy::{PolicyEvaluator, PrivacyEvaluator, PrivacyOperation};
+pub use privacy::{PolicyEvaluator, PrivacyEvaluator, PrivacyOperation, PrivacyRule};
 pub use query::{
-    DateTimePredicate, HopSource, HopType, IntPredicate, NullPredicate, QueryCore, RecordPredicate,
-    SortDirection, StringPredicate,
+    DateTimePredicate, HopSource, HopType, IdOnlyRecord, IntPredicate, NullPredicate, QueryCore,
+    RecordPredicate, SortDirection, StringPredicate,
 };
 pub use query_compiler::QueryCompiler;
 pub use query_compiler_registry::{

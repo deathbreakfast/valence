@@ -69,11 +69,20 @@ pub mod owner {
                 } else if let Some(obj) = field_value.as_object() {
                     if let Some(id_val) = obj.get("id") {
                         if let Some(id_str) = id_val.as_str() {
-                            owner_id_owned = id_str.to_string();
+                            // Match string-field normalization: strip a `table:` prefix when present.
+                            owner_id_owned = if let Some(id_part) = id_str.split(':').nth(1) {
+                                id_part.to_string()
+                            } else {
+                                id_str.to_string()
+                            };
                             &owner_id_owned
                         } else if let Some(id_obj) = id_val.as_object() {
                             if let Some(inner) = id_obj.get("String").and_then(|v| v.as_str()) {
-                                owner_id_owned = inner.to_string();
+                                owner_id_owned = if let Some(id_part) = inner.split(':').nth(1) {
+                                    id_part.to_string()
+                                } else {
+                                    inner.to_string()
+                                };
                                 &owner_id_owned
                             } else {
                                 return false;

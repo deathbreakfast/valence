@@ -144,29 +144,13 @@ impl OwnershipService {
         let sys = system_valence(v);
         let backend = Self::ownership_backend(valence_model, &sys)?;
         let owner_ids = owner_id_query_values(owner_id, owner_type);
-        let q = concat!(
-            "SELECT count() AS n FROM valence_data_ownership ",
-            "WHERE valence_model = $model AND owner_id IN $owner_ids ",
-            "AND owner_type = $owner_type AND status = $status GROUP ALL"
-        );
-        let compiled = crate::compiled_query::CompiledQuery::new(
-            q.to_string(),
-            vec![
-                (
-                    "model".to_string(),
-                    Value::String(valence_model.to_string()),
-                ),
-                (
-                    "owner_ids".to_string(),
-                    Value::Array(owner_ids.into_iter().map(Value::String).collect()),
-                ),
-                (
-                    "owner_type".to_string(),
-                    Value::String(owner_type.to_string()),
-                ),
-                ("status".to_string(), Value::String(status.to_string())),
-            ],
-        );
+        let compiled = crate::compiled_query_factory::count_ownership_rows_for_schema(
+            backend.engine_id(),
+            valence_model,
+            &owner_ids,
+            owner_type,
+            status,
+        )?;
         let rows = backend
             .execute_compiled_query(&compiled)
             .await

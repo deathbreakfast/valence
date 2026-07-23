@@ -51,3 +51,26 @@ pub struct IterDescriptor {
 }
 
 inventory::collect!(IterDescriptor);
+
+/// All registered iter descriptors from `valence_schema!` inventory.
+pub fn iter_descriptors() -> Vec<&'static IterDescriptor> {
+    inventory::iter::<IterDescriptor>.into_iter().collect()
+}
+
+/// Find a descriptor by logical table name and iter type name (Rust type string).
+pub fn find_iter_descriptor(
+    table_name: &str,
+    iter_type_name: &str,
+) -> Option<&'static IterDescriptor> {
+    iter_descriptors()
+        .into_iter()
+        .find(|d| d.table_name == table_name && d.iter_type_name == iter_type_name)
+}
+
+/// All iters registered for a table.
+pub fn iter_descriptors_for_table(table_name: &str) -> Vec<&'static IterDescriptor> {
+    iter_descriptors()
+        .into_iter()
+        .filter(|d| d.table_name == table_name)
+        .collect()
+}

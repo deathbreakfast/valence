@@ -17,8 +17,13 @@ name = "valence_backend_mem"
 [dependencies]
 async-trait = { workspace = true }
 serde_json = { workspace = true }
-tokio = { workspace = true }
 valence-core = { workspace = true }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+tokio = { workspace = true }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+tokio = { version = "1", default-features = false, features = ["macros", "rt", "sync", "time"] }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }

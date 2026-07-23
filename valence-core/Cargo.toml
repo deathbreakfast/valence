@@ -37,12 +37,17 @@ quick_cache = "0.6"
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
-tokio = { workspace = true, features = ["time"] }
 valence-telemetry = { workspace = true }
 anyhow = { workspace = true }
 chrono = { workspace = true }
 uuid = { workspace = true, features = ["v4", "v5"] }
 regex = "1"
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+tokio = { workspace = true, features = ["time"] }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+tokio = { version = "1", default-features = false, features = ["macros", "rt", "sync", "time"] }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }

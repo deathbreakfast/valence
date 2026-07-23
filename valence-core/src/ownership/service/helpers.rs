@@ -145,9 +145,14 @@ pub fn schema_skipped_for_owner_summary(table: &str, schema: &crate::Schema) -> 
     reason = "backend count values may be represented as floating-point JSON"
 )]
 pub fn parse_count_from_row(row: &Value) -> u64 {
-    row.get("n")
-        .or_else(|| row.get("count"))
-        .and_then(|v| v.as_u64().or_else(|| v.as_f64().map(|f| f as u64)))
+    row.as_u64()
+        .or_else(|| row.as_i64().map(|n| n as u64))
+        .or_else(|| row.as_f64().map(|f| f as u64))
+        .or_else(|| {
+            row.get("n")
+                .or_else(|| row.get("count"))
+                .and_then(|v| v.as_u64().or_else(|| v.as_f64().map(|f| f as u64)))
+        })
         .unwrap_or(0)
 }
 

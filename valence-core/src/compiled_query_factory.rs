@@ -251,3 +251,190 @@ pub fn select_hasone_cascade_children(
         vec![],
     ))
 }
+
+/// Count ownership sidecar rows for one schema / owner / status.
+///
+/// # Errors
+///
+/// Returns an error when the requested operation cannot be completed.
+pub fn count_ownership_rows_for_schema(
+    engine_id: &str,
+    valence_model: &str,
+    owner_ids: &[String],
+    owner_type: &str,
+    status: &str,
+) -> Result<CompiledQuery> {
+    require_compiler(engine_id, "count_ownership_rows_for_schema")?;
+    if is_surreal(engine_id) {
+        let q = concat!(
+            "SELECT count() AS n FROM valence_data_ownership ",
+            "WHERE valence_model = $model AND owner_id IN $owner_ids ",
+            "AND owner_type = $owner_type AND status = $status GROUP ALL"
+        );
+        return Ok(CompiledQuery::new(
+            q.to_string(),
+            vec![
+                (
+                    "model".to_string(),
+                    Value::String(valence_model.to_string()),
+                ),
+                (
+                    "owner_ids".to_string(),
+                    Value::Array(owner_ids.iter().cloned().map(Value::String).collect()),
+                ),
+                (
+                    "owner_type".to_string(),
+                    Value::String(owner_type.to_string()),
+                ),
+                ("status".to_string(), Value::String(status.to_string())),
+            ],
+        ));
+    }
+    if is_sql_family(engine_id) {
+        let mut params = vec![
+            (
+                "model".to_string(),
+                Value::String(valence_model.to_string()),
+            ),
+            (
+                "owner_type".to_string(),
+                Value::String(owner_type.to_string()),
+            ),
+            ("status".to_string(), Value::String(status.to_string())),
+        ];
+        let mut owner_ors = Vec::with_capacity(owner_ids.len());
+        for (i, owner_id) in owner_ids.iter().enumerate() {
+            let key = format!("owner_id_{i}");
+            owner_ors.push(format!("json_extract(body, '$.owner_id') = ${key}"));
+            params.push((key, Value::String(owner_id.clone())));
+        }
+        let owner_clause = match owner_ors.as_slice() {
+            [] => "0".to_string(),
+            [only] => only.clone(),
+            many => format!("({})", many.join(" OR ")),
+        };
+        let q = format!(
+            "SELECT COUNT(*) AS n FROM valence_data_ownership \
+             WHERE json_extract(body, '$.valence_model') = $model \
+               AND {owner_clause} \
+               AND json_extract(body, '$.owner_type') = $owner_type \
+               AND json_extract(body, '$.status') = $status"
+        );
+        return Ok(CompiledQuery::new(q, params));
+    }
+    Ok(CompiledQuery::new(
+        format!("/* count_ownership_rows_for_schema unsupported for {engine_id} */"),
+        vec![],
+    ))
+}
+
+const ACTIVE_DELETION_STATUSES: &[&str] = &["queued", "scanning", "processing"];
+
+/// Count in-flight deletion runs for a requester JSON string.
+///
+/// # Errors
+///
+/// Returns an error when the requested operation cannot be completed.
+pub fn count_active_deletion_runs_for_requester(
+    engine_id: &str,
+    requested_by: &str,
+) -> Result<CompiledQuery> {
+    require_compiler(engine_id, "count_active_deletion_runs_for_requester")?;
+    if is_surreal(engine_id) {
+        let q = concat!(
+            "SELECT count() AS n FROM valence_deletion_run ",
+            "WHERE requested_by = $requested_by ",
+            "AND status IN ['queued', 'scanning', 'processing'] GROUP ALL"
+        );
+        return Ok(CompiledQuery::new(
+            q.to_string(),
+            vec![(
+                "requested_by".to_string(),
+                Value::String(requested_by.to_string()),
+            )],
+        ));
+    }
+    if is_sql_family(engine_id) {
+        let mut params = vec![(
+            "requested_by".to_string(),
+            Value::String(requested_by.to_string()),
+        )];
+        let mut status_ors = Vec::with_capacity(ACTIVE_DELETION_STATUSES.len());
+        for (i, status) in ACTIVE_DELETION_STATUSES.iter().enumerate() {
+            let key = format!("status_{i}");
+            status_ors.push(format!("json_extract(body, '$.status') = ${key}"));
+            params.push((key, Value::String((*status).to_string())));
+        }
+        let status_clause = status_ors.join(" OR ");
+        let q = format!(
+            "SELECT COUNT(*) AS n FROM valence_deletion_run \
+             WHERE json_extract(body, '$.requested_by') = $requested_by \
+               AND ({status_clause})"
+        );
+        return Ok(CompiledQuery::new(q, params));
+    }
+    Ok(CompiledQuery::new(
+        format!("/* count_active_deletion_runs_for_requester unsupported for {engine_id} */"),
+        vec![],
+    ))
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::expect_used, clippy::unwrap_used)]
+
+    use super::*;
+    use crate::known_engines::KnownEngines;
+
+    #[test]
+    fn ownership_count_sql_uses_count_star_and_json_extract() {
+        let cq = count_ownership_rows_for_schema(
+            KnownEngines::SQLITE,
+            "task",
+            &["user:abc".into(), "abc".into()],
+            "user",
+            "active",
+        )
+        .expect("compile");
+        assert!(cq.query_string.contains("COUNT(*)"), "{}", cq.query_string);
+        assert!(
+            !cq.query_string.contains("GROUP ALL"),
+            "{}",
+            cq.query_string
+        );
+        assert!(cq.query_string.contains("json_extract(body, '$.owner_id')"));
+        assert_eq!(cq.params.len(), 5);
+    }
+
+    #[test]
+    fn ownership_count_surreal_keeps_group_all() {
+        let cq = count_ownership_rows_for_schema(
+            KnownEngines::SURREALDB,
+            "task",
+            &["user:abc".into()],
+            "user",
+            "active",
+        )
+        .expect("compile");
+        assert!(cq.query_string.contains("count()"));
+        assert!(cq.query_string.contains("GROUP ALL"));
+        assert!(cq.query_string.contains("IN $owner_ids"));
+    }
+
+    #[test]
+    fn active_deletion_count_sql_avoids_surreal_in_list() {
+        let cq = count_active_deletion_runs_for_requester(
+            KnownEngines::SQLITE,
+            r#"{"User":{"user_id":"x"}}"#,
+        )
+        .expect("compile");
+        assert!(cq.query_string.contains("COUNT(*)"), "{}", cq.query_string);
+        assert!(
+            !cq.query_string.contains("GROUP ALL"),
+            "{}",
+            cq.query_string
+        );
+        assert!(!cq.query_string.contains("IN ["), "{}", cq.query_string);
+        assert!(cq.query_string.contains("json_extract(body, '$.status')"));
+    }
+}

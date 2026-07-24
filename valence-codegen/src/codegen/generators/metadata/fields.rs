@@ -6,12 +6,15 @@ use syn::LitStr;
 
 use crate::codegen::utils::map_field_type_to_string;
 use valence_core::SchemaField;
+use valence_schema_dsl::ParsedPolicies;
 
+use super::policies::generate_policies_code;
 use super::string_helpers::humanize_field_edge_label;
 
 /// Optional `SchemaEdge` for FK-backed fields; plus the `SchemaField` row for `full()`.
 pub(super) fn schema_field_and_edge_tokens(
     field: &SchemaField,
+    field_policies: Option<&ParsedPolicies>,
 ) -> (Option<TokenStream>, TokenStream) {
     let field_name_str = field.name.as_str();
     let field_type_str = field.field_type.as_str();
@@ -80,6 +83,7 @@ pub(super) fn schema_field_and_edge_tokens(
 
     let encrypted = field.encrypted;
     let unique = field.unique;
+    let policies_code = generate_policies_code(field_policies);
 
     let model_path_code = if let Some(ref path) = field.model_path {
         let lit = LitStr::new(path, proc_macro2::Span::call_site());
@@ -99,7 +103,7 @@ pub(super) fn schema_field_and_edge_tokens(
             default: #default_code,
             fk: #fk_ref_code,
             validations: #validations_code,
-            policies: None,
+            policies: #policies_code,
             encrypted: #encrypted,
             enum_variants: Vec::new(),
             enum_type: None,

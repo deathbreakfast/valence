@@ -45,6 +45,8 @@ pub fn generate_from_schema_file(
                         ));
                     }
                     parsed_file.schema.fields.push(merged);
+                    // Trait-lowered fields currently omit evaluator AST; keep parallel None.
+                    parsed_file.field_policies.push(None);
                 }
             }
             for conn in &trait_def.connections {

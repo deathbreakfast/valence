@@ -24,6 +24,8 @@ pub struct ParsedSchemaFile {
     pub schema: valence_core::Schema,
     pub database: Option<syn::Expr>,
     pub policies: Option<ParsedPolicies>,
+    /// Per-field policy AST (parallel to [`Schema::fields`]) for metadata emission.
+    pub field_policies: Vec<Option<ParsedPolicies>>,
 }
 
 /// Parse a `valence_schema!` source file into generator IR.
@@ -46,10 +48,16 @@ Use a named `const` / `static` evaluator instead."
             );
         }
     }
+    let field_policies = parsed
+        .fields
+        .iter()
+        .map(|f| f.policies.clone())
+        .collect();
     Ok(ParsedSchemaFile {
         schema: lower_parsed_schema(&parsed),
         database: parsed.database,
         policies: parsed.policies,
+        field_policies,
     })
 }
 

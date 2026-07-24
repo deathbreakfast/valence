@@ -24,6 +24,8 @@ pub struct SchemaContext {
     pub database: Option<Expr>,
     /// Policy rule expressions for metadata emission (leaked evaluators).
     pub policies: Option<ParsedPolicies>,
+    /// Per-field policy AST (parallel to [`Self::fields`]) for metadata emission.
+    pub field_policies: Vec<Option<ParsedPolicies>>,
 }
 
 impl SchemaContext {
@@ -48,6 +50,7 @@ impl SchemaContext {
             traits,
             database: parsed.database,
             policies: parsed.policies,
+            field_policies: parsed.field_policies,
         })
     }
 }

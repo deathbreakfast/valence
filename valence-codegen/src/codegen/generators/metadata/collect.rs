@@ -60,8 +60,9 @@ pub(super) fn collect_schema_metadata_pieces(schema: &SchemaContext) -> SchemaMe
         .map(schema_connection_tokens)
         .collect();
 
-    for field in &schema.fields {
-        let (edge_ts, row_ts) = schema_field_and_edge_tokens(field);
+    for (idx, field) in schema.fields.iter().enumerate() {
+        let field_policies = schema.field_policies.get(idx).and_then(|p| p.as_ref());
+        let (edge_ts, row_ts) = schema_field_and_edge_tokens(field, field_policies);
         if let Some(e) = edge_ts {
             edges.push(e);
         }

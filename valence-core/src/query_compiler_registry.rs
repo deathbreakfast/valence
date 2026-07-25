@@ -95,7 +95,7 @@ impl QueryCompilerRegistry {
         let compiler = self.get(engine_id).ok_or_else(|| {
             Error::Internal(format!(
                 "no query compiler registered for engine `{engine_id}` — enable the matching \
-                 valence-core `compiler-*` / valence facade feature"
+                 valence-core `compiler-*` / valence public crate feature"
             ))
         })?;
         compiler.compile(core)

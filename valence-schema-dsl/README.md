@@ -7,7 +7,7 @@ Shared syn-based parser for `valence_schema!` and `valence_trait_schema!`.
 | Reader | Use this crate for |
 |--------|-------------------|
 | **Maintainers** | One grammar/AST shared by macros and codegen |
-| **App developers** | Prefer the `valence` facade macros — do not depend on this crate directly |
+| **App developers** | Prefer the `valence` crate macros — do not depend on this crate directly |
 
 ## Role
 
@@ -18,7 +18,7 @@ Both paths call the same parse/lower APIs so DSL syntax and semantics cannot dri
 
 ## Boundaries
 
-Depends only on `syn` / `quote` / `proc-macro2`. Must **not** depend on `valence-core`, the `valence` facade, `valence-macros`, or `valence-codegen`.
+Depends only on `syn` / `quote` / `proc-macro2`. Must **not** depend on `valence-core`, the `valence` crate, `valence-macros`, or `valence-codegen`.
 
 ## Verify
 

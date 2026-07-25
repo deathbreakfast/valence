@@ -65,7 +65,7 @@ jobs:
           df -h
       - name: Rustdoc
         run: |
-          # Facade docs need --all-features so backend re-exports resolve in Getting started.
+          # Public crate docs need --all-features so backend re-exports resolve in Getting started.
           RUSTDOCFLAGS="-D warnings" cargo doc -p uf-valence --all-features --no-deps
           RUSTDOCFLAGS="-D warnings" cargo doc --workspace --exclude uf-valence --no-deps
       - name: Doctests
@@ -226,7 +226,7 @@ jobs:
       - name: Test core crates
         run: |
           cargo test -p uf-valence-core -p uf-valence-telemetry -p uf-valence-macros -p uf-valence-backend-mem
-      - name: Check facade
+      - name: Check public crate
         run: |
           cargo check -p uf-valence --no-default-features
           cargo check -p uf-valence --features mem,telemetry-console

@@ -1,4 +1,4 @@
-//! Generated `impl Model` against the `valence` facade.
+//! Generated `impl Model` against the `valence` crate.
 
 #![allow(
     clippy::unwrap_used,

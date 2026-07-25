@@ -1,4 +1,4 @@
-//! Compile check: `valence_schema!` against facade types.
+//! Compile check: `valence_schema!` against public crate types.
 
 #![allow(
     clippy::unwrap_used,

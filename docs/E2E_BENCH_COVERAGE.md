@@ -128,4 +128,4 @@ Slices: `adapter-minimal`, `write-sweep`, `query-depth`, `overhead`, `read-hamme
 
 ## Quality gates
 
-See plan + [`.sentrux/rules.toml`](../.sentrux/rules.toml). Per phase: Sentrux `scan` / `session_start` / `check_rules` / `health` / `session_end`; clippy `-D warnings` on touched crates; no god files (`max_cc=25`, `max_file_sloc=450`).
+See plan + [`architectural layering rules`](../architectural layering rules). Per phase: quality review `scan` / `session_start` / `check_rules` / `health` / `session_end`; clippy `-D warnings` on touched crates; no god files (`max_cc=25`, `max_file_sloc=450`).

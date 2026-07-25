@@ -51,7 +51,7 @@ impl BackendCapabilities {
 ///    Database::from_engine("primary", ENGINE_ID)`.
 /// 4. Optional: `XBackend::builder()` with explicit setters; `from_env_defaults()` fills
 ///    **unset** fields only.
-/// 5. Host wires with `.add_backend("primary", Arc::new(adapter))` — no facade feature.
+/// 5. Host wires with `.add_backend("primary", Arc::new(adapter))` — no public crate feature.
 ///
 /// Reference: `examples/acme-valence-backend-stub`.
 ///

@@ -48,11 +48,7 @@ Use a named `const` / `static` evaluator instead."
             );
         }
     }
-    let field_policies = parsed
-        .fields
-        .iter()
-        .map(|f| f.policies.clone())
-        .collect();
+    let field_policies = parsed.fields.iter().map(|f| f.policies.clone()).collect();
     Ok(ParsedSchemaFile {
         schema: lower_parsed_schema(&parsed),
         database: parsed.database,

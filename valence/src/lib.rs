@@ -281,7 +281,7 @@
 //! ```
 //!
 //! **Dependency rules:** `valence-core` owns ports and runtime (no engine SDK);
-//! `valence-backend-*` advertise open `ENGINE_ID`s; the facade re-exports behind features;
+//! `valence-backend-*` advertise open `ENGINE_ID`s; the public crate re-exports behind features;
 //! apps own schema roots and call `valence-codegen` from `build.rs`; one operation stays on
 //! one backend; host adapters inject at boot.
 //!
@@ -434,7 +434,7 @@ mod tests {
     use std::sync::Arc;
 
     #[test]
-    fn facade_reexports_core() {
+    fn public_crate_reexports_core() {
         let _ = router_key("default", KnownEngines::INMEMORY_MEM);
     }
 

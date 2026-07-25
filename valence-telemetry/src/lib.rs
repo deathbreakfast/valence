@@ -20,11 +20,11 @@ pub use recording::{RecordedCounter, RecordedEvent, RecordedGauge, RecordingSink
 
 /// Host-injectable telemetry sink for Valence ORM metrics and events.
 ///
-/// Install with `ValenceBuilder::telemetry_sink` on the facade / `valence-core`.
+/// Install with `ValenceBuilder::telemetry_sink` on the public crate / `valence-core`.
 /// Instrumentation calls [`try_record_counter`], [`try_record_gauge`], and
 /// [`try_log_event_value`] — never a product SDK from upstream code.
 ///
-/// Reference impls: [`NoOpSink`] (default), [`ConsoleSink`] (facade `telemetry-console`
+/// Reference impls: [`NoOpSink`] (default), [`ConsoleSink`] (`telemetry-console` on the public crate
 /// feature). Custom sinks belong in host crates.
 ///
 /// # Examples

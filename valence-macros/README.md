@@ -6,7 +6,7 @@ Procedural macros for Valence schemas.
 
 | Reader | Use this crate for |
 |--------|-------------------|
-| **App developers** | `valence_schema!` and `valence_trait_schema!` via the `valence` facade |
+| **App developers** | `valence_schema!` and `valence_trait_schema!` via the `valence` crate |
 | **Library maintainers** | Macro expansion and DSL syntax |
 
 ## `valence_schema!`

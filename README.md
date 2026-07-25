@@ -68,14 +68,14 @@ Your application owns schemas, codegen roots, and business logic. Valence owns t
 
 1. `valence-core` defines ports and model/runtime semantics; it contains no engine SDK.
 2. `valence-backend-*` crates implement storage and advertise an open `ENGINE_ID`.
-3. The `valence` facade re-exports adapters behind Cargo features.
+3. The `valence` public crate re-exports adapters behind Cargo features.
 4. Applications own schema roots and invoke `valence-codegen` from `build.rs`.
 5. One runtime may register heterogeneous backends; one operation stays on one backend.
 6. Host-specific adapters remain outside core and are injected at boot.
 
 ## Quick start
 
-Add the facade crate with the in-memory backend for local evaluation. The crates.io
+Add the public crate with the in-memory backend for local evaluation. The crates.io
 package is **`uf-valence`** (the name `valence` is taken); imports stay `use valence::…`:
 
 ```toml
@@ -125,7 +125,7 @@ Follow the numbered **Getting started** guide in `cargo doc -p uf-valence` (wire
 | Wire backends (postgres/mongodb/redis) | Need a live server URL; examples skip when unset |
 | Cross-backend transactions | **Not supported** — batch ops stay on one backend |
 | Privacy / ownership / deletion DAG | Schema-driven; see `examples/product-model-host` and crate rustdoc (`Model`, ownership, deletion) |
-| Third-party engines | Implement `DatabaseBackend` in a separate crate — no facade change |
+| Third-party engines | Implement `DatabaseBackend` in a separate crate — no public crate change |
 
 ## Workspace crates
 
@@ -137,7 +137,7 @@ Follow the numbered **Getting started** guide in `cargo doc -p uf-valence` (wire
 | `valence-codegen` | Build-time model generation |
 | `valence-backend-*` | Feature-gated storage adapters |
 | `valence-telemetry` | `TelemetrySink` + reference sinks |
-| `valence` | Public facade |
+| `valence` | Public crate |
 | `valence-testkit` / `valence-e2e` / `valence-bench` | Matrix verification and benchmarks |
 
 ## Documentation
@@ -180,7 +180,7 @@ VALENCE_REDIS_URL=redis://… cargo run -p uf-valence --example quickstart_redis
 ## Composable storage (FAQ)
 
 **Q: How do I add Postgres, Vault, or a custom engine?**  
-Publish (or depend on) a crate that implements [`DatabaseBackend`](valence-core/src/backend/port.rs). Wire it with `.add_backend("logical", Arc::new(your_backend))` — no change to the `valence` facade features.
+Publish (or depend on) a crate that implements [`DatabaseBackend`](valence-core/src/backend/port.rs). Wire it with `.add_backend("logical", Arc::new(your_backend))` — no change to the `valence` crate features.
 
 **Q: Can one `Valence` use multiple engines?**  
 Yes. One [`DatabaseRouter`](valence-core/src/router.rs) holds heterogeneous backends. Schema `database:` evaluators pick the router key per table.

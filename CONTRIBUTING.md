@@ -40,7 +40,7 @@ cargo fmt --all -- --check
 cargo test -p uf-valence-core -p uf-valence-macros -p uf-valence-codegen \
            -p uf-valence-backend-mem -p uf-valence-telemetry -p uf-valence
 
-# Facade docs need --all-features so backend re-exports resolve in Getting started.
+# Public crate docs need --all-features so backend re-exports resolve in Getting started.
 RUSTDOCFLAGS="-D warnings" cargo doc -p uf-valence --all-features --no-deps
 
 # Doctests (stable; no nightly)

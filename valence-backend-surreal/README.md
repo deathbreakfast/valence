@@ -5,7 +5,7 @@ SurrealDB-backed [`DatabaseBackend`](https://github.com/unified-field-dev/valenc
 ## Audience
 
 - **Adapter authors:** study alongside `valence-backend-mem` for the port contract.
-- **Host integrators:** enable via facade `surreal` feature after wiring at boot.
+- **Host integrators:** enable via public crate `surreal` feature after wiring at boot.
 - **Maintainers:** `./scripts/gate.sh` blocks `surrealdb` in `valence-core`.
 
 ## Features

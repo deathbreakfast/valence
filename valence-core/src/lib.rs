@@ -5,7 +5,7 @@
 //! ## Stack position
 //!
 //! ```text
-//! valence facade → valence-core (this crate) → valence-telemetry
+//! valence public crate → valence-core (this crate) → valence-telemetry
 //! backends (mem, surreal, third-party) implement [`DatabaseBackend`]
 //! ```
 //!

@@ -2,7 +2,7 @@
 
 Build-time code generation for Valence models from `valence_schema!` and `valence_trait_schema!` sources.
 
-Depends on `valence-core` + shared [`valence-schema-dsl`](../valence-schema-dsl/README.md); generated output targets the `valence` facade.
+Depends on `valence-core` + shared [`valence-schema-dsl`](../valence-schema-dsl/README.md); generated output targets the `valence` crate.
 
 ## Audience
 

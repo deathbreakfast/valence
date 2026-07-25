@@ -6,7 +6,7 @@ Ports: `DatabaseBackend`, `DatabaseRouter`, `ValenceBuilder`, host injectable tr
 
 | Reader | Use this crate for |
 |--------|-------------------|
-| **Application developers** | Use via `valence` facade; rarely depend on this crate directly |
+| **Application developers** | Use via the `valence` crate; rarely depend on this crate directly |
 | **Host integrators** | Assemble `Valence::builder()` and inject ports |
 | **Adapter authors** | Implement `DatabaseBackend` and optional evaluators |
 

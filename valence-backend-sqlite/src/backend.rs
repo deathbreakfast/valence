@@ -86,9 +86,8 @@ impl SqliteBackend {
             .or_else(|_| SqliteConnectOptions::from_str(&format!("sqlite:{path}")))
             .map_err(|e| Error::Database(e.to_string()))?
             .create_if_missing(true);
-        let memory = path.contains(":memory:")
-            || path.contains("mode=memory")
-            || path == ":memory:";
+        let memory =
+            path.contains(":memory:") || path.contains("mode=memory") || path == ":memory:";
         let mut pool_opts = SqlitePoolOptions::new();
         if memory {
             pool_opts = pool_opts.max_connections(1);

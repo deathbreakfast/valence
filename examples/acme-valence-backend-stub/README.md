@@ -1,6 +1,6 @@
 # acme-valence-backend-stub
 
-Example third-party [`DatabaseBackend`](../../valence-core/src/backend/port.rs) with open `ENGINE_ID` (`acme_stub`). Exercises the `acme-stub` matrix row in `valence-testkit` / `valence-e2e` / `valence-bench` without a facade feature flag.
+Example third-party [`DatabaseBackend`](../../valence-core/src/backend/port.rs) with open `ENGINE_ID` (`acme_stub`). Exercises the `acme-stub` matrix row in `valence-testkit` / `valence-e2e` / `valence-bench` without a public crate feature flag.
 
 ## Audience
 

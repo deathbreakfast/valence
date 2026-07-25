@@ -1,6 +1,6 @@
 //! Example third-party [`DatabaseBackend`] with an open `ENGINE_ID`.
 //!
-//! Proves custom engines need **no** facade feature — depend on `valence-core`, implement
+//! Proves custom engines need **no** public crate feature — depend on `valence-core`, implement
 //! the trait, and wire with `.add_backend(...)`.
 //!
 //! # Published adapter checklist

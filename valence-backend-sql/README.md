@@ -8,8 +8,8 @@ and [`valence-backend-postgres`](../valence-backend-postgres/).
 | Reader | Use this crate for |
 |--------|-------------------|
 | **Adapter authors** | Reuse JSON-document + edges helpers |
-| **App developers** | Prefer facade features `sqlite` / `postgres` — not this crate directly |
+| **App developers** | Prefer public crate features `sqlite` / `postgres` — not this crate directly |
 
-This is **not** a user-facing engine. There is no `ENGINE_ID` and no facade feature named `sql`.
+This is **not** a user-facing engine. There is no `ENGINE_ID` and no public crate feature named `sql`.
 
 See `DatabaseBackend` rustdoc (`cargo doc -p uf-valence-core --open`).

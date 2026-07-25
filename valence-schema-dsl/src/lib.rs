@@ -4,7 +4,7 @@
 //! - [`valence-macros`](../valence_macros) — proc-macro expansion
 //! - [`valence-codegen`](../valence_codegen) — build-time model generation from schema files
 //!
-//! This crate depends only on `syn` / `quote` / `proc-macro2` (no `valence-core` or facade).
+//! This crate depends only on `syn` / `quote` / `proc-macro2` (no `valence-core` or public crate).
 //!
 //! # Examples
 //!

@@ -1,6 +1,6 @@
 # valence
 
-Facade crate re-exporting core, macros, and optional reference adapters.
+Public crate re-exporting core, macros, and optional reference adapters.
 
 Overview and quickstart: [../README.md](../README.md).
 

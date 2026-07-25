@@ -163,4 +163,26 @@ mod tests {
     fn ownership_colocate_enabled_defaults_on() {
         assert!(super::helpers::ownership_colocate_enabled());
     }
+
+    #[test]
+    fn pending_deletion_status_blocks_reads() {
+        use crate::error::Error;
+        use super::helpers::OwnershipGateStatus;
+        use super::OwnershipService;
+
+        let err = OwnershipService::apply_pending_deletion_gate(
+            "widget",
+            "w1",
+            OwnershipGateStatus::Status("pending_deletion".into()),
+        )
+        .expect_err("pending deletion must block");
+        assert!(matches!(err, Error::PendingDeletion(_)));
+
+        OwnershipService::apply_pending_deletion_gate(
+            "widget",
+            "w1",
+            OwnershipGateStatus::Absent,
+        )
+        .expect("absent ownership allows");
+    }
 }

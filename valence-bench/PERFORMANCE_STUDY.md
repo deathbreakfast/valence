@@ -21,6 +21,7 @@ Executive summary of Valence ORM / storage-adapter capacity experiments. Methodo
 | RQ-VQ6 | Cross-adapter query compare? | bm-v11/bm-v12 matrix |
 | RQ-VO1 | Privacy read gate on vs bypass? | bm-v16 |
 | RQ-VO2 | Privacy eval sleep sensitivity? | bm-v17 |
+| RQ-VO5 | ORM query privacy post-filter cost vs bypass? | **bm-v27** (`privacy-filter` slice) |
 | RQ-VO3 | Telemetry recording vs off? | bm-v18 (mem-only) |
 | RQ-VO4 | CPU/RSS loading 10k rows? | bm-v19 |
 | RQ-VR1 | Get-by-id hammer / cache? | **bm-v20** |

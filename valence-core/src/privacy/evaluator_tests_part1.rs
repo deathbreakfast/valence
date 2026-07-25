@@ -209,7 +209,12 @@
         let actor = Actor::Anonymous;
         let record = json!({});
         let result = PrivacyEvaluator::evaluate(&policy, &record, &actor);
-        assert!(result.is_ok());
+        assert!(result.is_err(), "empty policies default-deny for non-System");
+
+        let system = Actor::System {
+            operation: "test".into(),
+        };
+        assert!(PrivacyEvaluator::evaluate(&policy, &record, &system).is_ok());
     }
 
     #[test]

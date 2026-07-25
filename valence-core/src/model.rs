@@ -48,6 +48,9 @@ pub trait Model: Sized + Send + Sync {
     /// Delete one row by id.
     async fn delete(id: &str, valence: &Valence) -> Result<()>;
     /// Create or replace a row by explicit id.
+    ///
+    /// Privacy: when the row is absent, **create** policies apply; when it exists, **update**
+    /// policies apply to both the existing row and the proposed payload (after an authorized read).
     async fn upsert(id: &str, data: Self, valence: &Valence) -> Result<Self>;
     /// Patch an existing row with a partial JSON object when the backend supports merge.
     async fn merge(id: &str, patch: serde_json::Value, valence: &Valence) -> Result<Self>;

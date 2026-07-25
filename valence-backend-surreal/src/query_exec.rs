@@ -21,6 +21,41 @@ pub fn is_read_only_query(query: &str) -> bool {
     )
 }
 
+/// Reject mutating SurrealQL before it reaches the engine (mirrors SQL `ensure_read_only`).
+///
+/// # Errors
+///
+/// Returns [`valence_core::error::Error::Internal`] when the statement is not `SELECT`/`SHOW`.
+pub fn ensure_read_only(query: &str) -> Result<()> {
+    if is_read_only_query(query) {
+        Ok(())
+    } else {
+        Err(valence_core::error::Error::Internal(format!(
+            "unsupported SurrealQL in execute_compiled_query (read-only SELECT/SHOW only): {query}"
+        )))
+    }
+}
+
+#[cfg(test)]
+mod read_only_tests {
+    use super::{ensure_read_only, is_read_only_query};
+
+    #[test]
+    fn classifies_select_and_show() {
+        assert!(is_read_only_query("SELECT * FROM t"));
+        assert!(is_read_only_query("show tables"));
+        assert!(!is_read_only_query("DELETE FROM t"));
+        assert!(!is_read_only_query("UPDATE t SET x = 1"));
+    }
+
+    #[test]
+    fn ensure_read_only_rejects_writes() {
+        assert!(ensure_read_only("SELECT * FROM t").is_ok());
+        let err = ensure_read_only("DELETE FROM t").expect_err("reject");
+        assert!(err.to_string().contains("read-only"));
+    }
+}
+
 pub async fn execute_compiled_query_inner<C>(
     db: &Surreal<C>,
     query: &str,
@@ -30,6 +65,8 @@ where
     C: Connection,
 {
     use surrealdb::types::Value as SurrealValueType;
+
+    ensure_read_only(query)?;
 
     let mut response = if params.is_empty() {
         match db.query(query).await {

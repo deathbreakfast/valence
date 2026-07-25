@@ -57,12 +57,16 @@ pub(super) fn model_upsert_method_tokens(cx: &CrudEmitCtx<'_>) -> TokenStream {
     let own_create = ownership_after_row_persisted(cx, "upserted");
     quote! {
         async fn upsert(id: &str, data: Self, valence: &valence::Valence) -> valence::Result<Self> {
-            data.check_create_privacy(valence).await?;
+            let before_snapshot = Self::get(id, valence).await?;
+            if let Some(ref existing) = before_snapshot {
+                existing.check_update_privacy(valence).await?;
+                data.check_update_privacy(valence).await?;
+            } else {
+                data.check_create_privacy(valence).await?;
+            }
             let record = serde_json::to_value(&data)
                 .map_err(|e| valence::Error::Serialization(e.to_string()))?;
             Self::__assert_unique_constraints_for_record(&record, Some(id), valence).await?;
-
-            let before_snapshot = Self::get(id, valence).await?;
 
             let id = id.to_string();
             let upserted: Self = valence::retry_on_database_tx_conflict("Model::upsert", || {

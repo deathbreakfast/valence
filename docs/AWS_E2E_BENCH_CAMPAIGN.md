@@ -38,6 +38,7 @@ Entry script: [`scripts/aws-e2e-bench.sh`](../scripts/aws-e2e-bench.sh).
 ./scripts/aws-e2e-bench.sh --bench read-hammer
 ./scripts/aws-e2e-bench.sh --bench hop-pairs
 ./scripts/aws-e2e-bench.sh --bench hybrid-compare   # bm-v26: hybrid vs postgres vs indradb
+./scripts/aws-e2e-bench.sh --bench privacy-filter   # bm-v27: query privacy post-filter vs bypass
 ./scripts/aws-e2e-bench.sh --bench all
 ```
 

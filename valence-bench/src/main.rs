@@ -205,6 +205,7 @@ async fn run_matrix_slice(args: &MatrixArgs, wire: WireBackendOptions) -> Result
         "write-sweep" => vec!["bm-v5"],
         "query-depth" => vec!["bm-v11", "bm-v12"],
         "overhead" => vec!["bm-v16", "bm-v18"],
+        "privacy-filter" => vec!["bm-v27"],
         "read-hammer" => vec!["bm-v20"],
         "query-real" => vec!["bm-v21", "bm-v22", "bm-v23"],
         "hop-pairs" => vec!["bm-v24"],

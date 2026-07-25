@@ -1,12 +1,27 @@
 //! SQL column references for JSON document rows (`id` + `body`).
 
+use crate::safe_ident::assert_safe_ident;
+
 /// Map a Valence field name to a SQL expression against document storage.
+///
+/// Callers that accept untrusted field names must use [`sql_doc_column_checked`].
 pub fn sql_doc_column(field: &str) -> String {
+    sql_doc_column_checked(field).unwrap_or_else(|_| {
+        "json_extract(body, '$.__valence_rejected_ident')".to_string()
+    })
+}
+
+/// Map a field name to a SQL document column expression after charset validation.
+///
+/// # Errors
+///
+/// Returns [`crate::Error::Validation`] when `field` is not a safe identifier.
+pub fn sql_doc_column_checked(field: &str) -> crate::error::Result<String> {
     if field == "id" {
-        "id".to_string()
-    } else {
-        format!("json_extract(body, '$.{field}')")
+        return Ok("id".to_string());
     }
+    assert_safe_ident(field)?;
+    Ok(format!("json_extract(body, '$.{field}')"))
 }
 
 /// Rewrite `SELECT *` / field lists for document tables.

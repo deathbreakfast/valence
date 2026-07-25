@@ -77,6 +77,7 @@ pub mod router;
 pub mod router_key;
 pub mod row_json;
 pub mod runtime;
+pub mod safe_ident;
 pub mod schema;
 pub mod schema_api;
 pub mod schema_types;

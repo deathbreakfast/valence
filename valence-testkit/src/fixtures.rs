@@ -2,7 +2,7 @@
 
 use std::sync::OnceLock;
 
-use serde_json::{json, Value};
+use serde_json::Value;
 use valence_core::evaluator::DEFAULT_IN_MEMORY;
 use valence_core::privacy::PrivacyRule;
 use valence_core::privacy_policies::common;
@@ -12,9 +12,46 @@ use valence_core::schema_api::{
 };
 use valence_core::DatabaseEvaluator;
 
-/// Opaque actor JSON for factory/bootstrap scenarios.
+/// Typed [`valence_core::actor::Actor`] JSON for factory/bootstrap scenarios.
 pub fn smoke_actor_json() -> Value {
-    json!({"role": "system", "subject": "valence-testkit"})
+    serde_json::to_value(valence_core::actor::Actor::System {
+        operation: "valence-testkit".into(),
+    })
+    .unwrap_or(Value::Null)
+}
+
+/// Schema with no entity policies (catalog default-deny sad-path).
+pub fn empty_policies_schema() -> &'static SchemaMetadata {
+    static METADATA: OnceLock<SchemaMetadata> = OnceLock::new();
+    METADATA.get_or_init(|| {
+        let schema = Box::leak(Box::new(Schema {
+            name: "catalog_empty_policies".to_string(),
+            version: "0.1.0".to_string(),
+            databases: vec![DEFAULT_IN_MEMORY.name().to_string()],
+            database_evaluator: &DEFAULT_IN_MEMORY,
+            privacy: SchemaPrivacy {
+                read: "none".to_string(),
+                write: "none".to_string(),
+            },
+            policies: None,
+            fields: vec![],
+            edges: Vec::new(),
+            connections: Vec::new(),
+            side_effects: Vec::new(),
+            iters: Vec::new(),
+            composite_key: Vec::new(),
+            traits: Vec::new(),
+            ttl: None,
+            ownership: None,
+            meta: SchemaMeta {
+                retention: "365 days".to_string(),
+                row_count: 0,
+                owner: "system".to_string(),
+                description: None,
+            },
+        }));
+        SchemaMetadata::from_schema(schema)
+    })
 }
 
 /// Schema requiring authentication for read (catalog privacy sad-path).

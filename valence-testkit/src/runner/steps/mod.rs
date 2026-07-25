@@ -45,6 +45,7 @@ pub(super) async fn run_step(
         | ScenarioStep::ReadCacheSmoke => model::run(session, step, mode).await,
         ScenarioStep::AssertPrivacyReadDenied
         | ScenarioStep::AssertPrivacyWriteDenied
+        | ScenarioStep::AssertPrivacyEmptyDefaultDeny
         | ScenarioStep::AssertValidationRejects { .. }
         | ScenarioStep::AssertValidationAccepts { .. } => privacy::run(session, step, mode).await,
         ScenarioStep::AssertTelemetryCounter { .. } => telemetry::run(session, step, mode).await,
@@ -64,6 +65,7 @@ pub(super) fn step_label(step: &ScenarioStep) -> String {
         ScenarioStep::AssertGetMissing { .. } => "assert_get_missing".into(),
         ScenarioStep::AssertPrivacyReadDenied => "assert_privacy_read_denied".into(),
         ScenarioStep::AssertPrivacyWriteDenied => "assert_privacy_write_denied".into(),
+        ScenarioStep::AssertPrivacyEmptyDefaultDeny => "assert_privacy_empty_default_deny".into(),
         ScenarioStep::AssertValidationRejects { .. } => "assert_validation_rejects".into(),
         ScenarioStep::AssertValidationAccepts { .. } => "assert_validation_accepts".into(),
         ScenarioStep::ModelCrudSmoke => "model_crud_smoke".into(),

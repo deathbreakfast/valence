@@ -56,7 +56,12 @@ impl PrivacyEvaluator {
             && policies.block.is_empty()
             && policies.always_block.is_empty()
         {
-            return Ok(());
+            if viewer.is_system() {
+                return Ok(());
+            }
+            return Err(Error::Privacy(
+                "Access denied: no privacy policies configured (default deny)".to_string(),
+            ));
         }
 
         Err(Error::Privacy(

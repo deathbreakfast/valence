@@ -4,8 +4,14 @@ impl QueryCore {
     ///
     /// Returns an error when the requested operation cannot be completed.
     pub(crate) fn to_sql(&self) -> Result<(String, Vec<(String, serde_json::Value)>)> {
+        for part in self.table.split(',') {
+            let tbl = part.trim();
+            if !tbl.is_empty() {
+                crate::safe_ident::assert_safe_ident(tbl)?;
+            }
+        }
         let select_clause = super::sql_document::sql_select_clause(self.projection.as_ref());
-        let mut query = format!("SELECT {select_clause} FROM {}", self.table);
+        let mut query = format!("SELECT {select_clause} FROM {}", self.table.trim());
         let mut params = Vec::new();
         let mut param_counter = 0;
         let mut where_parts = Vec::new();

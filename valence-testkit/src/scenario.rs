@@ -66,6 +66,8 @@ pub enum ScenarioStep {
     AssertPrivacyReadDenied,
     /// Assert anonymous create is denied (sad path).
     AssertPrivacyWriteDenied,
+    /// Assert empty entity policies deny non-System actors (sad path).
+    AssertPrivacyEmptyDefaultDeny,
     /// Assert a validation helper rejects a value (sad path).
     AssertValidationRejects {
         /// Validator name (`email`, `non_empty`).
@@ -271,6 +273,16 @@ impl ScenarioSpec {
             steps: vec![
                 ScenarioStep::BuildValence,
                 ScenarioStep::AssertPrivacyWriteDenied,
+            ],
+        }
+    }
+
+    pub fn privacy_empty_default_deny() -> Self {
+        Self {
+            id: "privacy-empty-default-deny".into(),
+            steps: vec![
+                ScenarioStep::BuildValence,
+                ScenarioStep::AssertPrivacyEmptyDefaultDeny,
             ],
         }
     }

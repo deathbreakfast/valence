@@ -261,6 +261,7 @@ pub async fn get_edge_targets_postgres(
 
 pub async fn define_unique_index_postgres(pool: &PgPool, table: &str, field: &str) -> Result<()> {
     assert_safe_table(table)?;
+    valence_core::safe_ident::assert_safe_ident(field)?;
     ensure_table_postgres(pool, table).await?;
     let idx = format!("valence_unique_{table}_{field}");
     let q = format!("CREATE UNIQUE INDEX IF NOT EXISTS {idx} ON {table} ((body->>'{field}'))");

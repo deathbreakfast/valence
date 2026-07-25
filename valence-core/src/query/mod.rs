@@ -1,6 +1,7 @@
-//! Admin/query builder — composable filters, sorts, and compiled SQL execution.
+//! Composable query builder — filters, sorts, compiled execution.
 //!
-//! Entry type: [`QueryCore`]. Predicate helpers include [`StringPredicate`] and [`IntPredicate`].
+//! Entry type: [`QueryCore`]. [`QueryCore::execute`] post-filters rows by entity read privacy.
+//! [`QueryCore::get_record_json`] is a raw storage fetch (no privacy).
 mod predicates;
 #[cfg(any(
     feature = "compiler-sql",

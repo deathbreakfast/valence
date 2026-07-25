@@ -7,11 +7,19 @@
     clippy::print_stderr
 )]
 use valence::prelude::*;
+use valence::privacy_policies::common::PUBLIC_READ;
 
 valence_schema! {
     Smoke {
         table: "smoke",
         version: "0.1.0",
+        // Explicit policies: empty entity policy lists default-deny non-System actors.
+        policies: {
+            read: { allow: [PUBLIC_READ] },
+            create: { allow: [PUBLIC_READ] },
+            update: { allow: [PUBLIC_READ] },
+            delete: { allow: [PUBLIC_READ] },
+        },
         fields: [
             id: { r#type: FieldType::String, primary_key: true, required: true },
         ],

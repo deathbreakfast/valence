@@ -108,22 +108,33 @@ impl QueryCore {
         let filtered = self
             .post_filter_connection_privacy(results, valence)
             .await?;
-        let rows_after_privacy = filtered.len();
-        if rows_db > rows_after_privacy {
+        let rows_after_connection = filtered.len();
+        if rows_db > rows_after_connection {
             crate::instrumentation::metrics::record_query_rows_filtered(
                 table.split(',').next().unwrap_or(&table).trim(),
                 "connection_privacy",
-                (rows_db - rows_after_privacy) as i64,
+                (rows_db - rows_after_connection) as i64,
             );
         }
 
         let filtered = self.post_filter_hop_privacy(filtered, valence).await?;
         let rows_after_hop = filtered.len();
-        if rows_after_privacy > rows_after_hop {
+        if rows_after_connection > rows_after_hop {
             crate::instrumentation::metrics::record_query_rows_filtered(
                 table.split(',').next().unwrap_or(&table).trim(),
                 "hop_privacy",
-                (rows_after_privacy - rows_after_hop) as i64,
+                (rows_after_connection - rows_after_hop) as i64,
+            );
+        }
+
+        // Entity-level read privacy for every list/query row (HasMany / Model::query inherit this).
+        let filtered = self.post_filter_entity_privacy(filtered, valence).await?;
+        let rows_after_entity = filtered.len();
+        if rows_after_hop > rows_after_entity {
+            crate::instrumentation::metrics::record_query_rows_filtered(
+                table.split(',').next().unwrap_or(&table).trim(),
+                "entity_privacy",
+                (rows_after_hop - rows_after_entity) as i64,
             );
         }
 
@@ -134,7 +145,7 @@ impl QueryCore {
             query_target,
             &trait_name,
             rows_db as i64,
-            rows_after_hop as i64,
+            rows_after_entity as i64,
             rows_after_pending as i64,
             wall_ms,
         );
@@ -242,32 +253,55 @@ impl QueryCore {
         if self.hop_source.is_none() {
             return Ok(results);
         }
+        self.filter_rows_by_entity_read(results, valence).await
+    }
 
+    /// Drop rows the viewer cannot read under entity-level policies.
+    ///
+    /// Unregistered tables pass through (no schema ⇒ no policy evaluation). Prefer registering
+    /// schemas for any table that holds sensitive data.
+    async fn post_filter_entity_privacy<T>(
+        &self,
+        results: Vec<T>,
+        valence: &Valence,
+    ) -> Result<Vec<T>>
+    where
+        T: Serialize,
+    {
+        // Hop path already applied the same filter when `hop_source` is set.
+        if self.hop_source.is_some() {
+            return Ok(results);
+        }
+        self.filter_rows_by_entity_read(results, valence).await
+    }
+
+    async fn filter_rows_by_entity_read<T>(
+        &self,
+        results: Vec<T>,
+        valence: &Valence,
+    ) -> Result<Vec<T>>
+    where
+        T: Serialize,
+    {
         use crate::privacy::PrivacyEvaluator;
         use crate::schema::SchemaRegistry;
 
-        let Some(schema) = SchemaRegistry::global().get_schema(&self.table) else {
+        let schema_table = backend_schema_table(self.table.as_str());
+        let Some(schema) = SchemaRegistry::global().get_schema(schema_table) else {
             return Ok(results);
         };
 
-        let concurrency = 1usize;
-        let rows: Vec<T> = results;
-        let mut keep = vec![false; rows.len()];
-        for chunk_start in (0..rows.len()).step_by(concurrency) {
-            let chunk_end = (chunk_start + concurrency).min(rows.len());
-            for idx in chunk_start..chunk_end {
-                let row_json =
-                    serde_json::to_value(&rows[idx]).map_err(|e| Error::Internal(e.to_string()))?;
-                let ok = PrivacyEvaluator::check_entity_read(schema, &row_json, valence)
-                    .await
-                    .is_ok();
-                keep[idx] = ok;
+        let mut kept = Vec::with_capacity(results.len());
+        for row in results {
+            let row_json =
+                serde_json::to_value(&row).map_err(|e| Error::Internal(e.to_string()))?;
+            if PrivacyEvaluator::check_entity_read(schema, &row_json, valence)
+                .await
+                .is_ok()
+            {
+                kept.push(row);
             }
         }
-        Ok(rows
-            .into_iter()
-            .enumerate()
-            .filter_map(|(idx, row)| keep[idx].then_some(row))
-            .collect())
+        Ok(kept)
     }
 }

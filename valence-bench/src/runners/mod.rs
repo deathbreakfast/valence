@@ -1,4 +1,4 @@
-//! Experiment runners (bm-v0..bm-v26).
+//! Experiment runners (bm-v0..bm-v27).
 
 mod bm_v0;
 mod bm_v1;
@@ -19,6 +19,7 @@ mod bm_v23;
 mod bm_v24;
 mod bm_v25;
 mod bm_v26;
+mod bm_v27;
 mod bm_v3;
 mod bm_v4;
 mod bm_v5;
@@ -100,6 +101,7 @@ async fn run_real_world(ctx: &RunContext) -> Result<Option<BenchReport>> {
         "bm-v24" => bm_v24::run(ctx).await?,
         "bm-v25" => bm_v25::run(ctx).await?,
         "bm-v26" => bm_v26::run(ctx).await?,
+        "bm-v27" => bm_v27::run(ctx).await?,
         _ => return Ok(None),
     };
     Ok(Some(report))

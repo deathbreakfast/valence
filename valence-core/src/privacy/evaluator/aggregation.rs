@@ -25,7 +25,13 @@ impl PrivacyEvaluator {
 
         for field in &schema.schema.fields {
             let field_name = field.name.as_str();
-            let field_policy = Self::extract_field_read_policy(field)?;
+            // Absent field-level policy means no extra restriction beyond entity-level checks.
+            let Some(field_policy) = Self::extract_field_read_policy(field)? else {
+                if let Some(field_value) = raw_data.get(field_name) {
+                    filtered.insert(field_name.to_string(), field_value.clone());
+                }
+                continue;
+            };
 
             if let Some(field_value) = raw_data.get(field_name) {
                 match Self::evaluate(&field_policy, raw_data, viewer) {
@@ -60,13 +66,13 @@ impl PrivacyEvaluator {
         Ok((filtered, hidden))
     }
 
-    fn extract_field_read_policy(field_def: &SchemaField) -> Result<PrivacyPolicy> {
+    fn extract_field_read_policy(field_def: &SchemaField) -> Result<Option<PrivacyPolicy>> {
         if let Some(policies) = &field_def.policies {
             if let Some(read_policy) = &policies.read {
-                return Self::parse_policy_rules(read_policy);
+                return Ok(Some(Self::parse_policy_rules(read_policy)?));
             }
         }
-        Ok(PrivacyPolicy::default())
+        Ok(None)
     }
 
     fn parse_policy_rules(rules: &SchemaPolicyRules) -> Result<PrivacyPolicy> {
@@ -127,6 +133,14 @@ impl PrivacyEvaluator {
         raw_data: &serde_json::Value,
         v: &Valence,
     ) -> Result<()> {
+        // Bench/test seam only — never enable in production hosts.
+        if std::env::var("VALENCE_PRIVACY_BYPASS")
+            .map(|s| s.trim() == "1")
+            .unwrap_or(false)
+        {
+            return Ok(());
+        }
+
         let mut always_block = Vec::<&crate::schema_api::SchemaPolicyRule>::new();
         let mut always_allow = Vec::<&crate::schema_api::SchemaPolicyRule>::new();
         let mut block = Vec::<&crate::schema_api::SchemaPolicyRule>::new();
@@ -195,7 +209,19 @@ impl PrivacyEvaluator {
             && block.is_empty()
             && always_block.is_empty()
         {
-            return Ok(());
+            // Default-deny for missing entity policies. System retains access so platform/bootstrap
+            // paths on unpolicied internal tables keep working; declare explicit policies for data.
+            if v.actor().is_system() {
+                return Ok(());
+            }
+            let msg = "Access denied: no privacy policies configured (default deny)".to_string();
+            crate::instrumentation::privacy::record_privacy_denial(
+                table,
+                "default_deny",
+                telemetry_label,
+                &msg,
+            );
+            return Err(Error::Privacy(msg));
         }
 
         let msg = "Access denied: no matching allow policy".to_string();

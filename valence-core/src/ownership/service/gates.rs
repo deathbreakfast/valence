@@ -16,7 +16,7 @@ use super::helpers::{
 use super::OwnershipService;
 
 impl OwnershipService {
-    /// Pending-deletion gate for `Model::get`: absent ownership row passes; lookup errors pass.
+    /// Pending-deletion gate for `Model::get`: absent ownership row passes; lookup errors fail closed.
     /// # Errors
     ///
     /// Returns an error when the requested operation cannot be completed.
@@ -37,7 +37,12 @@ impl OwnershipService {
                     .map_or(OwnershipGateStatus::Absent, OwnershipGateStatus::Status);
                 Self::apply_pending_deletion_gate(valence_model, bare_id, status)
             }
-            Ok(None) | Err(_) => Ok(()),
+            // Absent ownership row remains allow (legacy create paths). Lookup errors fail closed
+            // so a pending_deletion row cannot become readable during ownership-store outages.
+            Ok(None) => Ok(()),
+            Err(e) => Err(Error::Privacy(format!(
+                "ownership lookup failed for {valence_model}:{bare_id}: {e}"
+            ))),
         }
     }
 

@@ -14,6 +14,8 @@
 //!   `database:` / [`DatabaseFromEngine`]
 //! - **Host ports** — secrets, actor identity, endpoints, and telemetry injected at boot
 //! - **Privacy-aware CRUD** — policy and ownership hooks on generated [`Model`] paths
+//! - **Query privacy** — [`QueryCore::execute`] / `Model::query` post-filter rows by entity read policy
+//! - **Default-deny policies** — schemas without entity `policies:` deny non-System actors
 //!
 //! Enable backends with Cargo features (`mem` is the default). The crate `README.md` lists every
 //! feature flag and environment variable.

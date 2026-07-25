@@ -26,7 +26,7 @@ Usage: aws-e2e-bench.sh [--dry-run] [--e2e] [--bench SLICE|all]
   --dry-run   Print expected tests/experiments and env presence; exit 0
   --e2e       Run cargo test -p valence-e2e -- --test-threads=1
   --bench S   Run matrix slice (read-hammer|query-real|hop-pairs|hop-chains|
-              hybrid-compare|adapter-minimal|write-sweep|query-depth|overhead|all)
+              hybrid-compare|privacy-filter|adapter-minimal|write-sweep|query-depth|overhead|all)
 EOF
 }
 
@@ -57,7 +57,7 @@ echo "  admin_runtime_catalog"
 echo "  cross_backend_hops (depth-2 Cartesian + chain depths)"
 
 echo "== expected bench slices =="
-echo "  adapter-minimal write-sweep query-depth overhead"
+echo "  adapter-minimal write-sweep query-depth overhead privacy-filter"
 echo "  read-hammer query-real hop-pairs hop-chains hybrid-compare"
 
 if [[ "$DRY_RUN" -eq 1 ]]; then
@@ -174,7 +174,7 @@ run_slice() {
 
 if [[ -n "$BENCH_SLICE" ]]; then
   if [[ "$BENCH_SLICE" == "all" ]]; then
-    for s in adapter-minimal write-sweep query-depth overhead read-hammer query-real hop-pairs hop-chains hybrid-compare; do
+    for s in adapter-minimal write-sweep query-depth overhead privacy-filter read-hammer query-real hop-pairs hop-chains hybrid-compare; do
       run_slice "$s"
     done
   else

@@ -63,6 +63,7 @@ Reports land under `profiling/valence-bench/reports/` as JSON.
 | **bm-v15** | Hop pair smoke (delegates to hop harness) | mem→sqlite |
 | **bm-v16** | Privacy gate overhead | mem, sqlite |
 | **bm-v17** | Privacy sleep sweep | mem |
+| **bm-v27** | Query privacy post-filter vs bypass | mem, sqlite (+ wire on AWS) |
 | **bm-v18** | Telemetry overhead | mem |
 | **bm-v19** | Map/RSS @ 10k rows | mem, sqlite |
 | **bm-v20** | Get-by-id hammer (hot + unique; cache on/off) | all available |

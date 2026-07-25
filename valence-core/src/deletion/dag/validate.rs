@@ -28,13 +28,7 @@ pub fn table_skips_pending_deletion_filter(table: &str) -> bool {
 ///
 /// Returns an error when the requested operation cannot be completed.
 pub fn assert_safe_ident(s: &str) -> Result<()> {
-    if s.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
-        Ok(())
-    } else {
-        Err(Error::Validation(format!(
-            "unsafe identifier for deletion graph query: {s:?}"
-        )))
-    }
+    crate::safe_ident::assert_safe_ident(s)
 }
 
 /// Record id string passed to `type::record($tb, $rid)` (bound parameter).

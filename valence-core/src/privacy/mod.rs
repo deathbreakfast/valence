@@ -1,14 +1,26 @@
-//! Field-level privacy evaluation for generated models and admin queries.
+//! Schema-driven privacy for entity and field access.
 //!
-//! [`PrivacyEvaluator`] applies schema policy rules; policy constants live in [`policies`].
+//! [`PrivacyEvaluator`] applies schema/trait policy rules. Built-ins live in
+//! [`crate::privacy_policies`] / [`policies`].
 //!
-//! Privacy is **schema-driven**, not a [`crate::ValenceBuilder`] port:
+//! Empty entity policy lists **deny** non-[`Actor::System`](crate::actor::Actor) viewers.
+//! [`crate::query::QueryCore::execute`] drops rows the viewer cannot read.
+//! Absent field-level policy means no extra restriction beyond entity checks.
 //!
-//! - App crates `impl` [`PolicyEvaluator`] and export `pub const MY_RULE`
-//! - Schemas reference those consts in `policies: { … }`
-//! - Built-ins (`AUTHENTICATED`, `PUBLIC_READ`, …) live in [`crate::privacy_policies`]
+//! Privacy is not a builder port — declare `policies:` on schemas (or `impl` [`PolicyEvaluator`]).
 //!
-//! There is **no** `ValenceBuilder::register_policy(...)`.
+//! ```
+//! use valence_core::actor::Actor;
+//! use valence_core::privacy::{PrivacyEvaluator, PrivacyPolicy};
+//! use valence_core::privacy_policies::common;
+//!
+//! let policy = PrivacyPolicy {
+//!     allow: vec![common::AUTHENTICATED],
+//!     ..PrivacyPolicy::default()
+//! };
+//! let record = serde_json::json!({"id": "1"});
+//! assert!(PrivacyEvaluator::evaluate(&policy, &record, &Actor::Anonymous).is_err());
+//! ```
 mod policy_evaluator;
 mod types;
 

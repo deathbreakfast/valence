@@ -249,6 +249,9 @@ pub fn embedded_catalog() -> &'static [CatalogEntry] {
         entry("privacy-write-deny", PathKind::Sad, |_| {
             ScenarioSpec::privacy_write_deny()
         }),
+        entry_sad("privacy-empty-default-deny", |_| {
+            ScenarioSpec::privacy_empty_default_deny()
+        }),
         entry("validation-accept-smoke", PathKind::Happy, |_| {
             ScenarioSpec::validation_accept_smoke()
         }),

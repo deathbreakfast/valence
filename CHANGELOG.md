@@ -34,7 +34,7 @@ https://github.com/unified-field-dev/valence
 Replace Cargo dependency names when consuming from git or crates.io:
 
 ```toml
-uf-valence = { git = "https://github.com/unified-field-dev/valence", package = "uf-valence", features = ["mem"] }
+uf-valence = { git = "https://github.com/deathbreakfast/valence", package = "uf-valence", features = ["mem"] }
 ```
 
 Rust code continues to use `use valence::…` (crate `[lib] name` is unchanged).

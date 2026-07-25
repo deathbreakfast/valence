@@ -170,10 +170,10 @@
 //!
 //! ```toml
 //! [dependencies]
-//! uf-valence = { git = "https://github.com/unified-field-dev/valence", package = "uf-valence", features = ["mem"] }
+//! uf-valence = { git = "https://github.com/deathbreakfast/valence", package = "uf-valence", features = ["mem"] }
 //!
 //! [build-dependencies]
-//! uf-valence-codegen = { git = "https://github.com/unified-field-dev/valence", package = "uf-valence-codegen" }
+//! uf-valence-codegen = { git = "https://github.com/deathbreakfast/valence", package = "uf-valence-codegen" }
 //! ```
 //!
 //! ```ignore

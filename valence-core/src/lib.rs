@@ -150,8 +150,8 @@ pub use query_compiler_registry::{
     compile_for_engine, global_compiler_registry, QueryCompilerRegistry,
 };
 pub use read_cache::{
-    get_record_via_cache, get_record_with_ownership_bundle_via_cache, invalidate,
-    read_cache_enabled,
+    clear_for_test, get_record_via_cache, get_record_with_ownership_bundle_via_cache, invalidate,
+    invalidate_for_backend, read_cache_enabled,
 };
 pub use record_id::RecordId;
 pub use reference::{Reference, ReferencedEntity, WithReference};

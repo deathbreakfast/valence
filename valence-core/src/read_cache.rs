@@ -6,6 +6,9 @@
 //! When [`ownership_unified_fetch_enabled`] is on, cache entries bundle the main row and ownership
 //! gate status so warm reads avoid a second ownership trip.
 //! Write paths invalidate via generated `Model` ops and [`OwnershipService`].
+//!
+//! Cache keys include the backend allocation identity so distinct in-memory stores (parallel
+//! tests, multiple routers) do not share point-get rows.
 
 use std::sync::{Arc, OnceLock};
 
@@ -19,8 +22,12 @@ use crate::ownership::{
     ownership_unified_fetch_enabled, OwnershipGateStatus, OwnershipService, RecordOwnershipBundle,
 };
 
-fn cache_key(table: &str, id: &str) -> (String, String) {
-    (table.to_string(), id.to_string())
+type CacheKey = (usize, String, String);
+
+fn cache_key(backend: &Arc<dyn DatabaseBackend>, table: &str, id: &str) -> CacheKey {
+    // Fat pointer → data pointer address; isolates distinct Arc backends (e.g. test DBs).
+    let backend_id = Arc::as_ptr(backend) as *const () as usize;
+    (backend_id, table.to_string(), id.to_string())
 }
 
 /// Whether the read-through record cache is active (default on; `VALENCE_READ_CACHE=0` disables).
@@ -45,8 +52,8 @@ fn read_cache_capacity() -> usize {
     })
 }
 
-fn global_cache() -> &'static Cache<(String, String), RecordOwnershipBundle> {
-    static CACHE: OnceLock<Cache<(String, String), RecordOwnershipBundle>> = OnceLock::new();
+fn global_cache() -> &'static Cache<CacheKey, RecordOwnershipBundle> {
+    static CACHE: OnceLock<Cache<CacheKey, RecordOwnershipBundle>> = OnceLock::new();
     CACHE.get_or_init(|| Cache::new(read_cache_capacity()))
 }
 
@@ -64,7 +71,7 @@ pub async fn get_record_via_cache(
         return backend.get_record(table, id).await;
     }
     if read_cache_enabled() {
-        let key = cache_key(table, id);
+        let key = cache_key(backend, table, id);
         if let Some(cached) = global_cache().get(&key) {
             instrumentation::record_ownership_fetch_mode("cache_hit_row");
             return Ok(cached.row);
@@ -100,7 +107,7 @@ pub async fn get_record_with_ownership_bundle_via_cache(
     let hybrid = backend.engine_id() == crate::KnownEngines::HYBRID_INDRA_SQL;
 
     if read_cache_enabled() && !hybrid {
-        let key = cache_key(table, id);
+        let key = cache_key(backend, table, id);
         if let Some(cached) = global_cache().get(&key) {
             if cached.ownership_status != OwnershipGateStatus::NotFetched {
                 instrumentation::record_ownership_fetch_mode("cache_hit");
@@ -120,15 +127,28 @@ pub async fn get_record_with_ownership_bundle_via_cache(
     instrumentation::record_ownership_fetch_mode(if hybrid { "unified_hybrid" } else { "unified" });
 
     if read_cache_enabled() && !hybrid {
-        global_cache().insert(cache_key(table, id), bundle.clone());
+        global_cache().insert(cache_key(backend, table, id), bundle.clone());
     }
     Ok(bundle)
 }
 
-/// Drop a cached row after a write or ownership status change.
+/// Drop cached rows after a write or ownership status change.
+///
+/// Without a backend handle (codegen call sites), this clears the process-wide cache.
+/// Prefer [`invalidate_for_backend`] when the backend is available.
 pub fn invalidate(table: &str, id: &str) {
+    let _ = (table, id);
     if read_cache_enabled() {
-        global_cache().remove(&cache_key(table, id));
+        // Coarse: write paths lack a backend pointer in generated code. Clearing avoids
+        // serving stale rows after upsert/delete across any backend.
+        global_cache().clear();
+    }
+}
+
+/// Drop a cached row for a specific backend after a write.
+pub fn invalidate_for_backend(backend: &Arc<dyn DatabaseBackend>, table: &str, id: &str) {
+    if read_cache_enabled() {
+        global_cache().remove(&cache_key(backend, table, id));
     }
 }
 

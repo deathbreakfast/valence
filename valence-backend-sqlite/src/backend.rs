@@ -1,6 +1,6 @@
 //! SQLite storage engine.
 
-use sqlx::sqlite::{SqliteConnectOptions, SqlitePool};
+use sqlx::sqlite::{SqliteConnectOptions, SqlitePool, SqlitePoolOptions};
 use std::str::FromStr;
 
 use valence_backend_sql::{
@@ -74,6 +74,10 @@ impl SqliteBackend {
 
     /// Connect to a SQLite database at `path` (`:memory:` for ephemeral).
     ///
+    /// In-memory URLs (`:memory:` or `mode=memory`) use a single-connection pool so every
+    /// checkout sees the same store. sqlx's default pool size otherwise opens isolated
+    /// private databases per connection for bare `:memory:`.
+    ///
     /// # Errors
     ///
     /// Returns [`Error::Database`] if connecting or ensuring the edges schema fails.
@@ -82,7 +86,15 @@ impl SqliteBackend {
             .or_else(|_| SqliteConnectOptions::from_str(&format!("sqlite:{path}")))
             .map_err(|e| Error::Database(e.to_string()))?
             .create_if_missing(true);
-        let pool = SqlitePool::connect_with(options)
+        let memory = path.contains(":memory:")
+            || path.contains("mode=memory")
+            || path == ":memory:";
+        let mut pool_opts = SqlitePoolOptions::new();
+        if memory {
+            pool_opts = pool_opts.max_connections(1);
+        }
+        let pool = pool_opts
+            .connect_with(options)
             .await
             .map_err(|e| Error::Database(e.to_string()))?;
         valence_backend_sql::ensure_edges_sqlite(&pool).await?;

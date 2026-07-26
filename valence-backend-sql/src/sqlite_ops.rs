@@ -163,8 +163,7 @@ pub async fn create_record_sqlite(
     let id = storage_id(&content).unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
     let mut body = upsert_body_fields(content);
     body.remove("id");
-    let body_text = serde_json::to_string(&Value::Object(body))
-        .map_err(|e| Error::Serialization(e.to_string()))?;
+    let body_text = serde_json::to_string(&Value::Object(body)).map_err(Error::from)?;
     let q = format!("INSERT INTO {table} (id, body) VALUES (?, ?)");
     sqlx::query(&q)
         .bind(&id)
@@ -190,8 +189,7 @@ pub async fn update_record_sqlite(
     }
     let mut body = upsert_body_fields(content);
     body.remove("id");
-    let body_text = serde_json::to_string(&Value::Object(body))
-        .map_err(|e| Error::Serialization(e.to_string()))?;
+    let body_text = serde_json::to_string(&Value::Object(body)).map_err(Error::from)?;
     let q = format!("UPDATE {table} SET body = ? WHERE id = ?");
     sqlx::query(&q)
         .bind(&body_text)

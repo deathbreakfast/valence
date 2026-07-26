@@ -1,6 +1,5 @@
 ---
 source: valence-codegen/src/codegen/tests/schema_generation.rs
-assertion_line: 170
 expression: generated
 ---
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -178,10 +177,7 @@ impl valence::Model for ScoreTracker {
                             None => None,
                             Some(v) => {
                                 Some(
-                                    serde_json::from_value(v)
-                                        .map_err(|e| {
-                                            valence::Error::Serialization(e.to_string())
-                                        })?,
+                                    serde_json::from_value(v).map_err(valence::Error::from)?,
                                 )
                             }
                         };
@@ -212,12 +208,28 @@ impl valence::Model for ScoreTracker {
                     .await?;
             }
         }
+        let result = match result {
+            Some(record) => {
+                let raw = serde_json::to_value(&record).map_err(valence::Error::from)?;
+                let (filtered, _) = valence::PrivacyEvaluator::filter_entity_fields(
+                    Self::__schema_metadata()?,
+                    &raw,
+                    valence.actor(),
+                )?;
+                let filtered_json = serde_json::Value::Object(
+                    filtered.into_iter().collect(),
+                );
+                Some(
+                    serde_json::from_value(filtered_json).map_err(valence::Error::from)?,
+                )
+            }
+            None => None,
+        };
         Ok(result)
     }
     async fn create(data: Self, valence: &valence::Valence) -> valence::Result<Self> {
         data.check_create_privacy(valence).await?;
-        let record = serde_json::to_value(&data)
-            .map_err(|e| valence::Error::Serialization(e.to_string()))?;
+        let record = serde_json::to_value(&data).map_err(valence::Error::from)?;
         Self::__assert_unique_constraints_for_record(&record, None, valence).await?;
         let created: Self = valence::retry_on_database_tx_conflict(
                 "Model::create",
@@ -229,8 +241,7 @@ impl valence::Model for ScoreTracker {
                         let row = backend
                             .create_record(Self::table_name(), record)
                             .await?;
-                        serde_json::from_value(row)
-                            .map_err(|e| valence::Error::Serialization(e.to_string()))
+                        serde_json::from_value(row).map_err(valence::Error::from)
                     }
                 },
             )
@@ -322,11 +333,15 @@ impl valence::Model for ScoreTracker {
         data: Self,
         valence: &valence::Valence,
     ) -> valence::Result<Self> {
-        data.check_create_privacy(valence).await?;
-        let record = serde_json::to_value(&data)
-            .map_err(|e| valence::Error::Serialization(e.to_string()))?;
-        Self::__assert_unique_constraints_for_record(&record, Some(id), valence).await?;
         let before_snapshot = Self::get(id, valence).await?;
+        if let Some(ref existing) = before_snapshot {
+            existing.check_update_privacy(valence).await?;
+            data.check_update_privacy(valence).await?;
+        } else {
+            data.check_create_privacy(valence).await?;
+        }
+        let record = serde_json::to_value(&data).map_err(valence::Error::from)?;
+        Self::__assert_unique_constraints_for_record(&record, Some(id), valence).await?;
         let id = id.to_string();
         let upserted: Self = valence::retry_on_database_tx_conflict(
                 "Model::upsert",
@@ -339,8 +354,7 @@ impl valence::Model for ScoreTracker {
                         let row = backend
                             .upsert_record(Self::table_name(), id.as_str(), record)
                             .await?;
-                        serde_json::from_value(row)
-                            .map_err(|e| valence::Error::Serialization(e.to_string()))
+                        serde_json::from_value(row).map_err(valence::Error::from)
                     }
                 },
             )
@@ -401,7 +415,7 @@ impl valence::Model for ScoreTracker {
             }
         };
         let mut merged_json = serde_json::to_value(existing)
-            .map_err(|e| valence::Error::Serialization(e.to_string()))?;
+            .map_err(valence::Error::from)?;
         if let serde_json::Value::Object(ref patch_obj) = patch_for_db {
             if let serde_json::Value::Object(ref mut base) = merged_json {
                 for (k, v) in patch_obj {
@@ -418,7 +432,7 @@ impl valence::Model for ScoreTracker {
         Self::__assert_unique_constraints_for_record(&merged_json, Some(id), valence)
             .await?;
         let proposed: Self = serde_json::from_value(merged_json)
-            .map_err(|e| valence::Error::Serialization(e.to_string()))?;
+            .map_err(valence::Error::from)?;
         proposed.check_update_privacy(valence).await?;
         let id = id.to_string();
         let merged: Self = valence::retry_on_database_tx_conflict(
@@ -432,8 +446,7 @@ impl valence::Model for ScoreTracker {
                         let row = backend
                             .merge_record(Self::table_name(), id.as_str(), patch_for_db)
                             .await?;
-                        serde_json::from_value(row)
-                            .map_err(|e| valence::Error::Serialization(e.to_string()))
+                        serde_json::from_value(row).map_err(valence::Error::from)
                     }
                 },
             )
@@ -462,10 +475,14 @@ impl valence::Model for ScoreTracker {
     }
 }
 impl ScoreTracker {
-    fn __schema_metadata() -> &'static valence::SchemaMetadataStruct {
+    fn __schema_metadata() -> valence::Result<&'static valence::SchemaMetadataStruct> {
         valence::SchemaRegistry::global()
             .get_schema("score_tracker")
-            .expect(concat!("SchemaRegistry missing entry for ", "score_tracker"))
+            .ok_or_else(|| {
+                valence::Error::Internal(
+                    concat!("SchemaRegistry missing entry for ", "score_tracker").into(),
+                )
+            })
     }
     async fn __assert_unique_constraints_for_record(
         record: &serde_json::Value,
@@ -545,7 +562,7 @@ impl ScoreTracker {
     ) -> valence::Result<()> {
         let record = serde_json::json!(self);
         valence::PrivacyEvaluator::check_entity_access(
-                Self::__schema_metadata(),
+                Self::__schema_metadata()?,
                 valence::PrivacyOperation::Read,
                 &record,
                 valence,
@@ -558,7 +575,7 @@ impl ScoreTracker {
     ) -> valence::Result<()> {
         let record = serde_json::json!(self);
         valence::PrivacyEvaluator::check_entity_access(
-                Self::__schema_metadata(),
+                Self::__schema_metadata()?,
                 valence::PrivacyOperation::Create,
                 &record,
                 valence,
@@ -571,7 +588,7 @@ impl ScoreTracker {
     ) -> valence::Result<()> {
         let record = serde_json::json!(self);
         valence::PrivacyEvaluator::check_entity_access(
-                Self::__schema_metadata(),
+                Self::__schema_metadata()?,
                 valence::PrivacyOperation::Update,
                 &record,
                 valence,
@@ -584,7 +601,7 @@ impl ScoreTracker {
     ) -> valence::Result<()> {
         let record = serde_json::json!(self);
         valence::PrivacyEvaluator::check_entity_access(
-                Self::__schema_metadata(),
+                Self::__schema_metadata()?,
                 valence::PrivacyOperation::Delete,
                 &record,
                 valence,
@@ -600,8 +617,7 @@ impl ScoreTracker {
         valence: &valence::Valence,
     ) -> valence::Result<Self> {
         data.check_update_privacy(valence).await?;
-        let record = serde_json::to_value(&data)
-            .map_err(|e| valence::Error::Serialization(e.to_string()))?;
+        let record = serde_json::to_value(&data).map_err(valence::Error::from)?;
         Self::__assert_unique_constraints_for_record(&record, Some(id), valence).await?;
         let before_snapshot = match before {
             Some(existing) => {
@@ -632,8 +648,7 @@ impl ScoreTracker {
                                 record,
                             )
                             .await?;
-                        serde_json::from_value(row)
-                            .map_err(|e| valence::Error::Serialization(e.to_string()))
+                        serde_json::from_value(row).map_err(valence::Error::from)
                     }
                 },
             )
@@ -676,8 +691,7 @@ impl ScoreTracker {
             })?;
         let __key = __rec_id.id().to_string();
         let __bare = valence::ownership::normalize_record_id_for_ownership(&__key);
-        let __payload = serde_json::to_value(self)
-            .map_err(|e| valence::Error::Serialization(e.to_string()))?;
+        let __payload = serde_json::to_value(self).map_err(valence::Error::from)?;
         let __owner: valence::OwnerRef = if let Some(o) = valence.owner_override() {
             o.clone()
         } else if false {
@@ -707,7 +721,7 @@ impl valence::BatchCreatable for ScoreTracker {
         valence: &valence::Valence,
     ) -> valence::Result<()> {
         let row: Self = serde_json::from_value(created_row)
-            .map_err(|e| valence::Error::Serialization(e.to_string()))?;
+            .map_err(valence::Error::from)?;
         row.__ensure_ownership_after_write(valence).await
     }
 }

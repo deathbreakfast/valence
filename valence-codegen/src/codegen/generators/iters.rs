@@ -34,7 +34,7 @@ pub fn generate_iters(schema: &SchemaContext) -> Result<TokenStream, Box<dyn std
             fn #should_run_fn(
                 v: valence::Valence,
                 row: serde_json::Value,
-            ) -> std::pin::Pin<Box<dyn std::future::Future<Output = anyhow::Result<valence::IterEvaluation>> + Send + 'static>> {
+            ) -> std::pin::Pin<Box<dyn std::future::Future<Output = valence::Result<valence::IterEvaluation>> + Send + 'static>> {
                 Box::pin(async move {
                     let model: #model_ident = serde_json::from_value(row)?;
                     const _VALENCE_ITER: #iter_ident = #iter_ident;
@@ -45,7 +45,7 @@ pub fn generate_iters(schema: &SchemaContext) -> Result<TokenStream, Box<dyn std
             fn #execute_fn(
                 v: valence::Valence,
                 row: serde_json::Value,
-            ) -> std::pin::Pin<Box<dyn std::future::Future<Output = anyhow::Result<()>> + Send + 'static>> {
+            ) -> std::pin::Pin<Box<dyn std::future::Future<Output = valence::Result<()>> + Send + 'static>> {
                 Box::pin(async move {
                     let model: #model_ident = serde_json::from_value(row)?;
                     const _VALENCE_ITER: #iter_ident = #iter_ident;

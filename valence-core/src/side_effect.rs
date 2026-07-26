@@ -85,7 +85,7 @@ impl<'v, T: Model> Mutation<'v, T> {
 
 #[async_trait]
 pub trait SideEffect<T: Model>: Send + Sync {
-    async fn on_mutation(&self, mutation: &Mutation<'_, T>) -> anyhow::Result<()>;
+    async fn on_mutation(&self, mutation: &Mutation<'_, T>) -> crate::error::Result<()>;
 }
 
 #[cfg(test)]

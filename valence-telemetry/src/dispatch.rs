@@ -10,22 +10,21 @@ static INSTALLED: RwLock<Option<Arc<dyn TelemetrySink>>> = RwLock::new(None);
 
 /// Install the process-wide Valence telemetry sink (tests and host boot).
 ///
-/// # Panics
-///
-/// Panics if the internal lock is poisoned.
+/// Recovers from a poisoned lock by taking the inner value (same policy as router resolve
+/// callers that map poison to errors — telemetry prefers continuing over aborting the host).
 pub fn install_telemetry_sink(sink: Arc<dyn TelemetrySink>) {
-    *INSTALLED.write().expect("telemetry sink lock poisoned") = Some(sink);
+    *INSTALLED
+        .write()
+        .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(sink);
 }
 
 /// Current sink, or [`NoOpSink`] when none is installed.
 ///
-/// # Panics
-///
-/// Panics if the internal lock is poisoned.
+/// Recovers from a poisoned lock by taking the inner value.
 pub fn telemetry_sink() -> Arc<dyn TelemetrySink> {
     INSTALLED
         .read()
-        .expect("telemetry sink lock poisoned")
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
         .clone()
         .unwrap_or_else(|| Arc::new(NoOpSink))
 }

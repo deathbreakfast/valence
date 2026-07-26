@@ -127,6 +127,11 @@ impl PrivacyEvaluator {
     /// # Errors
     ///
     /// Returns an error when the requested operation cannot be completed.
+    #[tracing::instrument(
+        name = "valence.privacy.check_entity_access",
+        skip(schema, raw_data, v),
+        fields(table = schema.table_name, ?op)
+    )]
     pub async fn check_entity_access(
         schema: &SchemaMetadata,
         op: PrivacyOperation,

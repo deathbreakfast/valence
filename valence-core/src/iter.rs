@@ -33,13 +33,14 @@ pub type IterShouldRunFn =
     fn(
         Valence,
         serde_json::Value,
-    ) -> Pin<Box<dyn Future<Output = anyhow::Result<IterEvaluation>> + Send + 'static>>;
+    ) -> Pin<Box<dyn Future<Output = crate::error::Result<IterEvaluation>> + Send + 'static>>;
 
 /// Type-erased `execute` for orchestration (row as JSON).
-pub type IterExecuteFn = fn(
-    Valence,
-    serde_json::Value,
-) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send + 'static>>;
+pub type IterExecuteFn =
+    fn(
+        Valence,
+        serde_json::Value,
+    ) -> Pin<Box<dyn Future<Output = crate::error::Result<()>> + Send + 'static>>;
 
 /// One registered iter implementation for a table (submitted by `valence_schema!`).
 #[derive(Copy, Clone)]

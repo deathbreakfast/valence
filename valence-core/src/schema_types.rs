@@ -3,9 +3,9 @@
 /// How `FieldType::JsonAs` handles serde failures on the model boundary.
 ///
 /// Write APIs take the declared Rust type `T`, so serialization is not an expected
-/// failure for ordinary `Serialize` impls. Choose [`Panic`](Self::Panic) when failure
-/// indicates a programmer or data invariant violation; choose [`Error`](Self::Error)
-/// (the default) when the host should receive [`crate::Error::Serialization`].
+/// failure for ordinary `Serialize` impls. Prefer [`Error`](Self::Error) (the default)
+/// so hosts receive [`crate::Error::Serialization`]. Reserve [`Panic`](Self::Panic) for
+/// explicitly trusted stored JSON / programmer-invariant paths only.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum JsonAsSerdeError {
     /// Map serde failures to [`crate::Error::Serialization`] (via serde custom errors
@@ -13,6 +13,7 @@ pub enum JsonAsSerdeError {
     #[default]
     Error,
     /// Panic with table/field/type context (trusted `T` / trusted stored JSON).
+    /// Prefer [`Error`](Self::Error) unless a panic is an intentional invariant.
     Panic,
 }
 

@@ -43,7 +43,7 @@ impl DatabaseRouter {
     pub fn register(&mut self, key: impl Into<String>, backend: Arc<dyn DatabaseBackend>) {
         self.backends
             .get_mut()
-            .expect("router lock not poisoned")
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
             .insert(key.into(), backend);
     }
 

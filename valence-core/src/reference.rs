@@ -26,16 +26,25 @@ impl<T> Reference<T> {
     }
 
     pub fn resolve(&self) -> Option<RecordId> {
-        self.resolved.lock().unwrap().clone()
+        self.resolved
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .clone()
     }
 
     /// Store the resolved record id for this placeholder reference.
     pub fn resolve_to(&self, id: RecordId) {
-        *self.resolved.lock().unwrap() = Some(id);
+        *self
+            .resolved
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(id);
     }
 
     pub fn is_resolved(&self) -> bool {
-        self.resolved.lock().unwrap().is_some()
+        self.resolved
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .is_some()
     }
 }
 

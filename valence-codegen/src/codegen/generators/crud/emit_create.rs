@@ -13,7 +13,7 @@ pub(super) fn model_create_method_tokens(cx: &CrudEmitCtx<'_>) -> TokenStream {
         async fn create(data: Self, valence: &valence::Valence) -> valence::Result<Self> {
             data.check_create_privacy(valence).await?;
             let record = serde_json::to_value(&data)
-                .map_err(|e| valence::Error::Serialization(e.to_string()))?;
+                .map_err(valence::Error::from)?;
             Self::__assert_unique_constraints_for_record(&record, None, valence).await?;
 
             let created: Self = valence::retry_on_database_tx_conflict("Model::create", || {
@@ -24,7 +24,7 @@ pub(super) fn model_create_method_tokens(cx: &CrudEmitCtx<'_>) -> TokenStream {
                         .create_record(Self::table_name(), record)
                         .await?;
                     serde_json::from_value(row)
-                        .map_err(|e| valence::Error::Serialization(e.to_string()))
+                        .map_err(valence::Error::from)
                 }
             })
             .await?;
@@ -65,7 +65,7 @@ pub(super) fn model_upsert_method_tokens(cx: &CrudEmitCtx<'_>) -> TokenStream {
                 data.check_create_privacy(valence).await?;
             }
             let record = serde_json::to_value(&data)
-                .map_err(|e| valence::Error::Serialization(e.to_string()))?;
+                .map_err(valence::Error::from)?;
             Self::__assert_unique_constraints_for_record(&record, Some(id), valence).await?;
 
             let id = id.to_string();
@@ -78,7 +78,7 @@ pub(super) fn model_upsert_method_tokens(cx: &CrudEmitCtx<'_>) -> TokenStream {
                         .upsert_record(Self::table_name(), id.as_str(), record)
                         .await?;
                     serde_json::from_value(row)
-                        .map_err(|e| valence::Error::Serialization(e.to_string()))
+                        .map_err(valence::Error::from)
                 }
             })
             .await?;
@@ -146,7 +146,7 @@ pub(super) fn model_merge_method_tokens(field_changes_name: &proc_macro2::Ident)
             };
 
             let mut merged_json = serde_json::to_value(existing)
-                .map_err(|e| valence::Error::Serialization(e.to_string()))?;
+                .map_err(valence::Error::from)?;
             if let serde_json::Value::Object(ref patch_obj) = patch_for_db {
                 if let serde_json::Value::Object(ref mut base) = merged_json {
                     for (k, v) in patch_obj {
@@ -162,7 +162,7 @@ pub(super) fn model_merge_method_tokens(field_changes_name: &proc_macro2::Ident)
             Self::__assert_unique_constraints_for_record(&merged_json, Some(id), valence).await?;
 
             let proposed: Self = serde_json::from_value(merged_json)
-                .map_err(|e| valence::Error::Serialization(e.to_string()))?;
+                .map_err(valence::Error::from)?;
             proposed.check_update_privacy(valence).await?;
 
             let id = id.to_string();
@@ -175,7 +175,7 @@ pub(super) fn model_merge_method_tokens(field_changes_name: &proc_macro2::Ident)
                         .merge_record(Self::table_name(), id.as_str(), patch_for_db)
                         .await?;
                     serde_json::from_value(row)
-                        .map_err(|e| valence::Error::Serialization(e.to_string()))
+                        .map_err(valence::Error::from)
                 }
             })
             .await?;

@@ -5775,7 +5775,6 @@ dependencies = [
 name = "uf-valence-core"
 version = "0.1.1"
 dependencies = [
- "anyhow",
  "async-trait",
  "chrono",
  "inventory",

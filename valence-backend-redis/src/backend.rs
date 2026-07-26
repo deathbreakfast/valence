@@ -308,8 +308,7 @@ impl DatabaseBackend for RedisBackend {
         }
         self.claim_unique_fields(table, &id, &record, None).await?;
         let body = strip_id_field(&record);
-        let body_text =
-            serde_json::to_string(&body).map_err(|e| Error::Serialization(e.to_string()))?;
+        let body_text = serde_json::to_string(&body).map_err(Error::from)?;
         let doc_key = self.keys.doc(table, &id);
         let ids_key = self.keys.table_ids(table);
         let mut conn = self.conn.clone();
@@ -334,8 +333,7 @@ impl DatabaseBackend for RedisBackend {
             obj.insert("id".into(), record_id_json(table, id));
         }
         let body = strip_id_field(&record);
-        let body_text =
-            serde_json::to_string(&body).map_err(|e| Error::Serialization(e.to_string()))?;
+        let body_text = serde_json::to_string(&body).map_err(Error::from)?;
         let doc_key = self.keys.doc(table, id);
         let mut conn = self.conn.clone();
         let _: () = conn
@@ -360,8 +358,7 @@ impl DatabaseBackend for RedisBackend {
         self.claim_unique_fields(table, id, &merged, Some(id))
             .await?;
         let body = strip_id_field(&merged);
-        let body_text =
-            serde_json::to_string(&body).map_err(|e| Error::Serialization(e.to_string()))?;
+        let body_text = serde_json::to_string(&body).map_err(Error::from)?;
         let doc_key = self.keys.doc(table, id);
         let ids_key = self.keys.table_ids(table);
         let mut conn = self.conn.clone();

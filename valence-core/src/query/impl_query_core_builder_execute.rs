@@ -15,6 +15,11 @@ impl QueryCore {
     /// # Errors
     ///
     /// Returns an error when the requested operation cannot be completed.
+    #[tracing::instrument(
+        name = "valence.query.execute",
+        skip(self, valence),
+        fields(table = %self.table)
+    )]
     pub async fn execute<T>(mut self, valence: &Valence) -> Result<Vec<T>>
     where
         T: DeserializeOwned + Serialize,
@@ -45,7 +50,7 @@ impl QueryCore {
                 for row in rows {
                     merged_json.push(
                         serde_json::to_value(&row)
-                            .map_err(|e| Error::Serialization(e.to_string()))?,
+                            .map_err(Error::from)?,
                     );
                 }
             }
@@ -61,7 +66,7 @@ impl QueryCore {
             for row in merged_json {
                 results.push(
                     serde_json::from_value(row)
-                        .map_err(|e| Error::Serialization(e.to_string()))?,
+                        .map_err(Error::from)?,
                 );
             }
             return Ok(results);
@@ -71,6 +76,11 @@ impl QueryCore {
     }
 
     #[allow(clippy::cast_possible_wrap, reason = "telemetry accepts signed row counts while collection lengths are usize")]
+    #[tracing::instrument(
+        name = "valence.query.execute_on_table",
+        skip(self, valence),
+        fields(table = %self.table)
+    )]
     async fn execute_on_table<T>(self, valence: &Valence) -> Result<Vec<T>>
     where
         T: DeserializeOwned + Serialize,
@@ -81,6 +91,7 @@ impl QueryCore {
         };
         use crate::instrumentation::timing::QueryTimer;
         use crate::query_compiler_registry::compile_for_engine;
+        use tracing::Instrument;
 
         let table = self.table.clone();
         let query_target = classify_query_target(&table, false);
@@ -104,7 +115,15 @@ impl QueryCore {
                 return Err(e);
             }
         };
-        let json_rows: Vec<serde_json::Value> = backend.execute_compiled_query(&compiled).await?;
+        let backend_span = tracing::info_span!(
+            "valence.backend.execute_compiled_query",
+            engine = engine_id,
+            table = %table
+        );
+        let json_rows: Vec<serde_json::Value> = backend
+            .execute_compiled_query(&compiled)
+            .instrument(backend_span)
+            .await?;
         let rows_db = json_rows.len();
 
         let mut results = Vec::with_capacity(json_rows.len());
@@ -112,7 +131,7 @@ impl QueryCore {
             match serde_json::from_value(row) {
                 Ok(v) => results.push(v),
                 Err(e) => {
-                    let err = Error::Serialization(e.to_string());
+                    let err = Error::from(e);
                     record_deserialize_error(&table, &err);
                     return Err(err);
                 }
@@ -187,7 +206,7 @@ impl QueryCore {
         let mut results = Vec::with_capacity(json_rows.len());
         for row in json_rows {
             results.push(
-                serde_json::from_value(row).map_err(|e| Error::Serialization(e.to_string()))?,
+                serde_json::from_value(row).map_err(Error::from)?,
             );
         }
         Ok(results)
@@ -318,7 +337,7 @@ impl QueryCore {
                 let filtered_json = serde_json::Value::Object(filtered.into_iter().collect());
                 kept.push(
                     serde_json::from_value(filtered_json)
-                        .map_err(|e| Error::Serialization(e.to_string()))?,
+                        .map_err(Error::from)?,
                 );
             }
         }

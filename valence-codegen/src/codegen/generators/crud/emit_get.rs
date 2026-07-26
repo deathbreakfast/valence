@@ -18,9 +18,7 @@ pub(super) fn model_get_method_tokens(cx: &CrudEmitCtx<'_>) -> TokenStream {
             let result = match row {
                 None => None,
                 Some(v) => Some(
-                    serde_json::from_value(v).map_err(|e| {
-                        valence::Error::Serialization(e.to_string())
-                    })?,
+                    serde_json::from_value(v).map_err(valence::Error::from)?,
                 ),
             };
             Ok((result, valence::ownership::OwnershipGateStatus::Absent))
@@ -51,9 +49,7 @@ pub(super) fn model_get_method_tokens(cx: &CrudEmitCtx<'_>) -> TokenStream {
             let result = match row {
                 None => None,
                 Some(v) => Some(
-                    serde_json::from_value(v).map_err(|e| {
-                        valence::Error::Serialization(e.to_string())
-                    })?,
+                    serde_json::from_value(v).map_err(valence::Error::from)?,
                 ),
             };
             Ok((result, bundle_status))
@@ -108,19 +104,15 @@ pub(super) fn model_get_method_tokens(cx: &CrudEmitCtx<'_>) -> TokenStream {
 
             let result = match result {
                 Some(record) => {
-                    let raw = serde_json::to_value(&record).map_err(|e| {
-                        valence::Error::Serialization(e.to_string())
-                    })?;
+                    let raw = serde_json::to_value(&record).map_err(valence::Error::from)?;
                     let (filtered, _) = valence::PrivacyEvaluator::filter_entity_fields(
-                        Self::__schema_metadata(),
+                        Self::__schema_metadata()?,
                         &raw,
                         valence.actor(),
                     )?;
                     let filtered_json =
                         serde_json::Value::Object(filtered.into_iter().collect());
-                    Some(serde_json::from_value(filtered_json).map_err(|e| {
-                        valence::Error::Serialization(e.to_string())
-                    })?)
+                    Some(serde_json::from_value(filtered_json).map_err(valence::Error::from)?)
                 }
                 None => None,
             };

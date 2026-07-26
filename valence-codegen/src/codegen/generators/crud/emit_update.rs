@@ -9,7 +9,7 @@ pub(super) fn model_update_with_before_body_tokens(
     quote! {
         data.check_update_privacy(valence).await?;
         let record = serde_json::to_value(&data)
-            .map_err(|e| valence::Error::Serialization(e.to_string()))?;
+            .map_err(valence::Error::from)?;
         Self::__assert_unique_constraints_for_record(&record, Some(id), valence).await?;
 
         let before_snapshot = match before {
@@ -36,7 +36,7 @@ pub(super) fn model_update_with_before_body_tokens(
                     .update_record(<Self as valence::Model>::table_name(), id.as_str(), record)
                     .await?;
                 serde_json::from_value(row)
-                    .map_err(|e| valence::Error::Serialization(e.to_string()))
+                    .map_err(valence::Error::from)
             }
         })
         .await?;

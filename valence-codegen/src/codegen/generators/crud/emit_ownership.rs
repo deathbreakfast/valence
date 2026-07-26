@@ -67,7 +67,7 @@ pub(super) fn emit_ownership_support_tokens(cx: &CrudEmitCtx<'_>) -> TokenStream
                 let __key = __rec_id.id().to_string();
                 let __bare = valence::ownership::normalize_record_id_for_ownership(&__key);
                 let __payload = serde_json::to_value(self)
-                    .map_err(|e| valence::Error::Serialization(e.to_string()))?;
+                    .map_err(valence::Error::from)?;
                 let __owner: valence::OwnerRef = #resolve;
                 valence::ownership::OwnershipService::ensure_active_ownership(
                     #table_name_lit,
@@ -94,7 +94,7 @@ pub(super) fn emit_batch_creatable_tokens(cx: &CrudEmitCtx<'_>) -> TokenStream {
                 valence: &valence::Valence,
             ) -> valence::Result<()> {
                 let row: Self = serde_json::from_value(created_row)
-                    .map_err(|e| valence::Error::Serialization(e.to_string()))?;
+                    .map_err(valence::Error::from)?;
                 row.__ensure_ownership_after_write(valence).await
             }
         }
@@ -117,10 +117,14 @@ pub(super) fn emit_batch_creatable_tokens(cx: &CrudEmitCtx<'_>) -> TokenStream {
 
 fn schema_metadata_fn_tokens(table_name_lit: &str) -> TokenStream {
     quote! {
-        fn __schema_metadata() -> &'static valence::SchemaMetadataStruct {
+        fn __schema_metadata() -> valence::Result<&'static valence::SchemaMetadataStruct> {
             valence::SchemaRegistry::global()
                 .get_schema(#table_name_lit)
-                .expect(concat!("SchemaRegistry missing entry for ", #table_name_lit))
+                .ok_or_else(|| {
+                    valence::Error::Internal(
+                        concat!("SchemaRegistry missing entry for ", #table_name_lit).into(),
+                    )
+                })
         }
     }
 }
@@ -201,7 +205,7 @@ fn entity_privacy_check_tokens() -> TokenStream {
         async fn check_read_privacy(&self, valence: &valence::Valence) -> valence::Result<()> {
             let record = serde_json::json!(self);
             valence::PrivacyEvaluator::check_entity_access(
-                Self::__schema_metadata(), valence::PrivacyOperation::Read, &record, valence,
+                Self::__schema_metadata()?, valence::PrivacyOperation::Read, &record, valence,
             )
             .await
         }
@@ -209,7 +213,7 @@ fn entity_privacy_check_tokens() -> TokenStream {
         async fn check_create_privacy(&self, valence: &valence::Valence) -> valence::Result<()> {
             let record = serde_json::json!(self);
             valence::PrivacyEvaluator::check_entity_access(
-                Self::__schema_metadata(), valence::PrivacyOperation::Create, &record, valence,
+                Self::__schema_metadata()?, valence::PrivacyOperation::Create, &record, valence,
             )
             .await
         }
@@ -217,7 +221,7 @@ fn entity_privacy_check_tokens() -> TokenStream {
         async fn check_update_privacy(&self, valence: &valence::Valence) -> valence::Result<()> {
             let record = serde_json::json!(self);
             valence::PrivacyEvaluator::check_entity_access(
-                Self::__schema_metadata(), valence::PrivacyOperation::Update, &record, valence,
+                Self::__schema_metadata()?, valence::PrivacyOperation::Update, &record, valence,
             )
             .await
         }
@@ -225,7 +229,7 @@ fn entity_privacy_check_tokens() -> TokenStream {
         async fn check_delete_privacy(&self, valence: &valence::Valence) -> valence::Result<()> {
             let record = serde_json::json!(self);
             valence::PrivacyEvaluator::check_entity_access(
-                Self::__schema_metadata(), valence::PrivacyOperation::Delete, &record, valence,
+                Self::__schema_metadata()?, valence::PrivacyOperation::Delete, &record, valence,
             )
             .await
         }

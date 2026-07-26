@@ -36,26 +36,6 @@ pub fn ensure_read_only(query: &str) -> Result<()> {
     }
 }
 
-#[cfg(test)]
-mod read_only_tests {
-    use super::{ensure_read_only, is_read_only_query};
-
-    #[test]
-    fn classifies_select_and_show() {
-        assert!(is_read_only_query("SELECT * FROM t"));
-        assert!(is_read_only_query("show tables"));
-        assert!(!is_read_only_query("DELETE FROM t"));
-        assert!(!is_read_only_query("UPDATE t SET x = 1"));
-    }
-
-    #[test]
-    fn ensure_read_only_rejects_writes() {
-        assert!(ensure_read_only("SELECT * FROM t").is_ok());
-        let err = ensure_read_only("DELETE FROM t").expect_err("reject");
-        assert!(err.to_string().contains("read-only"));
-    }
-}
-
 pub async fn execute_compiled_query_inner<C>(
     db: &Surreal<C>,
     query: &str,
@@ -100,5 +80,25 @@ where
         decode_query_value_projection_rows_to_json(result)
     } else {
         decode_query_response_rows_to_json(db, result).await
+    }
+}
+
+#[cfg(test)]
+mod read_only_tests {
+    use super::{ensure_read_only, is_read_only_query};
+
+    #[test]
+    fn classifies_select_and_show() {
+        assert!(is_read_only_query("SELECT * FROM t"));
+        assert!(is_read_only_query("show tables"));
+        assert!(!is_read_only_query("DELETE FROM t"));
+        assert!(!is_read_only_query("UPDATE t SET x = 1"));
+    }
+
+    #[test]
+    fn ensure_read_only_rejects_writes() {
+        assert!(ensure_read_only("SELECT * FROM t").is_ok());
+        let err = ensure_read_only("DELETE FROM t").expect_err("reject");
+        assert!(err.to_string().contains("read-only"));
     }
 }

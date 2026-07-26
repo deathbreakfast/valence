@@ -64,7 +64,7 @@ impl OwnershipService {
         let rows = backend
             .execute_compiled_query(&compiled)
             .await
-            .map_err(|e| Error::Database(e.to_string()))?;
+            .map_err(|e| Error::database(e.to_string()))?;
         Ok(rows
             .into_iter()
             .filter_map(|v| v.as_str().map(normalize_pending_deletion_query_value))
@@ -86,7 +86,7 @@ impl OwnershipService {
         backend
             .get_record("valence_data_ownership", &id)
             .await
-            .map_err(|e| Error::Database(e.to_string()))
+            .map_err(|e| Error::database(e.to_string()))
     }
 
     /// Subset of `bare_record_ids` that currently have `status = pending_deletion` in ownership.
@@ -116,7 +116,7 @@ impl OwnershipService {
                 let Some(json) = backend
                     .get_record("valence_data_ownership", &id)
                     .await
-                    .map_err(|e| Error::Database(e.to_string()))?
+                    .map_err(|e| Error::database(e.to_string()))?
                 else {
                     continue;
                 };
@@ -154,7 +154,7 @@ impl OwnershipService {
         let rows = backend
             .execute_compiled_query(&compiled)
             .await
-            .map_err(|e| Error::Database(e.to_string()))?;
+            .map_err(|e| Error::database(e.to_string()))?;
         Ok(rows.first().map_or(0, parse_count_from_row))
     }
 

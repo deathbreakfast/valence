@@ -8,7 +8,8 @@ use valence_core::privacy::PrivacyRule;
 use valence_core::privacy_policies::common;
 use valence_core::schema::SchemaMetadata;
 use valence_core::schema_api::{
-    Schema, SchemaMeta, SchemaPolicies, SchemaPolicyRule, SchemaPolicyRules, SchemaPrivacy,
+    Schema, SchemaField, SchemaMeta, SchemaPolicies, SchemaPolicyRule, SchemaPolicyRules,
+    SchemaPrivacy,
 };
 use valence_core::DatabaseEvaluator;
 
@@ -88,6 +89,105 @@ pub fn authenticated_only_schema() -> &'static SchemaMetadata {
                 ..SchemaPolicies::default()
             }),
             fields: vec![],
+            edges: Vec::new(),
+            connections: Vec::new(),
+            side_effects: Vec::new(),
+            iters: Vec::new(),
+            composite_key: Vec::new(),
+            traits: Vec::new(),
+            ttl: None,
+            ownership: None,
+            meta: SchemaMeta {
+                retention: "365 days".to_string(),
+                row_count: 0,
+                owner: "system".to_string(),
+                description: None,
+            },
+        }));
+        SchemaMetadata::from_schema(schema)
+    })
+}
+
+/// Schema with a `SYSTEM_ONLY` field for field-privacy sad paths.
+pub fn system_only_field_schema() -> &'static SchemaMetadata {
+    static PUBLIC: PrivacyRule = common::PUBLIC_READ;
+    static SYSTEM: PrivacyRule = common::SYSTEM_ONLY;
+    static METADATA: OnceLock<SchemaMetadata> = OnceLock::new();
+    METADATA.get_or_init(|| {
+        let schema = Box::leak(Box::new(Schema {
+            name: "catalog_field_privacy".to_string(),
+            version: "0.1.0".to_string(),
+            databases: vec![DEFAULT_IN_MEMORY.name().to_string()],
+            database_evaluator: &DEFAULT_IN_MEMORY,
+            privacy: SchemaPrivacy {
+                read: "public".to_string(),
+                write: "public".to_string(),
+            },
+            policies: Some(SchemaPolicies {
+                read: Some(SchemaPolicyRules {
+                    allow: vec![SchemaPolicyRule {
+                        name: "PUBLIC_READ".to_string(),
+                        description: None,
+                        evaluator: Some(&PUBLIC),
+                    }],
+                    ..SchemaPolicyRules::default()
+                }),
+                ..SchemaPolicies::default()
+            }),
+            fields: vec![
+                SchemaField {
+                    name: "id".to_string(),
+                    field_type: "string".to_string(),
+                    primary: true,
+                    nullable: false,
+                    indexed: false,
+                    unique: false,
+                    default: None,
+                    fk: None,
+                    validations: Vec::new(),
+                    policies: Some(SchemaPolicies {
+                        read: Some(SchemaPolicyRules {
+                            allow: vec![SchemaPolicyRule {
+                                name: "PUBLIC_READ".to_string(),
+                                description: None,
+                                evaluator: Some(&PUBLIC),
+                            }],
+                            ..SchemaPolicyRules::default()
+                        }),
+                        ..SchemaPolicies::default()
+                    }),
+                    encrypted: false,
+                    enum_variants: Vec::new(),
+                    enum_type: None,
+                    model_path: None,
+                },
+                SchemaField {
+                    name: "secret".to_string(),
+                    field_type: "string".to_string(),
+                    primary: false,
+                    nullable: true,
+                    indexed: false,
+                    unique: false,
+                    default: None,
+                    fk: None,
+                    validations: Vec::new(),
+                    policies: Some(SchemaPolicies {
+                        read: Some(SchemaPolicyRules {
+                            allow: vec![SchemaPolicyRule {
+                                name: "SYSTEM_ONLY".to_string(),
+                                description: None,
+                                evaluator: Some(&SYSTEM),
+                            }],
+                            ..SchemaPolicyRules::default()
+                        }),
+                        ..SchemaPolicies::default()
+                    }),
+                    encrypted: false,
+                    enum_variants: Vec::new(),
+                    enum_type: None,
+                    model_path: None,
+                },
+            ],
             edges: Vec::new(),
             connections: Vec::new(),
             side_effects: Vec::new(),

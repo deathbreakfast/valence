@@ -13,12 +13,19 @@
 //! - **Multi-backend routing** — one [`DatabaseRouter`]; each schema picks a backend with
 //!   `database:` / [`DatabaseFromEngine`]
 //! - **Host ports** — secrets, actor identity, endpoints, and telemetry injected at boot
-//! - **Privacy-aware CRUD** — policy and ownership hooks on generated [`Model`] paths
-//! - **Query privacy** — [`QueryCore::execute`] / `Model::query` post-filter rows by entity read policy
+//! - **Privacy-aware CRUD** — policy and ownership hooks on generated [`Model`] paths; field
+//!   privacy via [`PrivacyEvaluator::filter_entity_fields`] on `Model::get` and query rows
+//! - **Query privacy** — [`QueryCore::execute`] / `Model::query` post-filter rows by entity read
+//!   policy and field policies
 //! - **Default-deny policies** — schemas without entity `policies:` deny non-System actors
+//! - **Query paging clamps** — [`MAX_QUERY_LIMIT`] / [`MAX_QUERY_OFFSET`] on [`QueryCore`]
+//! - **Dual-key privacy bypass** — bench/test only: `VALENCE_PRIVACY_BYPASS` +
+//!   `VALENCE_PRIVACY_BYPASS_FORCE_ON` (never in production; see repository `SECURITY.md`)
+//! - **Actor JSON policy** — optional [`RejectExternalSystemActor`] on factory builds
 //!
 //! Enable backends with Cargo features (`mem` is the default). The crate `README.md` lists every
-//! feature flag and environment variable.
+//! feature flag and environment variable. See repository [`SECURITY.md`](https://github.com/unified-field-dev/valence/blob/main/SECURITY.md)
+//! for integrator wiring.
 //!
 //! # Topologies
 //!

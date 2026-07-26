@@ -151,6 +151,11 @@ impl ValenceBuilder {
     }
 
     /// Set the default actor for this runtime (defaults to anonymous).
+    ///
+    /// # Security
+    ///
+    /// Privileged when `actor` is System or otherwise elevated — bind only from trusted host
+    /// context, never from raw client payloads.
     #[must_use]
     pub fn with_actor(mut self, actor: Actor) -> Self {
         self.actor = Some(actor);

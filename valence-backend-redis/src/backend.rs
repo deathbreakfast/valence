@@ -100,10 +100,10 @@ impl RedisBackend {
     /// Returns [`Error::Database`] when the Redis connection fails.
     pub async fn connect_with_config(config: RedisConfig) -> Result<Self> {
         let client =
-            redis::Client::open(config.url.as_str()).map_err(|e| Error::Database(e.to_string()))?;
+            redis::Client::open(config.url.as_str()).map_err(|e| Error::database(e.to_string()))?;
         let conn = ConnectionManager::new(client)
             .await
-            .map_err(|e| Error::Database(e.to_string()))?;
+            .map_err(|e| Error::database(e.to_string()))?;
         Ok(Self {
             conn,
             keys: Keyspace::new(config.key_prefix),
@@ -112,7 +112,7 @@ impl RedisBackend {
 
     #[allow(clippy::needless_pass_by_value)] // map_err adapter; value only Display'd
     fn map_err(e: redis::RedisError) -> Error {
-        Error::Database(e.to_string())
+        Error::database(e.to_string())
     }
 
     fn assert_safe_table(table: &str) -> Result<()> {
@@ -154,7 +154,7 @@ impl RedisBackend {
             if !set {
                 let existing: Option<String> = conn.get(&key).await.map_err(Self::map_err)?;
                 if existing.as_deref() != Some(id) {
-                    return Err(Error::Database(format!(
+                    return Err(Error::database(format!(
                         "duplicate unique index value for {table}.{field}"
                     )));
                 }

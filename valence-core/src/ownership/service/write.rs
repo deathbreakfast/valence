@@ -40,7 +40,7 @@ impl OwnershipService {
         backend
             .upsert_record("valence_data_ownership", id.as_str(), row)
             .await
-            .map_err(|e| Error::Database(e.to_string()))?;
+            .map_err(|e| Error::database(e.to_string()))?;
         crate::read_cache::invalidate("valence_data_ownership", &id);
         crate::read_cache::invalidate(valence_model, record_id);
         Ok(())
@@ -65,7 +65,7 @@ impl OwnershipService {
         backend
             .merge_record("valence_data_ownership", &id, patch)
             .await
-            .map_err(|e| Error::Database(e.to_string()))
+            .map_err(|e| Error::database(e.to_string()))
             .map(|_| ())?;
         crate::read_cache::invalidate("valence_data_ownership", &id);
         crate::read_cache::invalidate(valence_model, record_id);
@@ -96,7 +96,7 @@ impl OwnershipService {
         backend
             .upsert_record("valence_data_ownership", id.as_str(), row)
             .await
-            .map_err(|e| Error::Database(e.to_string()))
+            .map_err(|e| Error::database(e.to_string()))
             .map(|_| ())?;
         crate::read_cache::invalidate("valence_data_ownership", &id);
         crate::read_cache::invalidate(valence_model, record_id);
@@ -104,6 +104,12 @@ impl OwnershipService {
     }
 
     /// Transfer ownership and append a history row.
+    ///
+    /// # Security
+    ///
+    /// Privileged: runs under a system-scoped valence. Hosts must authorize the caller before
+    /// invoking; do not expose as an unauthenticated client API.
+    ///
     /// # Errors
     ///
     /// Returns an error when the requested operation cannot be completed.
@@ -142,7 +148,7 @@ impl OwnershipService {
         backend
             .merge_record("valence_data_ownership", &oid, merged)
             .await
-            .map_err(|e| Error::Database(e.to_string()))
+            .map_err(|e| Error::database(e.to_string()))
             .map(|_| ())?;
         crate::read_cache::invalidate("valence_data_ownership", &oid);
         crate::read_cache::invalidate(valence_model, record_id);

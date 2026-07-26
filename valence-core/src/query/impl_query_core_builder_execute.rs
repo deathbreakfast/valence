@@ -1,12 +1,25 @@
 impl QueryCore {
+    /// Clamp limit/offset; default missing limit to [`super::MAX_QUERY_LIMIT`].
+    fn apply_query_window_clamps(&mut self) {
+        self.limit = Some(
+            self.limit
+                .unwrap_or(super::MAX_QUERY_LIMIT)
+                .min(super::MAX_QUERY_LIMIT),
+        );
+        if let Some(offset) = self.offset {
+            self.offset = Some(offset.min(super::MAX_QUERY_OFFSET));
+        }
+    }
+
     /// Compile the query for the active backend and execute it
     /// # Errors
     ///
     /// Returns an error when the requested operation cannot be completed.
-    pub async fn execute<T>(self, valence: &Valence) -> Result<Vec<T>>
+    pub async fn execute<T>(mut self, valence: &Valence) -> Result<Vec<T>>
     where
         T: DeserializeOwned + Serialize,
     {
+        self.apply_query_window_clamps();
         let tables: Vec<String> = self
             .table
             .split(',')
@@ -20,7 +33,8 @@ impl QueryCore {
             let offset = self.offset;
             let mut branch_core = self;
             branch_core.order_by.clear();
-            branch_core.limit = None;
+            // Cap each branch fetch; final window applied after merge.
+            branch_core.limit = Some(super::MAX_QUERY_LIMIT);
             branch_core.offset = None;
 
             let mut merged_json = Vec::new();
@@ -248,7 +262,7 @@ impl QueryCore {
 
     async fn post_filter_hop_privacy<T>(&self, results: Vec<T>, valence: &Valence) -> Result<Vec<T>>
     where
-        T: Serialize,
+        T: Serialize + DeserializeOwned,
     {
         if self.hop_source.is_none() {
             return Ok(results);
@@ -256,7 +270,7 @@ impl QueryCore {
         self.filter_rows_by_entity_read(results, valence).await
     }
 
-    /// Drop rows the viewer cannot read under entity-level policies.
+    /// Drop rows the viewer cannot read under entity-level policies, then apply field privacy.
     ///
     /// Unregistered tables pass through (no schema ⇒ no policy evaluation). Prefer registering
     /// schemas for any table that holds sensitive data.
@@ -266,7 +280,7 @@ impl QueryCore {
         valence: &Valence,
     ) -> Result<Vec<T>>
     where
-        T: Serialize,
+        T: Serialize + DeserializeOwned,
     {
         // Hop path already applied the same filter when `hop_source` is set.
         if self.hop_source.is_some() {
@@ -281,7 +295,7 @@ impl QueryCore {
         valence: &Valence,
     ) -> Result<Vec<T>>
     where
-        T: Serialize,
+        T: Serialize + DeserializeOwned,
     {
         use crate::privacy::PrivacyEvaluator;
         use crate::schema::SchemaRegistry;
@@ -299,7 +313,13 @@ impl QueryCore {
                 .await
                 .is_ok()
             {
-                kept.push(row);
+                let (filtered, _) =
+                    PrivacyEvaluator::filter_entity_fields(schema, &row_json, valence.actor())?;
+                let filtered_json = serde_json::Value::Object(filtered.into_iter().collect());
+                kept.push(
+                    serde_json::from_value(filtered_json)
+                        .map_err(|e| Error::Serialization(e.to_string()))?,
+                );
             }
         }
         Ok(kept)

@@ -29,6 +29,7 @@ pub async fn run(ctx: &RunContext) -> Result<BenchReport> {
     let id = created.id().expect("id").id();
 
     std::env::set_var("VALENCE_PRIVACY_BYPASS", "0");
+    std::env::remove_var("VALENCE_PRIVACY_BYPASS_FORCE_ON");
     let mut with_gate = Vec::with_capacity(ctx.plan.default_ops);
     for _ in 0..ctx.plan.default_ops {
         let start = Instant::now();
@@ -37,12 +38,15 @@ pub async fn run(ctx: &RunContext) -> Result<BenchReport> {
     }
 
     std::env::set_var("VALENCE_PRIVACY_BYPASS", "1");
+    std::env::set_var("VALENCE_PRIVACY_BYPASS_FORCE_ON", "1");
     let mut bypass = Vec::with_capacity(ctx.plan.default_ops);
     for _ in 0..ctx.plan.default_ops {
         let start = Instant::now();
         let _ = Project::get(id, valence).await?;
         bypass.push(start.elapsed().as_secs_f64() * 1000.0);
     }
+    std::env::set_var("VALENCE_PRIVACY_BYPASS", "0");
+    std::env::remove_var("VALENCE_PRIVACY_BYPASS_FORCE_ON");
 
     let gate_stats = MetricStats::summarize(with_gate);
     let bypass_stats = MetricStats::summarize(bypass);

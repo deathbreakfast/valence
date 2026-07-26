@@ -76,7 +76,7 @@ pub async fn execute_select_sqlite(
     let rows = match q.fetch_all(pool).await {
         Ok(rows) => rows,
         Err(e) if e.to_string().to_lowercase().contains("no such table") => return Ok(vec![]),
-        Err(e) => return Err(Error::Database(e.to_string())),
+        Err(e) => return Err(Error::database(e.to_string())),
     };
 
     if sql.contains("COUNT(") {
@@ -118,7 +118,7 @@ pub async fn ensure_edges_sqlite(pool: &sqlx::SqlitePool) -> Result<()> {
     sqlx::query(&crate::document::ensure_edges_table_ddl())
         .execute(pool)
         .await
-        .map_err(|e| Error::Database(e.to_string()))?;
+        .map_err(|e| Error::database(e.to_string()))?;
     Ok(())
 }
 
@@ -127,7 +127,7 @@ pub async fn ensure_table_sqlite(pool: &sqlx::SqlitePool, table: &str) -> Result
     sqlx::query(&ensure_table(table))
         .execute(pool)
         .await
-        .map_err(|e| Error::Database(e.to_string()))?;
+        .map_err(|e| Error::database(e.to_string()))?;
     Ok(())
 }
 
@@ -142,7 +142,7 @@ pub async fn get_record_sqlite(
         .bind(id)
         .fetch_optional(pool)
         .await
-        .map_err(|e| Error::Database(e.to_string()))?;
+        .map_err(|e| Error::database(e.to_string()))?;
     Ok(row.map(|r| {
         let id: String = r.get(0);
         let body: String = r.get(1);
@@ -171,7 +171,7 @@ pub async fn create_record_sqlite(
         .bind(&body_text)
         .execute(pool)
         .await
-        .map_err(|e| Error::Database(e.to_string()))?;
+        .map_err(|e| Error::database(e.to_string()))?;
     Ok(row_from_body(
         table,
         &id,
@@ -198,7 +198,7 @@ pub async fn update_record_sqlite(
         .bind(id)
         .execute(pool)
         .await
-        .map_err(|e| Error::Database(e.to_string()))?;
+        .map_err(|e| Error::database(e.to_string()))?;
     Ok(row_from_body(
         table,
         id,
@@ -229,7 +229,7 @@ pub async fn delete_record_sqlite(pool: &sqlx::SqlitePool, table: &str, id: &str
         .bind(id)
         .execute(pool)
         .await
-        .map_err(|e| Error::Database(e.to_string()))?;
+        .map_err(|e| Error::database(e.to_string()))?;
     Ok(())
 }
 
@@ -251,7 +251,7 @@ pub async fn relate_edge_sqlite(
     .bind(to.id())
     .execute(pool)
     .await
-    .map_err(|e| Error::Database(e.to_string()))?;
+    .map_err(|e| Error::database(e.to_string()))?;
     Ok(())
 }
 
@@ -272,7 +272,7 @@ pub async fn unrelate_edge_sqlite(
     .bind(to.id())
     .execute(pool)
     .await
-    .map_err(|e| Error::Database(e.to_string()))?;
+    .map_err(|e| Error::database(e.to_string()))?;
     Ok(())
 }
 
@@ -290,7 +290,7 @@ pub async fn get_edge_targets_sqlite(
     .bind(edge_table)
     .fetch_all(pool)
     .await
-    .map_err(|e| Error::Database(e.to_string()))?;
+    .map_err(|e| Error::database(e.to_string()))?;
     Ok(rows
         .iter()
         .map(|r| RecordId::new(r.get::<String, _>(0), r.get::<String, _>(1)))
@@ -314,7 +314,7 @@ pub async fn define_unique_index_sqlite(
     sqlx::query(&q)
         .execute(pool)
         .await
-        .map_err(|e| Error::Database(e.to_string()))?;
+        .map_err(|e| Error::database(e.to_string()))?;
     Ok(())
 }
 

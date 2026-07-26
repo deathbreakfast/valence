@@ -38,9 +38,14 @@ Entry script: [`scripts/aws-e2e-bench.sh`](../scripts/aws-e2e-bench.sh).
 ./scripts/aws-e2e-bench.sh --bench read-hammer
 ./scripts/aws-e2e-bench.sh --bench hop-pairs
 ./scripts/aws-e2e-bench.sh --bench hybrid-compare   # bm-v26: hybrid vs postgres vs indradb
-./scripts/aws-e2e-bench.sh --bench privacy-filter   # bm-v27: query privacy post-filter vs bypass
+./scripts/aws-e2e-bench.sh --bench privacy-filter   # bm-v27: query privacy post-filter vs dual-key bypass
 ./scripts/aws-e2e-bench.sh --bench all
 ```
+
+New catalog sad paths (`privacy-field-system-only-hidden`, `query-limit-clamped`,
+`privacy-bypass-requires-force`) ride the default embedded E2E matrix. URL redaction and
+SECURITY wiring are correctness-only (no dedicated bench ID).
+
 
 For published comparative numbers set `VALENCE_BENCH_RELEASE=1` (enabled by `deploy-and-run.sh hybrid-compare`).
 

@@ -22,7 +22,7 @@ pub async fn ensure_edges_postgres(pool: &PgPool) -> Result<()> {
     sqlx::query(&crate::document::ensure_edges_table_ddl())
         .execute(pool)
         .await
-        .map_err(|e| Error::Database(e.to_string()))?;
+        .map_err(|e| Error::database(e.to_string()))?;
     Ok(())
 }
 
@@ -31,7 +31,7 @@ pub async fn ensure_table_postgres(pool: &PgPool, table: &str) -> Result<()> {
     sqlx::query(&ensure_table_ddl_postgres(table))
         .execute(pool)
         .await
-        .map_err(|e| Error::Database(e.to_string()))?;
+        .map_err(|e| Error::database(e.to_string()))?;
     Ok(())
 }
 
@@ -77,7 +77,7 @@ pub async fn execute_select_postgres(
         {
             return Ok(vec![]);
         }
-        Err(e) => return Err(Error::Database(e.to_string())),
+        Err(e) => return Err(Error::database(e.to_string())),
     };
 
     if sql.contains("COUNT(") {
@@ -122,7 +122,7 @@ pub async fn get_record_postgres(pool: &PgPool, table: &str, id: &str) -> Result
         .bind(id)
         .fetch_optional(pool)
         .await
-        .map_err(|e| Error::Database(e.to_string()))?;
+        .map_err(|e| Error::database(e.to_string()))?;
     Ok(row.map(|r| {
         let id: String = r.get(0);
         let body: Value = r.get(1);
@@ -142,7 +142,7 @@ pub async fn create_record_postgres(pool: &PgPool, table: &str, content: Value) 
         .bind(&body_val)
         .execute(pool)
         .await
-        .map_err(|e| Error::Database(e.to_string()))?;
+        .map_err(|e| Error::database(e.to_string()))?;
     Ok(row_from_body(table, &id, body_val))
 }
 
@@ -164,7 +164,7 @@ pub async fn update_record_postgres(
         .bind(id)
         .execute(pool)
         .await
-        .map_err(|e| Error::Database(e.to_string()))?;
+        .map_err(|e| Error::database(e.to_string()))?;
     Ok(row_from_body(table, id, body_val))
 }
 
@@ -191,7 +191,7 @@ pub async fn delete_record_postgres(pool: &PgPool, table: &str, id: &str) -> Res
         .bind(id)
         .execute(pool)
         .await
-        .map_err(|e| Error::Database(e.to_string()))?;
+        .map_err(|e| Error::database(e.to_string()))?;
     Ok(())
 }
 
@@ -213,7 +213,7 @@ pub async fn relate_edge_postgres(
     .bind(to.id())
     .execute(pool)
     .await
-    .map_err(|e| Error::Database(e.to_string()))?;
+    .map_err(|e| Error::database(e.to_string()))?;
     Ok(())
 }
 
@@ -234,7 +234,7 @@ pub async fn unrelate_edge_postgres(
     .bind(to.id())
     .execute(pool)
     .await
-    .map_err(|e| Error::Database(e.to_string()))?;
+    .map_err(|e| Error::database(e.to_string()))?;
     Ok(())
 }
 
@@ -252,7 +252,7 @@ pub async fn get_edge_targets_postgres(
     .bind(edge_table)
     .fetch_all(pool)
     .await
-    .map_err(|e| Error::Database(e.to_string()))?;
+    .map_err(|e| Error::database(e.to_string()))?;
     Ok(rows
         .iter()
         .map(|r| RecordId::new(r.get::<String, _>(0), r.get::<String, _>(1)))
@@ -268,6 +268,6 @@ pub async fn define_unique_index_postgres(pool: &PgPool, table: &str, field: &st
     sqlx::query(&q)
         .execute(pool)
         .await
-        .map_err(|e| Error::Database(e.to_string()))?;
+        .map_err(|e| Error::database(e.to_string()))?;
     Ok(())
 }

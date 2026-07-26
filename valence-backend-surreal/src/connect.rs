@@ -73,10 +73,10 @@ pub async fn connect_embedded_at_path(
     let db: Surreal<Db> = match engine {
         EmbeddedEngine::Mem => Surreal::new::<Mem>(())
             .await
-            .map_err(|e| Error::Database(format!("Failed to open embedded Mem store: {e}")))?,
+            .map_err(|e| Error::database(format!("Failed to open embedded Mem store: {e}")))?,
         #[cfg(feature = "embedded-rocksdb")]
         EmbeddedEngine::RocksDb => Surreal::new::<RocksDb>(path).await.map_err(|e| {
-            Error::Database(format!("Failed to open embedded RocksDB at {path}: {e}"))
+            Error::database(format!("Failed to open embedded RocksDB at {path}: {e}"))
         })?,
         #[cfg(not(feature = "embedded-rocksdb"))]
         EmbeddedEngine::RocksDb => {
@@ -89,7 +89,7 @@ pub async fn connect_embedded_at_path(
     db.use_ns(ns)
         .use_db(db_name)
         .await
-        .map_err(|e| Error::Database(format!("Failed to select ns/db {ns}/{db_name}: {e}")))?;
+        .map_err(|e| Error::database(format!("Failed to select ns/db {ns}/{db_name}: {e}")))?;
     Ok(db)
 }
 

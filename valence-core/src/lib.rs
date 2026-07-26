@@ -42,6 +42,7 @@
 extern crate self as valence_core;
 
 pub mod actor;
+pub mod actor_policy;
 pub mod admin_entity_delete;
 pub mod backend;
 pub mod batch;
@@ -69,6 +70,7 @@ pub mod query_compiler;
 pub mod query_compiler_registry;
 pub mod read_cache;
 pub mod record_id;
+pub mod redact;
 pub mod reference;
 pub mod register_logical;
 pub mod registry;
@@ -98,6 +100,9 @@ pub mod __internal {
 }
 
 pub use actor::Actor;
+pub use actor_policy::{
+    is_system_shaped_actor, ActorJsonPolicy, ActorTrust, RejectExternalSystemActor,
+};
 pub use admin_entity_delete::queue_delete_entity;
 #[cfg(feature = "compiler-indradb")]
 pub use backend::IndraQueryCompiler;
@@ -141,10 +146,13 @@ pub use ports::endpoints::{
     DatabaseEndpointResolver, EnvEndpointResolver, NoopEndpointResolver, StaticEndpointResolver,
 };
 pub use ports::secrets::{EnvSecretProvider, NoOpSecretProvider, SecretProvider};
-pub use privacy::{PolicyEvaluator, PrivacyEvaluator, PrivacyOperation, PrivacyRule};
+pub use privacy::{
+    privacy_bypass_active, PolicyEvaluator, PrivacyEvaluator, PrivacyOperation, PrivacyRule,
+    PRIVACY_BYPASS_ENV, PRIVACY_BYPASS_FORCE_ON_ENV,
+};
 pub use query::{
     DateTimePredicate, HopSource, HopType, IdOnlyRecord, IntPredicate, NullPredicate, QueryCore,
-    RecordPredicate, SortDirection, StringPredicate,
+    RecordPredicate, SortDirection, StringPredicate, MAX_QUERY_LIMIT, MAX_QUERY_OFFSET,
 };
 pub use query_compiler::QueryCompiler;
 pub use query_compiler_registry::{
@@ -155,6 +163,7 @@ pub use read_cache::{
     invalidate_for_backend, read_cache_enabled,
 };
 pub use record_id::RecordId;
+pub use redact::{redact_credentials_in_text, redact_endpoint};
 pub use reference::{Reference, ReferencedEntity, WithReference};
 pub use register_logical::{
     register_backend_logical_names, register_backend_logical_names_slices,

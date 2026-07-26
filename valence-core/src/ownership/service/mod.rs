@@ -66,7 +66,7 @@ pub async fn ensure_lookup_indexes(v: &Valence) -> Result<()> {
         backend
             .execute_compiled_query(&compiled)
             .await
-            .map_err(|e| Error::Database(e.to_string()))?;
+            .map_err(|e| Error::database(e.to_string()))?;
     }
     Ok(())
 }

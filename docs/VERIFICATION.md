@@ -10,6 +10,10 @@ Re-run after test or CI changes.
 # Full workspace tests
 cargo test --workspace
 
+# Security hardening (V-1..V-4) unit slice
+cargo test -p uf-valence-core --lib privacy::bypass redact error::tests query::clamp_tests
+cargo test -p uf-valence-core --lib privacy::evaluator::tests::test_filter_entity_fields
+
 # Matrix E2E
 cargo test -p valence-e2e
 

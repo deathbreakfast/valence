@@ -73,12 +73,16 @@ Living coverage map for Valence. Status legend:
 | Privacy deny anonymous | Y | Y | bm-v16/17 |
 | Privacy write deny | Y (`privacy-write-deny`) | Y | N |
 | Query/list entity privacy post-filter | P (execute path + bm-v27) | P | **bm-v27** |
+| Field privacy SYSTEM_ONLY | Y (unit) | Y (`privacy-field-system-only-hidden`) | N (correctness) |
+| Dual-key privacy bypass | Y (unit) | Y (`privacy-bypass-requires-force`) | bm-v16/27 (both env keys) |
+| Query limit/offset clamp | Y (unit) | Y (`query-limit-clamped`) | N (correctness waiver) |
 | Empty policies default-deny | Y (`privacy-empty-default-deny`) | Y | N |
 | Upsert update privacy | P (codegen) | P (codegen) | N |
 | OWNER_* policies | N | N | N |
 | Ownership gate | Y | Y (fail-closed on Err — unit) | N |
 | Safe idents / Surreal CQ read-only | Y | Y | N |
 | Factory actor bind | Y | Y | N |
+| URL credential redaction | Y (unit) | N | N (correctness waiver) |
 | Validation reject/accept | Y | Y | N |
 
 ### Telemetry / admin / deletion

@@ -68,6 +68,12 @@ pub enum ScenarioStep {
     AssertPrivacyWriteDenied,
     /// Assert empty entity policies deny non-System actors (sad path).
     AssertPrivacyEmptyDefaultDeny,
+    /// Assert SYSTEM_ONLY field is hidden from anonymous viewers (sad path).
+    AssertPrivacyFieldSystemOnlyHidden,
+    /// Assert huge query limit is clamped to [`valence_core::MAX_QUERY_LIMIT`] (sad path).
+    AssertQueryLimitClamped,
+    /// Assert privacy bypass requires both env keys (sad path).
+    AssertPrivacyBypassRequiresForce,
     /// Assert a validation helper rejects a value (sad path).
     AssertValidationRejects {
         /// Validator name (`email`, `non_empty`).
@@ -283,6 +289,36 @@ impl ScenarioSpec {
             steps: vec![
                 ScenarioStep::BuildValence,
                 ScenarioStep::AssertPrivacyEmptyDefaultDeny,
+            ],
+        }
+    }
+
+    pub fn privacy_field_system_only_hidden() -> Self {
+        Self {
+            id: "privacy-field-system-only-hidden".into(),
+            steps: vec![
+                ScenarioStep::BuildValence,
+                ScenarioStep::AssertPrivacyFieldSystemOnlyHidden,
+            ],
+        }
+    }
+
+    pub fn query_limit_clamped() -> Self {
+        Self {
+            id: "query-limit-clamped".into(),
+            steps: vec![
+                ScenarioStep::BuildValence,
+                ScenarioStep::AssertQueryLimitClamped,
+            ],
+        }
+    }
+
+    pub fn privacy_bypass_requires_force() -> Self {
+        Self {
+            id: "privacy-bypass-requires-force".into(),
+            steps: vec![
+                ScenarioStep::BuildValence,
+                ScenarioStep::AssertPrivacyBypassRequiresForce,
             ],
         }
     }

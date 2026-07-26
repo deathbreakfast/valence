@@ -84,7 +84,7 @@ impl SqliteBackend {
     pub async fn connect(path: &str) -> Result<Self> {
         let options = SqliteConnectOptions::from_str(path)
             .or_else(|_| SqliteConnectOptions::from_str(&format!("sqlite:{path}")))
-            .map_err(|e| Error::Database(e.to_string()))?
+            .map_err(|e| Error::database(e.to_string()))?
             .create_if_missing(true);
         let memory =
             path.contains(":memory:") || path.contains("mode=memory") || path == ":memory:";
@@ -95,7 +95,7 @@ impl SqliteBackend {
         let pool = pool_opts
             .connect_with(options)
             .await
-            .map_err(|e| Error::Database(e.to_string()))?;
+            .map_err(|e| Error::database(e.to_string()))?;
         valence_backend_sql::ensure_edges_sqlite(&pool).await?;
         Ok(Self { pool })
     }

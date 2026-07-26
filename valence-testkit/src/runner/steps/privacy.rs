@@ -1,8 +1,13 @@
 //! Privacy and validation steps.
 
 use valence_core::actor::Actor;
-use valence_core::privacy::{PrivacyEvaluator, PrivacyOperation};
+use valence_core::privacy::{
+    privacy_bypass_active, PrivacyEvaluator, PrivacyOperation, PRIVACY_BYPASS_ENV,
+    PRIVACY_BYPASS_FORCE_ON_ENV,
+};
+use valence_core::query::QueryCore;
 use valence_core::validation;
+use valence_core::MAX_QUERY_LIMIT;
 
 use crate::bootstrap::BootstrapSession;
 use crate::runner::RunMode;
@@ -65,6 +70,64 @@ pub(super) async fn run(
             PrivacyEvaluator::check_entity_read(schema, &serde_json::json!({"id": "x"}), &system)
                 .await
                 .map_err(|e| format!("system should pass empty policies: {e}"))?;
+        }
+        ScenarioStep::AssertPrivacyFieldSystemOnlyHidden => {
+            if mode == RunMode::Benchmark {
+                return Ok(());
+            }
+            let schema = crate::fixtures::system_only_field_schema();
+            let raw = serde_json::json!({"id": "1", "secret": "hidden-value"});
+            let (filtered, hidden) =
+                PrivacyEvaluator::filter_entity_fields(schema, &raw, &Actor::Anonymous)
+                    .map_err(|e| e.to_string())?;
+            if filtered.contains_key("secret") {
+                return Err("SYSTEM_ONLY secret should be hidden from anonymous".into());
+            }
+            if !hidden.iter().any(|f| f == "secret") {
+                return Err("secret should appear in hidden fields".into());
+            }
+            let (sys_filtered, _) = PrivacyEvaluator::filter_entity_fields(
+                schema,
+                &raw,
+                &Actor::System {
+                    operation: "testkit".into(),
+                },
+            )
+            .map_err(|e| e.to_string())?;
+            if !sys_filtered.contains_key("secret") {
+                return Err("SYSTEM_ONLY secret should be visible to System".into());
+            }
+        }
+        ScenarioStep::AssertQueryLimitClamped => {
+            if mode == RunMode::Benchmark {
+                return Ok(());
+            }
+            let q = QueryCore::new("project".into()).limit(u32::MAX);
+            if q.limit != Some(MAX_QUERY_LIMIT) {
+                return Err(format!(
+                    "expected limit clamped to {MAX_QUERY_LIMIT}, got {:?}",
+                    q.limit
+                ));
+            }
+        }
+        ScenarioStep::AssertPrivacyBypassRequiresForce => {
+            if mode == RunMode::Benchmark {
+                return Ok(());
+            }
+            std::env::set_var(PRIVACY_BYPASS_ENV, "1");
+            std::env::remove_var(PRIVACY_BYPASS_FORCE_ON_ENV);
+            if privacy_bypass_active() {
+                std::env::remove_var(PRIVACY_BYPASS_ENV);
+                return Err("bypass alone must not activate without FORCE_ON".into());
+            }
+            std::env::set_var(PRIVACY_BYPASS_FORCE_ON_ENV, "1");
+            if !privacy_bypass_active() {
+                std::env::remove_var(PRIVACY_BYPASS_ENV);
+                std::env::remove_var(PRIVACY_BYPASS_FORCE_ON_ENV);
+                return Err("bypass+FORCE_ON should activate".into());
+            }
+            std::env::remove_var(PRIVACY_BYPASS_ENV);
+            std::env::remove_var(PRIVACY_BYPASS_FORCE_ON_ENV);
         }
         ScenarioStep::AssertValidationRejects { validator, value } => {
             if mode == RunMode::Benchmark {

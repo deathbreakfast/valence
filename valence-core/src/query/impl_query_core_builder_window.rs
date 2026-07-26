@@ -13,17 +13,17 @@ impl QueryCore {
         self
     }
 
-    /// Set the LIMIT
+    /// Set the LIMIT (clamped to [`super::MAX_QUERY_LIMIT`]).
     #[must_use]
     pub fn limit(mut self, limit: u32) -> Self {
-        self.limit = Some(limit);
+        self.limit = Some(limit.min(super::MAX_QUERY_LIMIT));
         self
     }
 
-    /// Set the OFFSET
+    /// Set the OFFSET (clamped to [`super::MAX_QUERY_OFFSET`]).
     #[must_use]
     pub fn offset(mut self, offset: u32) -> Self {
-        self.offset = Some(offset);
+        self.offset = Some(offset.min(super::MAX_QUERY_OFFSET));
         self
     }
 

@@ -134,10 +134,7 @@ impl PrivacyEvaluator {
         v: &Valence,
     ) -> Result<()> {
         // Bench/test seam only — never enable in production hosts.
-        if std::env::var("VALENCE_PRIVACY_BYPASS")
-            .map(|s| s.trim() == "1")
-            .unwrap_or(false)
-        {
+        if crate::privacy::privacy_bypass_active() {
             return Ok(());
         }
 

@@ -3,12 +3,14 @@
 //! [`RouterValenceFactory::build`] deserializes `actor_json` into a typed [`crate::actor::Actor`]
 //! and attaches it to the returned [`Valence`]. Pass only host-trusted JSON (session-derived);
 //! never deserialize untrusted client payloads as [`Actor::System`](crate::actor::Actor::System).
+//! Install [`crate::actor_policy::RejectExternalSystemActor`] on external paths.
 
 use std::sync::Arc;
 
 use serde_json::Value;
 
 use crate::actor::Actor;
+use crate::actor_policy::{ActorJsonPolicy, ActorTrust};
 use crate::error::{Error, Result};
 use crate::ports::actor::{ActorFactory, JsonActorFactory};
 use crate::ports::endpoints::DatabaseEndpointResolver;
@@ -39,6 +41,10 @@ pub struct RouterValenceFactoryConfig {
     pub actor_factory: Option<Arc<dyn ActorFactory>>,
     /// Optional endpoint resolver override (defaults to no-op).
     pub endpoint_resolver: Option<Arc<dyn DatabaseEndpointResolver>>,
+    /// Optional policy for validating `actor_json` (see [`RejectExternalSystemActor`](crate::actor_policy::RejectExternalSystemActor)).
+    pub actor_json_policy: Option<Arc<dyn ActorJsonPolicy>>,
+    /// Trust level passed to [`ActorJsonPolicy`] (default [`ActorTrust::External`]).
+    pub actor_trust: ActorTrust,
 }
 
 impl RouterValenceFactoryConfig {
@@ -51,7 +57,16 @@ impl RouterValenceFactoryConfig {
             secret_provider: None,
             actor_factory: None,
             endpoint_resolver: None,
+            actor_json_policy: None,
+            actor_trust: ActorTrust::External,
         }
+    }
+
+    /// Install an [`ActorJsonPolicy`] for factory `actor_json` validation.
+    #[must_use]
+    pub fn actor_json_policy(mut self, policy: impl ActorJsonPolicy + 'static) -> Self {
+        self.actor_json_policy = Some(Arc::new(policy));
+        self
     }
 }
 
@@ -80,6 +95,10 @@ impl RouterValenceFactory {
 
 impl ValenceFactory for RouterValenceFactory {
     fn build(&self, actor_json: &Value) -> Result<Valence> {
+        if let Some(policy) = &self.config.actor_json_policy {
+            policy.validate(self.config.actor_trust, actor_json)?;
+        }
+
         let actor_factory = self
             .config
             .actor_factory
@@ -233,5 +252,24 @@ mod tests {
             .build(&serde_json::json!({"kind": "not-an-actor"}))
             .expect_err("invalid");
         assert!(err.to_string().contains("actor_json"));
+    }
+
+    #[test]
+    fn build_rejects_external_system_when_policy_installed() {
+        use crate::actor_policy::RejectExternalSystemActor;
+        let valence = Valence::builder()
+            .add_backend("default", Arc::new(MockBackend))
+            .build()
+            .expect("build");
+        let router = Arc::clone(valence.database_router());
+        let config =
+            RouterValenceFactoryConfig::new("default").actor_json_policy(RejectExternalSystemActor);
+        let f = RouterValenceFactory::new(router, config);
+        let system = serde_json::to_value(Actor::System {
+            operation: "x".into(),
+        })
+        .expect("json");
+        let err = f.build(&system).expect_err("system");
+        assert!(err.to_string().contains("System"));
     }
 }

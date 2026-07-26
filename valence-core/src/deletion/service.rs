@@ -45,7 +45,7 @@ impl DeletionService {
         backend
             .create_record("valence_deletion_run", row)
             .await
-            .map_err(|e| Error::Database(e.to_string()))?;
+            .map_err(|e| Error::database(e.to_string()))?;
         Ok(run_id)
     }
 
@@ -56,7 +56,7 @@ impl DeletionService {
         let sys = system_valence(v);
         QueryCore::get_record_json("valence_deletion_run", run_id, &sys)
             .await
-            .map_err(|e| Error::Database(e.to_string()))
+            .map_err(|e| Error::database(e.to_string()))
     }
 
     /// # Errors
@@ -68,7 +68,7 @@ impl DeletionService {
         backend
             .merge_record("valence_deletion_run", run_id, patch)
             .await
-            .map_err(|e| Error::Database(e.to_string()))
+            .map_err(|e| Error::database(e.to_string()))
             .map(|_| ())
     }
 
@@ -96,7 +96,7 @@ impl DeletionService {
             .limit(50)
             .execute(&sys)
             .await
-            .map_err(|e| Error::Database(e.to_string()))
+            .map_err(|e| Error::database(e.to_string()))
     }
 
     /// Recent runs for a logical schema (matches `root_table`).
@@ -115,7 +115,7 @@ impl DeletionService {
             .limit(50)
             .execute(&sys)
             .await
-            .map_err(|e| Error::Database(e.to_string()))
+            .map_err(|e| Error::database(e.to_string()))
     }
 
     /// Count in-flight runs requested by the given actor JSON (`requested_by` field).
@@ -138,7 +138,7 @@ impl DeletionService {
         let rows = backend
             .execute_compiled_query(&compiled)
             .await
-            .map_err(|e| Error::Database(e.to_string()))?;
+            .map_err(|e| Error::database(e.to_string()))?;
         Ok(rows
             .first()
             .and_then(|row| {
@@ -166,6 +166,6 @@ impl DeletionService {
             .limit(limit)
             .execute(&sys)
             .await
-            .map_err(|e| Error::Database(e.to_string()))
+            .map_err(|e| Error::database(e.to_string()))
     }
 }

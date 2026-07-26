@@ -108,7 +108,7 @@ impl MongoBackend {
     pub async fn connect_with_config(config: MongoConfig) -> Result<Self> {
         let client = Client::with_uri_str(&config.uri)
             .await
-            .map_err(|e| Error::Database(e.to_string()))?;
+            .map_err(|e| Error::database(e.to_string()))?;
         let backend = Self {
             client,
             database: config.database,
@@ -144,7 +144,7 @@ impl MongoBackend {
             .build();
         coll.create_index(index)
             .await
-            .map_err(|e| Error::Database(e.to_string()))?;
+            .map_err(|e| Error::database(e.to_string()))?;
         Ok(())
     }
 
@@ -180,11 +180,11 @@ impl MongoBackend {
             if let Some(existing) = coll
                 .find_one(filter)
                 .await
-                .map_err(|e| Error::Database(e.to_string()))?
+                .map_err(|e| Error::database(e.to_string()))?
             {
                 let existing_id = existing.get_str("_id").unwrap_or("");
                 if exclude_id != Some(existing_id) {
-                    return Err(Error::Database(format!(
+                    return Err(Error::database(format!(
                         "duplicate unique index value for {table}.{field}"
                     )));
                 }
@@ -214,12 +214,12 @@ impl MongoBackend {
         let mut cursor = coll
             .find(doc! {})
             .await
-            .map_err(|e| Error::Database(e.to_string()))?;
+            .map_err(|e| Error::database(e.to_string()))?;
         let mut rows = Vec::new();
         while let Some(doc) = cursor
             .try_next()
             .await
-            .map_err(|e| Error::Database(e.to_string()))?
+            .map_err(|e| Error::database(e.to_string()))?
         {
             let id = doc.get_str("_id").unwrap_or("").to_string();
             rows.push(Self::doc_to_row(table, &id, doc));
@@ -304,7 +304,7 @@ impl DatabaseBackend for MongoBackend {
         let doc = coll
             .find_one(doc! { "_id": id })
             .await
-            .map_err(|e| Error::Database(e.to_string()))?;
+            .map_err(|e| Error::database(e.to_string()))?;
         Ok(doc.map(|d| Self::doc_to_row(table, id, d)))
     }
 
@@ -361,9 +361,9 @@ impl DatabaseBackend for MongoBackend {
             .await
             .map_err(|e| {
                 if e.to_string().contains("duplicate key") {
-                    Error::Database(format!("duplicate unique index value for {table}"))
+                    Error::database(format!("duplicate unique index value for {table}"))
                 } else {
-                    Error::Database(e.to_string())
+                    Error::database(e.to_string())
                 }
             })?;
         Ok(merged)
@@ -385,7 +385,7 @@ impl DatabaseBackend for MongoBackend {
         let coll = self.collection(table);
         coll.delete_one(doc! { "_id": id })
             .await
-            .map_err(|e| Error::Database(e.to_string()))?;
+            .map_err(|e| Error::database(e.to_string()))?;
         Ok(())
     }
 
@@ -399,7 +399,7 @@ impl DatabaseBackend for MongoBackend {
             "to_id": to.id(),
         })
         .await
-        .map_err(|e| Error::Database(e.to_string()))?;
+        .map_err(|e| Error::database(e.to_string()))?;
         Ok(())
     }
 
@@ -413,7 +413,7 @@ impl DatabaseBackend for MongoBackend {
             "to_id": to.id(),
         })
         .await
-        .map_err(|e| Error::Database(e.to_string()))?;
+        .map_err(|e| Error::database(e.to_string()))?;
         Ok(())
     }
 
@@ -426,12 +426,12 @@ impl DatabaseBackend for MongoBackend {
                 "edge_type": edge_table,
             })
             .await
-            .map_err(|e| Error::Database(e.to_string()))?;
+            .map_err(|e| Error::database(e.to_string()))?;
         let mut out = Vec::new();
         while let Some(edge) = cursor
             .try_next()
             .await
-            .map_err(|e| Error::Database(e.to_string()))?
+            .map_err(|e| Error::database(e.to_string()))?
         {
             let to_table = edge.get_str("to_table").unwrap_or("").to_string();
             let to_id = edge.get_str("to_id").unwrap_or("").to_string();
@@ -453,7 +453,7 @@ impl DatabaseBackend for MongoBackend {
             .build();
         coll.create_index(index)
             .await
-            .map_err(|e| Error::Database(e.to_string()))?;
+            .map_err(|e| Error::database(e.to_string()))?;
         Ok(())
     }
 }
@@ -461,9 +461,9 @@ impl DatabaseBackend for MongoBackend {
 #[allow(clippy::needless_pass_by_value)] // map_err adapter; value only Display'd
 fn map_duplicate_key(e: mongodb::error::Error) -> Error {
     if e.to_string().contains("duplicate key") {
-        Error::Database("duplicate unique index value".into())
+        Error::database("duplicate unique index value")
     } else {
-        Error::Database(e.to_string())
+        Error::database(e.to_string())
     }
 }
 

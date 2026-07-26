@@ -86,7 +86,7 @@ impl PostgresBackend {
     pub async fn connect(url: &str) -> Result<Self> {
         let pool = PgPool::connect(url)
             .await
-            .map_err(|e| Error::Database(e.to_string()))?;
+            .map_err(|e| Error::database(e.to_string()))?;
         ensure_edges_postgres(&pool).await?;
         Ok(Self { pool })
     }

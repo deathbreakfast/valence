@@ -93,7 +93,7 @@ impl IndradbBackend {
 
     #[allow(clippy::needless_pass_by_value)] // map_err adapter; value only Display'd
     fn db_err(e: indradb::Error) -> Error {
-        Error::Database(e.to_string())
+        Error::database(e.to_string())
     }
 
     fn table_identifier(table: &str) -> Result<Identifier> {
@@ -173,7 +173,7 @@ impl IndradbBackend {
                 continue;
             }
             if values.contains(value) {
-                return Err(Error::Database(format!(
+                return Err(Error::database(format!(
                     "duplicate unique index value for {table}.{field}"
                 )));
             }

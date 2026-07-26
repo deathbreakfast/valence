@@ -21,9 +21,11 @@
 //! let record = serde_json::json!({"id": "1"});
 //! assert!(PrivacyEvaluator::evaluate(&policy, &record, &Actor::Anonymous).is_err());
 //! ```
+mod bypass;
 mod policy_evaluator;
 mod types;
 
+pub use bypass::{privacy_bypass_active, PRIVACY_BYPASS_ENV, PRIVACY_BYPASS_FORCE_ON_ENV};
 pub use policy_evaluator::PolicyEvaluator;
 pub use types::{PrivacyOperation, PrivacyPolicies, PrivacyPolicy, PrivacyRule};
 

@@ -26,7 +26,7 @@ type CacheKey = (usize, String, String);
 
 fn cache_key(backend: &Arc<dyn DatabaseBackend>, table: &str, id: &str) -> CacheKey {
     // Fat pointer → data pointer address; isolates distinct Arc backends (e.g. test DBs).
-    let backend_id = Arc::as_ptr(backend) as *const () as usize;
+    let backend_id = Arc::as_ptr(backend).cast::<()>() as usize;
     (backend_id, table.to_string(), id.to_string())
 }
 

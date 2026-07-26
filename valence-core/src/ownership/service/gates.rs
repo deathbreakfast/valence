@@ -146,7 +146,7 @@ impl OwnershipService {
         let rows = backend
             .execute_compiled_query(&compiled)
             .await
-            .map_err(|e| Error::Database(e.to_string()))?;
+            .map_err(|e| Error::database(e.to_string()))?;
         let payload = rows.into_iter().next().unwrap_or(Value::Null);
         let obj = payload.as_object();
         let row = obj

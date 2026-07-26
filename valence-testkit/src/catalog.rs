@@ -252,6 +252,15 @@ pub fn embedded_catalog() -> &'static [CatalogEntry] {
         entry_sad("privacy-empty-default-deny", |_| {
             ScenarioSpec::privacy_empty_default_deny()
         }),
+        entry_sad("privacy-field-system-only-hidden", |_| {
+            ScenarioSpec::privacy_field_system_only_hidden()
+        }),
+        entry_sad("query-limit-clamped", |_| {
+            ScenarioSpec::query_limit_clamped()
+        }),
+        entry_sad("privacy-bypass-requires-force", |_| {
+            ScenarioSpec::privacy_bypass_requires_force()
+        }),
         entry("validation-accept-smoke", PathKind::Happy, |_| {
             ScenarioSpec::validation_accept_smoke()
         }),

@@ -257,7 +257,7 @@ pub async fn append_transfer_history_row(
     tback
         .create_record("valence_ownership_transfer", transfer)
         .await
-        .map_err(|e| Error::Database(e.to_string()))?;
+        .map_err(|e| Error::database(e.to_string()))?;
 
     crate::instrumentation::record_ownership_transfer(
         valence_model,

@@ -1,3 +1,18 @@
+/// Escape `\`, `%`, and `_` so user literals are not LIKE wildcards.
+fn escape_like_pattern(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for c in s.chars() {
+        match c {
+            '\\' | '%' | '_' => {
+                out.push('\\');
+                out.push(c);
+            }
+            _ => out.push(c),
+        }
+    }
+    out
+}
+
 impl QueryCore {
     fn clause_to_condition_sql(
         clause: &WhereClause,
@@ -143,23 +158,31 @@ impl QueryCore {
         }
         let col = super::sql_document::sql_doc_column(field);
         let param_key = Self::next_param_key(param_counter);
-        let (op, value) = match pred {
-            StringPredicate::Equals(s) => ("=", serde_json::Value::String(s.clone())),
+        let (op, value, like_escape) = match pred {
+            StringPredicate::Equals(s) => ("=", serde_json::Value::String(s.clone()), false),
             StringPredicate::Contains(s) => (
                 "LIKE",
-                serde_json::Value::String(format!("%{s}%")),
+                serde_json::Value::String(format!("%{}%", escape_like_pattern(s))),
+                true,
             ),
             StringPredicate::StartsWith(s) => (
                 "LIKE",
-                serde_json::Value::String(format!("{s}%")),
+                serde_json::Value::String(format!("{}%", escape_like_pattern(s))),
+                true,
             ),
             StringPredicate::EndsWith(s) => (
                 "LIKE",
-                serde_json::Value::String(format!("%{s}")),
+                serde_json::Value::String(format!("%{}", escape_like_pattern(s))),
+                true,
             ),
         };
         let params = vec![(param_key.clone(), value)];
-        (format!("{col} {op} ${param_key}"), params)
+        let sql = if like_escape {
+            format!("{col} {op} ${param_key} ESCAPE '\\'")
+        } else {
+            format!("{col} {op} ${param_key}")
+        };
+        (sql, params)
     }
 
     fn string_equals_id_clause_sql_sql(

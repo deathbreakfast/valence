@@ -5785,6 +5785,7 @@ dependencies = [
  "serde_json",
  "thiserror",
  "tokio",
+ "tracing",
  "uf-valence-backend-mem",
  "uf-valence-telemetry",
  "uuid",

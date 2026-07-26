@@ -79,7 +79,7 @@ async fn run_count_query(
     let rows = match backend.execute_compiled_query(&compiled).await {
         Ok(rows) => rows,
         Err(e) if query_err_is_missing_table(&e.to_string()) => return Ok(0),
-        Err(e) => return Err(Error::Database(e.to_string())),
+        Err(e) => return Err(Error::database(e.to_string())),
     };
     Ok(rows
         .into_iter()
@@ -99,7 +99,7 @@ async fn run_id_query(
     let rows = match backend.execute_compiled_query(&compiled).await {
         Ok(rows) => rows,
         Err(e) if query_err_is_missing_table(&e.to_string()) => return Ok(vec![]),
-        Err(e) => return Err(Error::Database(e.to_string())),
+        Err(e) => return Err(Error::database(e.to_string())),
     };
     let mut out = Vec::new();
     for cell in rows {

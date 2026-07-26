@@ -88,6 +88,12 @@ impl Valence {
         &self.actor
     }
 
+    /// Clone this handle with a different actor.
+    ///
+    /// # Security
+    ///
+    /// Privileged: hosts must not expose raw `with_actor(Actor::System)` (or other elevated
+    /// actors) from untrusted client input. Bind actors from session/JWT at the host edge.
     #[must_use]
     pub fn with_actor(&self, actor: Actor) -> Self {
         Self {
@@ -96,6 +102,11 @@ impl Valence {
         }
     }
 
+    /// Clone this handle with an ownership override.
+    ///
+    /// # Security
+    ///
+    /// Privileged: do not accept client-supplied owner overrides without host authorization.
     #[must_use]
     pub fn with_owner_override(&self, owner: OwnerRef) -> Self {
         Self {
@@ -114,6 +125,11 @@ impl Valence {
     }
 
     /// Navigate ManyToMany edges and return target [`RecordId`] values.
+    ///
+    /// # Security
+    ///
+    /// Raw edge read — no schema privacy. Do not expose as a client API without host authz.
+    ///
     /// # Errors
     ///
     /// Returns an error when the requested operation cannot be completed.
@@ -127,6 +143,11 @@ impl Valence {
     }
 
     /// Create a graph edge between two records in `edge_table`.
+    ///
+    /// # Security
+    ///
+    /// Raw edge write — no schema privacy. Hosts must authorize before calling.
+    ///
     /// # Errors
     ///
     /// Returns an error when the requested operation cannot be completed.
@@ -141,6 +162,11 @@ impl Valence {
     }
 
     /// Delete a graph edge between two records in `edge_table`.
+    ///
+    /// # Security
+    ///
+    /// Raw edge delete — no schema privacy. Hosts must authorize before calling.
+    ///
     /// # Errors
     ///
     /// Returns an error when the requested operation cannot be completed.

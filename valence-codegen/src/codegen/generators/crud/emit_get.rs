@@ -106,6 +106,25 @@ pub(super) fn model_get_method_tokens(cx: &CrudEmitCtx<'_>) -> TokenStream {
 
             #privacy_and_gate
 
+            let result = match result {
+                Some(record) => {
+                    let raw = serde_json::to_value(&record).map_err(|e| {
+                        valence::Error::Serialization(e.to_string())
+                    })?;
+                    let (filtered, _) = valence::PrivacyEvaluator::filter_entity_fields(
+                        Self::__schema_metadata(),
+                        &raw,
+                        valence.actor(),
+                    )?;
+                    let filtered_json =
+                        serde_json::Value::Object(filtered.into_iter().collect());
+                    Some(serde_json::from_value(filtered_json).map_err(|e| {
+                        valence::Error::Serialization(e.to_string())
+                    })?)
+                }
+                None => None,
+            };
+
             Ok(result)
         }
     }

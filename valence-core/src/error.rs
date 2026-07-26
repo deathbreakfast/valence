@@ -2,6 +2,8 @@
 
 use thiserror::Error;
 
+use crate::redact::redact_credentials_in_text;
+
 #[derive(Debug, Error)]
 pub enum Error {
     #[error("Database error: {0}")]
@@ -36,6 +38,12 @@ impl From<serde_json::Error> for Error {
 }
 
 impl Error {
+    /// Build a [`Error::Database`] with URL userinfo redacted from the message.
+    #[must_use]
+    pub fn database(msg: impl AsRef<str>) -> Self {
+        Self::Database(redact_credentials_in_text(msg.as_ref()))
+    }
+
     /// True when the database engine reported MVCC / transaction contention that may succeed on retry.
     pub fn is_retryable_transaction_contention(&self) -> bool {
         match self {
@@ -57,3 +65,16 @@ impl From<&str> for Error {
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn database_redacts_url_userinfo() {
+        let err = Error::database("connect failed: postgres://user:secret@host/db");
+        let s = err.to_string();
+        assert!(s.contains("postgres://***@host/db"));
+        assert!(!s.contains("secret"));
+    }
+}

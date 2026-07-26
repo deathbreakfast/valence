@@ -1,7 +1,7 @@
 //! Boot Valence with the embedded IndraDB graph backend.
 //!
 //! ```bash
-//! cargo run -p valence --example quickstart_indradb --features indradb
+//! cargo run -p uf-valence --example quickstart_indradb --features indradb
 //! ```
 
 #![allow(

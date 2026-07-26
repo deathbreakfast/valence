@@ -49,21 +49,19 @@ cargo test --doc -p uf-valence-backend-mem
 cargo test --doc -p uf-valence-telemetry
 cargo test --doc -p uf-valence
 
-# Examples (offline-friendly)
+# Examples — canonical path (see valence/README.md#how-to-run-examples)
 cargo run -p uf-valence --example quickstart --features mem
-cargo run -p uf-valence --example multi_backend --features mem
 cargo run -p uf-valence --example quickstart_sqlite --features sqlite
-cargo run -p uf-valence --example quickstart_indradb --features indradb
-cargo run -p uf-valence --example surreal_embedded --features surreal
+cargo run -p uf-valence --example multi_backend --features mem
+cargo check -p codegen-host
+cargo run -p cross-backend-model-host
 cargo run -p uf-valence --example quickstart_telemetry --features mem,telemetry-console
 
 # Wire backends when a live service is available:
 # DATABASE_URL=… cargo run -p uf-valence --example quickstart_postgres --features postgres
-# VALENCE_MONGODB_URI=… cargo run -p uf-valence --example quickstart_mongodb --features mongodb
-# VALENCE_REDIS_URL=… cargo run -p uf-valence --example quickstart_redis --features redis
 ```
 
-See [`docs/VERIFICATION.md`](docs/VERIFICATION.md) for E2E / extended Surreal coverage.
+See [`valence/README.md`](valence/README.md#how-to-run-examples) for the full catalog and [`docs/VERIFICATION.md`](docs/VERIFICATION.md) for E2E / extended Surreal coverage.
 
 ## Pull requests
 

@@ -107,6 +107,7 @@ Follow the numbered **Getting started** guide in `cargo doc -p uf-valence` (wire
 | `mem` | `valence-backend-mem` | **Default** — quick start, non-durable |
 | `sqlite` | `valence-backend-sqlite` | Durable embedded |
 | `indradb` | `valence-backend-indradb` | Embedded graph |
+| `hybrid` | `valence-backend-hybrid` | IndraDB cache over a primary |
 | `surreal` | `valence-backend-surreal` | Embedded Surreal (mem engine) |
 | `surreal-rocksdb` | Surreal RocksDB | On-disk embedded |
 | `surreal-remote` | Surreal remote | WebSocket/HTTP |
@@ -149,25 +150,28 @@ Follow the numbered **Getting started** guide in `cargo doc -p uf-valence` (wire
 | [`valence-macros/README.md`](valence-macros/README.md) | Schema authors — DSL field reference |
 | [`valence-codegen/README.md`](valence-codegen/README.md) | Build pipeline — model generation |
 | [`examples/codegen-host/`](examples/codegen-host/) | End-to-end codegen → `Model` |
+| [`examples/cross-backend-model-host/`](examples/cross-backend-model-host/) | Mem↔sqlite hop + `Model::query` |
 | [`examples/product-model-host/`](examples/product-model-host/) | Product-shaped schemas and connections |
 | [`examples/acme-valence-backend-stub/`](examples/acme-valence-backend-stub/) | Third-party adapter checklist |
 | `cargo doc -p uf-valence-core --open` | Adapter authors / host integrators — `DatabaseBackend`, `ports`, `ValenceBuilder` |
 | Per-crate READMEs | Backend- and crate-specific entry points |
 
-### Runnable examples
+### How to run examples
+
+Full runbook: [`valence/README.md`](valence/README.md#how-to-run-examples)
+([Embedded](https://docs.rs/uf-valence/latest/valence/index.html#embedded-one-process) /
+[Remote (wire)](https://docs.rs/uf-valence/latest/valence/index.html#remote-wire)).
 
 ```bash
+# Canonical path
 cargo run -p uf-valence --example quickstart --features mem
-cargo run -p uf-valence --example multi_backend --features mem
 cargo run -p uf-valence --example quickstart_sqlite --features sqlite
-cargo run -p uf-valence --example quickstart_indradb --features indradb
-cargo run -p uf-valence --example surreal_embedded --features surreal
-cargo run -p uf-valence --example quickstart_telemetry --features mem,telemetry-console
+cargo run -p uf-valence --example multi_backend --features mem
+cargo check -p codegen-host
+cargo run -p cross-backend-model-host
 
-# Wire (skip cleanly when URL unset):
+# Optional remote wire (skip when URL unset):
 DATABASE_URL=postgres://… cargo run -p uf-valence --example quickstart_postgres --features postgres
-VALENCE_MONGODB_URI=mongodb://… cargo run -p uf-valence --example quickstart_mongodb --features mongodb
-VALENCE_REDIS_URL=redis://… cargo run -p uf-valence --example quickstart_redis --features redis
 ```
 
 ### Maintainers

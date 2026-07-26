@@ -20,6 +20,23 @@
 //! Enable backends with Cargo features (`mem` is the default). The crate `README.md` lists every
 //! feature flag and environment variable.
 //!
+//! # Topologies
+//!
+//! Valence is an **in-process** ORM: one host process owns [`Valence`] / [`DatabaseRouter`].
+//! There is no coordinator/worker daemon split.
+//!
+//! ## Embedded (one process)
+//!
+//! Engine runs in-process (`mem`, `sqlite`, `indradb`, Surreal embedded). No external database
+//! required for the canonical path.
+//!
+//! ## Remote (wire)
+//!
+//! The host process is a client to an external database (Postgres, MongoDB, Redis, Surreal
+//! remote). Start the service, set the URL env var, then run one example process.
+//!
+//! Runnable catalog: crate [`README.md`](https://github.com/unified-field-dev/valence/blob/main/valence/README.md#how-to-run-examples).
+//!
 //! # Getting started
 //!
 //! Follow these steps in order. Each linked API page includes details for that task.
@@ -28,13 +45,13 @@
 //!
 //! | Backend | Type | Feature | Topology | When to use |
 //! |---------|------|---------|----------|-------------|
-//! | In-memory | [`InMemoryBackend`] | `mem` (default) | embedded | Local experiments; tests |
-//! | SQLite | [`SqliteBackend`] | `sqlite` | embedded | Durable single-host store |
-//! | IndraDB | [`IndradbBackend`] | `indradb` | embedded | Graph-oriented workloads |
-//! | SurrealDB | [`SurrealEmbeddedBackend`] | `surreal` | embedded | Surreal engine in-process |
-//! | Postgres | [`PostgresBackend`] | `postgres` | remote | Wire Postgres (`DATABASE_URL`) |
-//! | MongoDB | [`MongoBackend`] | `mongodb` | remote | Wire Mongo (`VALENCE_MONGODB_URI`) |
-//! | Redis | [`RedisBackend`] | `redis` | remote | Wire Redis (`VALENCE_REDIS_URL`) |
+//! | In-memory | [`InMemoryBackend`] | `mem` (default) | [embedded](#embedded-one-process) | Local experiments; tests |
+//! | SQLite | [`SqliteBackend`] | `sqlite` | [embedded](#embedded-one-process) | Durable single-host store |
+//! | IndraDB | [`IndradbBackend`] | `indradb` | [embedded](#embedded-one-process) | Graph-oriented workloads |
+//! | SurrealDB | [`SurrealEmbeddedBackend`] | `surreal` | [embedded](#embedded-one-process) | Surreal engine in-process |
+//! | Postgres | [`PostgresBackend`] | `postgres` | [remote](#remote-wire) | Wire Postgres (`DATABASE_URL`) |
+//! | MongoDB | [`MongoBackend`] | `mongodb` | [remote](#remote-wire) | Wire Mongo (`VALENCE_MONGODB_URI`) |
+//! | Redis | [`RedisBackend`] | `redis` | [remote](#remote-wire) | Wire Redis (`VALENCE_REDIS_URL`) |
 //!
 //! ### Select a backend in the schema
 //!
@@ -127,7 +144,7 @@
 //! # }
 //! ```
 //!
-//! Runnable: `cargo run -p valence --example quickstart --features mem`
+//! Runnable: `cargo run -p uf-valence --example quickstart --features mem`
 //!
 //! ## 2. Declare schemas
 //!
@@ -235,7 +252,10 @@
 //! # }
 //! ```
 //!
-//! Runnable: `cargo run -p valence --example multi_backend --features mem`
+//! Runnable: `cargo run -p uf-valence --example multi_backend --features mem`
+//!
+//! Heterogeneous engines (mem Project ↔ sqlite Task) with hop + query:
+//! `cargo run -p cross-backend-model-host`.
 //!
 //! ## 6. Inject host ports
 //!
@@ -296,6 +316,8 @@
 //! | Wire storage | [`Valence::builder()`], [`InMemoryBackend`] |
 //! | Model CRUD | [`Model`], `examples/product-model-host` |
 //! | Multi-backend routing | [`DatabaseRouter`], `multi_backend` example |
+//! | Cross-backend hop + query | `cargo run -p cross-backend-model-host` |
+//! | Hybrid multi-logical | `hybrid_multi_logical` example (`hybrid,mem`) |
 //! | Custom adapter | [`DatabaseBackend`], `examples/acme-valence-backend-stub` |
 //! | SQLite | [`SqliteBackend`], `quickstart_sqlite` example |
 //! | IndraDB | [`IndradbBackend`], `quickstart_indradb` example |
@@ -305,6 +327,7 @@
 //! | Redis | [`RedisBackend`], `quickstart_redis` (env-gated) |
 //! | Admin runtime | [`SchemaRegistry`], [`QueryCore`], `examples/admin-runtime-host` |
 //! | Config / env vars | crate [`README.md`](README.md) |
+//! | How to run examples | crate [`README.md`](https://github.com/unified-field-dev/valence/blob/main/valence/README.md#how-to-run-examples) |
 //!
 //! # Entry points
 //!
@@ -325,24 +348,28 @@
 //!
 //! # Runnable examples
 //!
+//! Canonical path (see crate README **How to run examples**):
+//!
+//! ```bash
+//! cargo run -p uf-valence --example quickstart --features mem
+//! cargo run -p uf-valence --example quickstart_sqlite --features sqlite
+//! cargo run -p uf-valence --example multi_backend --features mem
+//! cargo check -p codegen-host
+//! cargo run -p cross-backend-model-host
+//! ```
+//!
 //! | Example | Features | Notes |
 //! |---------|----------|-------|
 //! | `quickstart` | `mem` | Schema + mem boot + registry proof |
-//! | `multi_backend` | `mem` | Multiple logical backends |
 //! | `quickstart_sqlite` | `sqlite` | Embedded SQLite |
-//! | `quickstart_indradb` | `indradb` | Embedded IndraDB |
+//! | `multi_backend` | `mem` | Multiple logical backends |
+//! | `hybrid_multi_logical` | `hybrid,mem` | Hybrid primary, several logical names |
 //! | `surreal_embedded` | `surreal` | Surreal mem engine |
+//! | `quickstart_indradb` | `indradb` | Embedded IndraDB |
 //! | `quickstart_postgres` | `postgres` | Requires `DATABASE_URL` |
 //! | `quickstart_mongodb` | `mongodb` | Requires `VALENCE_MONGODB_URI` |
 //! | `quickstart_redis` | `redis` | Requires `VALENCE_REDIS_URL` |
 //! | `quickstart_telemetry` | `mem,telemetry-console` | Console telemetry sink |
-//!
-//! ```bash
-//! cargo run -p valence --example quickstart --features mem
-//! cargo run -p valence --example quickstart_sqlite --features sqlite
-//! cargo run -p valence --example quickstart_indradb --features indradb
-//! cargo run -p valence --example surreal_embedded --features surreal
-//! ```
 
 extern crate self as valence;
 

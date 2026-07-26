@@ -166,9 +166,9 @@ mod tests {
 
     #[test]
     fn pending_deletion_status_blocks_reads() {
-        use crate::error::Error;
         use super::helpers::OwnershipGateStatus;
         use super::OwnershipService;
+        use crate::error::Error;
 
         let err = OwnershipService::apply_pending_deletion_gate(
             "widget",
@@ -178,11 +178,7 @@ mod tests {
         .expect_err("pending deletion must block");
         assert!(matches!(err, Error::PendingDeletion(_)));
 
-        OwnershipService::apply_pending_deletion_gate(
-            "widget",
-            "w1",
-            OwnershipGateStatus::Absent,
-        )
-        .expect("absent ownership allows");
+        OwnershipService::apply_pending_deletion_gate("widget", "w1", OwnershipGateStatus::Absent)
+            .expect("absent ownership allows");
     }
 }

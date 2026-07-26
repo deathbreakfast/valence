@@ -4,7 +4,7 @@
 //!
 //! ```bash
 //! VALENCE_REDIS_URL=redis://127.0.0.1:6379 \
-//!   cargo run -p valence --example quickstart_redis --features redis
+//!   cargo run -p uf-valence --example quickstart_redis --features redis
 //! ```
 
 #![allow(

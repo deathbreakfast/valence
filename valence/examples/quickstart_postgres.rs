@@ -4,7 +4,7 @@
 //!
 //! ```bash
 //! DATABASE_URL=postgres://localhost/valence \
-//!   cargo run -p valence --example quickstart_postgres --features postgres
+//!   cargo run -p uf-valence --example quickstart_postgres --features postgres
 //! ```
 
 #![allow(

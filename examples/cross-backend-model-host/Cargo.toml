@@ -3,9 +3,14 @@ name = "cross-backend-model-host"
 version = "0.1.0"
 edition = "2021"
 publish = false
+description = "Example: Project(mem) ↔ Task(sqlite) hop + Model::query"
 
 [lib]
 path = "src/lib.rs"
+
+[[bin]]
+name = "cross-backend-model-host"
+path = "src/main.rs"
 
 [dependencies]
 valence = { path = "../../valence", features = ["mem", "sqlite"], package = "uf-valence" }
@@ -14,6 +19,7 @@ valence-backend-sqlite = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 async-trait = { workspace = true }
+tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
 
 [build-dependencies]
 valence-codegen = { path = "../../valence-codegen", package = "uf-valence-codegen", version = "0.1.1" }

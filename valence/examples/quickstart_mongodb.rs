@@ -4,7 +4,7 @@
 //!
 //! ```bash
 //! VALENCE_MONGODB_URI=mongodb://localhost:27017 \
-//!   cargo run -p valence --example quickstart_mongodb --features mongodb
+//!   cargo run -p uf-valence --example quickstart_mongodb --features mongodb
 //! ```
 
 #![allow(

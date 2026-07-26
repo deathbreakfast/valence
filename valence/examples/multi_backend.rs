@@ -1,7 +1,7 @@
 //! Register multiple logical backends on one router and select a default key.
 //!
 //! ```bash
-//! cargo run -p valence --example multi_backend --features mem
+//! cargo run -p uf-valence --example multi_backend --features mem
 //! ```
 
 #![allow(

@@ -51,7 +51,12 @@ let router = bootstrap_embedded_router_from_inventory(
 )?;
 ```
 
-See [`examples/embedded-bootstrap/`](../examples/embedded-bootstrap/).
+Runnable (facade): `cargo run -p uf-valence --example surreal_embedded --features surreal`
+
+Inventory bootstrap host: [`examples/embedded-bootstrap/`](../examples/embedded-bootstrap/).
+
+Topology catalog: [Embedded](https://docs.rs/uf-valence/latest/valence/index.html#embedded-one-process) /
+[Remote (wire)](https://docs.rs/uf-valence/latest/valence/index.html#remote-wire).
 
 Telemetry label: `database_type=surrealdb` on instrumentation hooks.
 

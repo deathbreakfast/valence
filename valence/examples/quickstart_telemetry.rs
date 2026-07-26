@@ -1,7 +1,7 @@
 //! Boot Valence with the console telemetry sink (`telemetry-console` feature).
 //!
 //! ```bash
-//! cargo run -p valence --example quickstart_telemetry --features mem,telemetry-console
+//! cargo run -p uf-valence --example quickstart_telemetry --features mem,telemetry-console
 //! ```
 
 #![allow(

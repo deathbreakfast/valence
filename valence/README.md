@@ -27,6 +27,7 @@ Overview and quickstart: [../README.md](../README.md).
 | `surreal-connect-env` | `connect_embedded_from_env()` via `VALENCE_EMBEDDED_*` |
 | `postgres` | `valence-backend-postgres` (`DATABASE_URL`) |
 | `mongodb` | `valence-backend-mongodb` (`VALENCE_MONGODB_URI`) |
+| `hybrid` | `valence-backend-hybrid` (IndraDB cache over a primary) |
 | `redis` | `valence-backend-redis` (`VALENCE_REDIS_URL`) |
 | `telemetry-console` | `valence-telemetry` re-export and stderr sink |
 
@@ -36,26 +37,85 @@ Enable backends explicitly when minimizing dependencies:
 uf-valence = { git = "https://github.com/deathbreakfast/valence", package = "uf-valence", default-features = false, features = ["mem"] }
 ```
 
-## Runnable examples
+## How to run examples
 
-From the workspace root:
+Canonical teaching path (start here). Topology docs:
+[Embedded](https://docs.rs/uf-valence/latest/valence/index.html#embedded-one-process) /
+[Remote (wire)](https://docs.rs/uf-valence/latest/valence/index.html#remote-wire).
+
+Valence is an in-process ORM: one host process owns the router. There is no coordinator/worker split. “Remote” means a wire client to an external database.
+
+### 1. Embedded mem — `quickstart` (standalone)
 
 ```bash
 cargo run -p uf-valence --example quickstart --features mem
-cargo run -p uf-valence --example multi_backend --features mem
-cargo run -p uf-valence --example quickstart_sqlite --features sqlite
-cargo run -p uf-valence --example quickstart_indradb --features indradb
-cargo run -p uf-valence --example surreal_embedded --features surreal
-cargo run -p uf-valence --example quickstart_telemetry --features mem,telemetry-console
-
-# Wire (skip when URL unset):
-DATABASE_URL=postgres://localhost/valence \
-  cargo run -p uf-valence --example quickstart_postgres --features postgres
-VALENCE_MONGODB_URI=mongodb://localhost:27017 \
-  cargo run -p uf-valence --example quickstart_mongodb --features mongodb
-VALENCE_REDIS_URL=redis://127.0.0.1:6379 \
-  cargo run -p uf-valence --example quickstart_redis --features redis
 ```
+
+Success: stdout prints `quickstart: schema … registered; Valence runtime ready`.
+
+### 2. Durable embedded — `quickstart_sqlite` (standalone)
+
+```bash
+cargo run -p uf-valence --example quickstart_sqlite --features sqlite
+```
+
+### 3. Multi-backend routing — `multi_backend` (standalone)
+
+One process, two logical mem backends + default key.
+
+```bash
+cargo run -p uf-valence --example multi_backend --features mem
+```
+
+### 4. Codegen → Model — workspace `codegen-host`
+
+Typed `Model` impls need host `build.rs` + `valence-codegen` (not a facade `[[example]]`).
+
+```bash
+cargo check -p codegen-host
+```
+
+### 5. Cross-backend hop + query — workspace `cross-backend-model-host`
+
+One process, two backends (Project on mem, Task on sqlite): create rows, BelongsTo/HasMany hop, `Model::query`.
+
+```bash
+cargo run -p cross-backend-model-host
+```
+
+Success: stdout prints `cross-backend-model-host: Project(mem) ↔ Task(sqlite) hop + query OK (…)`.
+
+### 6. Remote wire — `quickstart_postgres` (optional)
+
+Start Postgres, set the shared URL, then run one example process (skips cleanly when unset):
+
+```bash
+export DATABASE_URL=postgres://localhost/valence
+cargo run -p uf-valence --example quickstart_postgres --features postgres
+```
+
+MongoDB / Redis follow the same pattern with `VALENCE_MONGODB_URI` / `VALENCE_REDIS_URL` (see Other examples).
+
+### Other examples
+
+| Example | Topology | Features | Notes |
+|---------|----------|----------|-------|
+| `hybrid_multi_logical` | Embedded | `hybrid,mem` | Hybrid primary under several logical names |
+| `surreal_embedded` | Embedded | `surreal` | Surreal mem engine boot |
+| `quickstart_indradb` | Embedded | `indradb` | Graph backend boot |
+| `quickstart_mongodb` | Remote (wire) | `mongodb` | Requires `VALENCE_MONGODB_URI` |
+| `quickstart_redis` | Remote (wire) | `redis` | Requires `VALENCE_REDIS_URL` |
+| `quickstart_telemetry` | Embedded | `mem,telemetry-console` | `ConsoleSink` port |
+
+### Workspace host proofs (not facade examples)
+
+| Crate | Role |
+|-------|------|
+| [`examples/codegen-host`](../examples/codegen-host/) | Codegen → generated `Model` |
+| [`examples/cross-backend-model-host`](../examples/cross-backend-model-host/) | Hop + query demo (path step 5) |
+| [`examples/product-model-host`](../examples/product-model-host/) | Product schemas / connections |
+| [`examples/acme-valence-backend-stub`](../examples/acme-valence-backend-stub/) | Third-party `DatabaseBackend` checklist |
+| [`examples/admin-runtime-host`](../examples/admin-runtime-host/) | Admin / `QueryCore` smoke |
 
 ## Configuration
 

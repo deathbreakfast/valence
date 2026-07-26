@@ -1,7 +1,7 @@
 //! Boot Valence with the embedded SQLite backend (in-memory database).
 //!
 //! ```bash
-//! cargo run -p valence --example quickstart_sqlite --features sqlite
+//! cargo run -p uf-valence --example quickstart_sqlite --features sqlite
 //! ```
 
 #![allow(

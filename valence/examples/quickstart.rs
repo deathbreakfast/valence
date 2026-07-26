@@ -1,7 +1,7 @@
 //! Quick start: declare a schema, boot an in-memory [`Valence`] runtime, prove registry discovery.
 //!
 //! ```bash
-//! cargo run -p valence --example quickstart --features mem
+//! cargo run -p uf-valence --example quickstart --features mem
 //! ```
 
 #![allow(

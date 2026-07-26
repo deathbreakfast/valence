@@ -26,13 +26,15 @@ cargo test -p valence-e2e --features surreal-rocksdb -- --ignored
 
 ### Examples and docs
 
+Canonical path and full catalog: [`valence/README.md`](../valence/README.md#how-to-run-examples).
+
 ```bash
 RUSTDOCFLAGS="-D warnings" cargo doc -p uf-valence --all-features --no-deps
 cargo test --doc -p uf-valence-core -p uf-valence
 cargo run -p uf-valence --example quickstart --features mem
 cargo run -p uf-valence --example quickstart_sqlite --features sqlite
-cargo run -p uf-valence --example quickstart_indradb --features indradb
-cargo run -p uf-valence --example surreal_embedded --features surreal
+cargo run -p uf-valence --example multi_backend --features mem
+cargo run -p cross-backend-model-host
 ```
 
 ## Line coverage (CI artifact)

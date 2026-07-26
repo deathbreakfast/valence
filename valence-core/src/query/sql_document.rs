@@ -6,9 +6,8 @@ use crate::safe_ident::assert_safe_ident;
 ///
 /// Callers that accept untrusted field names must use [`sql_doc_column_checked`].
 pub fn sql_doc_column(field: &str) -> String {
-    sql_doc_column_checked(field).unwrap_or_else(|_| {
-        "json_extract(body, '$.__valence_rejected_ident')".to_string()
-    })
+    sql_doc_column_checked(field)
+        .unwrap_or_else(|_| "json_extract(body, '$.__valence_rejected_ident')".to_string())
 }
 
 /// Map a field name to a SQL document column expression after charset validation.

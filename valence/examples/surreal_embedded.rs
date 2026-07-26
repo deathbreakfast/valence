@@ -1,7 +1,7 @@
 //! Connect an embedded Surreal engine and wire it through [`ValenceBuilder`].
 //!
 //! ```bash
-//! cargo run -p valence --example surreal_embedded --features surreal
+//! cargo run -p uf-valence --example surreal_embedded --features surreal
 //! ```
 
 #![allow(

@@ -198,7 +198,7 @@ jobs:
         run: bash scripts/gate.sh
       - name: Codegen / runtime verify
         run: |
-          cargo test -p uf-valence-core -- --test-threads=1
+          cargo test -p uf-valence-core --features compiler-surreal -- --test-threads=1
           cargo test -p uf-valence-codegen -- --test-threads=1
           # Process-global telemetry/deletion harness state requires serial tests.
           cargo test -p valence-testkit -- --test-threads=1
@@ -225,7 +225,8 @@ jobs:
         run: bash scripts/gate.sh
       - name: Test core crates
         run: |
-          cargo test -p uf-valence-core -p uf-valence-telemetry -p uf-valence-macros -p uf-valence-backend-mem
+          cargo test -p uf-valence-core --features compiler-surreal
+          cargo test -p uf-valence-telemetry -p uf-valence-macros -p uf-valence-backend-mem
       - name: Check public crate
         run: |
           cargo check -p uf-valence --no-default-features

@@ -61,7 +61,8 @@ mod tests {
         let project_id = created.id().expect("id").id();
 
         // Step 3 — Create child Task with BelongsTo RecordId pointing at the project row.
-        let task = Task::new("ship".to_string(), RecordId::new("project", project_id)).expect("new");
+        let task =
+            Task::new("ship".to_string(), RecordId::new("project", project_id)).expect("new");
         Task::create(task, &valence).await.expect("create task");
 
         // Step 4 — Read and merge on the parent model.

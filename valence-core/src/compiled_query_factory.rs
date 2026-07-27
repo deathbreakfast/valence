@@ -407,6 +407,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "compiler-surreal")]
     fn ownership_count_surreal_keeps_group_all() {
         let cq = count_ownership_rows_for_schema(
             KnownEngines::SURREALDB,

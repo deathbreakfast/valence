@@ -21,6 +21,7 @@ use valence::{
 
 #[tokio::main]
 async fn main() -> valence::Result<()> {
+    // Step 1 — Register heterogeneous backends: Project schema → mem/default, Task → sqlite/archive.
     let valence = Valence::builder()
         .add_backend("default", Arc::new(InMemoryBackend::new()))
         .add_backend("archive", Arc::new(SqliteBackend::connect_memory().await?))
@@ -30,6 +31,7 @@ async fn main() -> valence::Result<()> {
         })
         .build()?;
 
+    // Step 2 — Prove per-table routing matches schema `database:` evaluators.
     assert_eq!(
         valence.backend_for_table("xb_project")?.engine_id(),
         MEM_ENGINE_ID
@@ -39,6 +41,7 @@ async fn main() -> valence::Result<()> {
         SQLITE_ENGINE_ID
     );
 
+    // Step 3 — Create rows on their respective backends (connection stores cross-table RecordId).
     let created = Project::create(Project::new("alpha".into())?, &valence).await?;
     let project_id = created.id().expect("project id").id().to_string();
     let task = Task::create(
@@ -50,21 +53,21 @@ async fn main() -> valence::Result<()> {
     )
     .await?;
 
-    // BelongsTo / HasMany navigation across backends.
+    // Step 4 — BelongsTo / HasMany navigation across backends (hard guarantee for this layout).
     let project = task.get_project(&valence).await?;
     assert_eq!(project.name(), "alpha");
     let tasks = Task::get_from_project(&project, &valence).await?;
     assert_eq!(tasks.len(), 1);
 
-    // Same-backend filter query (Project lives on mem).
+    // Step 5 — Same-backend filter query (Project lives entirely on mem).
     let by_name = Project::query(&valence)
         .where_name(StringPredicate::Equals("alpha".into()))
         .await?;
     assert_eq!(by_name.len(), 1);
     assert_eq!(by_name[0].id().expect("project id").id(), project_id);
 
-    // Nested HasMany predicate + hop query (API shape). Mem↔sqlite nested EXISTS may
-    // return empty in 0.1.x — navigation above is the hard guarantee for this layout.
+    // Step 6 — Nested HasMany EXISTS + hop query API shape.
+    // Limitation (0.1.x): mem↔sqlite nested EXISTS may return empty — navigation (step 4) is the lesson.
     let nested = Project::query(&valence)
         .where_tasks_has_results(|q| {
             q.where_string("title".into(), StringPredicate::Equals("first task".into()))

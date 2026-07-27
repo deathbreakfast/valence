@@ -1,4 +1,8 @@
-//! Hop-pair model host: Project on hop_a, Task on hop_b (any physical backends).
+//! Testkit fixture: generated Project/Task models with abstract engine ids.
+//!
+//! `hop_a` / `hop_b` are placeholder engine slugs — `valence-testkit` registers any physical
+//! adapter pair under those keys for matrix rows. Not a runnable application host; see
+//! [`cross-backend-model-host`](../cross-backend-model-host/) for end-to-end hop navigation.
 
 #![allow(
     clippy::unwrap_used,

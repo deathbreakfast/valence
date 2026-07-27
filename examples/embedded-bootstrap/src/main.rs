@@ -30,15 +30,19 @@ valence_schema! {
 
 #[tokio::main]
 async fn main() {
+    // Step 1 — Connect Surreal embedded (mem engine here; swap EmbeddedEngine::RocksDb + path for durable).
     let db = connect_embedded_at_path(EmbeddedEngine::Mem, "", "demo", "demo")
         .await
         .expect("connect");
+
+    // Step 2 — Discover logical names from linked valence_schema! inventory and build a shared router.
     let router = bootstrap_embedded_router_from_inventory(
         db,
         RegisterEmbeddedLogicalNamesOptions::default(),
     )
     .expect("bootstrap router");
 
+    // Step 3 — Attach pre-built router to Valence (default key matches DemoItem's database: evaluator).
     let default_key = valence::router_key("default", SURREAL_ENGINE_ID);
     let valence = Valence::builder()
         .database_router(Arc::clone(&router))
@@ -46,6 +50,7 @@ async fn main() {
         .build()
         .expect("valence");
 
+    // Step 4 — Same router powers background ValenceFactory builds (request-scoped actor injection).
     let background =
         RouterValenceFactory::arc(router, RouterValenceFactoryConfig::new(default_key))
             .build(&serde_json::json!({"role": "system"}))

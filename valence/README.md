@@ -32,7 +32,9 @@ uf-valence = { git = "https://github.com/deathbreakfast/valence", package = "uf-
 
 ## How to run examples
 
-Canonical teaching path (start here). Topology docs:
+**Walkthrough ladder:** [`examples/README.md`](../examples/README.md) — ordered path from quickstarts through workspace hosts to testkit fixtures.
+
+Topology docs:
 [Embedded](https://docs.rs/uf-valence/latest/valence/index.html#embedded-one-process) /
 [Remote (wire)](https://docs.rs/uf-valence/latest/valence/index.html#remote-wire).
 
@@ -62,7 +64,7 @@ cargo run -p uf-valence --example multi_backend --features mem
 
 ### 4. Codegen → Model — workspace `codegen-host`
 
-Typed `Model` impls need host `build.rs` + `valence-codegen` (not a facade `[[example]]`).
+Typed `Model` impls need host `build.rs` + `valence-codegen` (not a single-file `[[example]]`).
 Proof is the co-located test in `examples/codegen-host/src/lib.rs`.
 
 ```bash
@@ -101,15 +103,21 @@ MongoDB / Redis follow the same pattern with `VALENCE_MONGODB_URI` / `VALENCE_RE
 | `quickstart_redis` | Remote (wire) | `redis` | Requires `VALENCE_REDIS_URL` |
 | `quickstart_telemetry` | Embedded | `mem,telemetry-console` | `ConsoleSink` port |
 
-### Workspace host proofs (not facade examples)
+### Workspace host proofs (not crate `[[example]]`s)
+
+See [`examples/README.md`](../examples/README.md) for the full ordered ladder.
 
 | Crate | Role |
 |-------|------|
+| [`examples/minimal-schema`](../examples/minimal-schema/) | Compile-only `valence_schema!` |
 | [`examples/codegen-host`](../examples/codegen-host/) | Codegen → generated `Model` |
+| [`examples/product-model-host`](../examples/product-model-host/) | Product schemas / connections / deletion |
 | [`examples/cross-backend-model-host`](../examples/cross-backend-model-host/) | Hop + query demo (path step 5) |
-| [`examples/product-model-host`](../examples/product-model-host/) | Product schemas / connections |
-| [`examples/acme-valence-backend-stub`](../examples/acme-valence-backend-stub/) | Third-party `DatabaseBackend` checklist |
 | [`examples/admin-runtime-host`](../examples/admin-runtime-host/) | Admin / `QueryCore` smoke |
+| [`examples/embedded-bootstrap`](../examples/embedded-bootstrap/) | Surreal inventory bootstrap |
+| [`examples/acme-valence-backend-stub`](../examples/acme-valence-backend-stub/) | Third-party `DatabaseBackend` checklist |
+| [`examples/hop-pair-model-host`](../examples/hop-pair-model-host/) | Testkit fixture — adapter-pair hop models |
+| [`examples/hop-chain-model-host`](../examples/hop-chain-model-host/) | Testkit fixture — four-table hop chain |
 
 ## Configuration
 

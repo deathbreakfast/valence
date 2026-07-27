@@ -148,19 +148,27 @@ Follow the numbered **Getting started** guide in `cargo doc -p uf-valence` (wire
 | Doc | For |
 |-----|-----|
 | `cargo doc -p uf-valence --open` | Getting started, API map, examples |
+| [`examples/README.md`](examples/README.md) | **Ordered walkthrough ladder** (quickstarts → workspace hosts → testkit fixtures) |
 | [`valence/README.md`](valence/README.md) | Feature flags, configuration precedence, env vars |
 | [`valence-macros/README.md`](valence-macros/README.md) | Schema DSL field reference |
 | [`valence-codegen/README.md`](valence-codegen/README.md) | Build pipeline — model generation |
+| [`examples/minimal-schema/`](examples/minimal-schema/) | Compile-only `valence_schema!` |
 | [`examples/codegen-host/`](examples/codegen-host/) | End-to-end codegen → `Model` |
+| [`examples/product-model-host/`](examples/product-model-host/) | Product schemas, connections, deletion queue |
 | [`examples/cross-backend-model-host/`](examples/cross-backend-model-host/) | Mem↔sqlite hop + `Model::query` |
-| [`examples/product-model-host/`](examples/product-model-host/) | Product-shaped schemas and connections |
+| [`examples/admin-runtime-host/`](examples/admin-runtime-host/) | Admin / `QueryCore` smoke |
+| [`examples/embedded-bootstrap/`](examples/embedded-bootstrap/) | Surreal inventory bootstrap |
 | [`examples/acme-valence-backend-stub/`](examples/acme-valence-backend-stub/) | Third-party adapter checklist |
+| [`examples/hop-pair-model-host/`](examples/hop-pair-model-host/) | Testkit fixture — adapter-pair hop models |
+| [`examples/hop-chain-model-host/`](examples/hop-chain-model-host/) | Testkit fixture — four-table hop chain |
 | `cargo doc -p uf-valence-core --open` | `DatabaseBackend`, `ports`, `ValenceBuilder` |
 | Per-crate READMEs | Backend- and crate-specific entry points |
 
 ### How to run examples
 
-Full runbook: [`valence/README.md`](valence/README.md#how-to-run-examples)
+Full walkthrough ladder: [`examples/README.md`](examples/README.md).
+
+Runbook details: [`valence/README.md`](valence/README.md#how-to-run-examples)
 ([Embedded](https://docs.rs/uf-valence/latest/valence/index.html#embedded-one-process) /
 [Remote (wire)](https://docs.rs/uf-valence/latest/valence/index.html#remote-wire)).
 

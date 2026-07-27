@@ -20,6 +20,7 @@ mod tests {
 
     #[tokio::test]
     async fn generated_widget_impl_model_compiles_and_runs() {
+        // Step 1 — Boot Valence with mem backend + System actor (generated CRUD expects actor context).
         let valence = Valence::builder()
             .add_backend("default", Arc::new(InMemoryBackend::new()))
             .with_actor(Actor::System {
@@ -28,14 +29,17 @@ mod tests {
             .build()
             .expect("build");
 
+        // Step 2 — Create: `Widget` is generated from schemas/widget_valence_schema.rs via build.rs.
         let widget = Widget::new("demo".to_string()).expect("new");
         let created = Widget::create(widget, &valence).await.expect("create");
         assert_eq!(created.name(), "demo");
         let id = created.id().expect("id").id();
 
+        // Step 3 — Read back the persisted row.
         let fetched = Widget::get(id, &valence).await.expect("get");
         assert!(fetched.is_some());
 
+        // Step 4 — Partial update via JSON merge patch.
         let patch = serde_json::json!({ "name": "updated" });
         let merged = Widget::merge(id, patch, &valence).await.expect("merge");
         assert_eq!(merged.name(), "updated");

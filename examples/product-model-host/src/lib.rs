@@ -44,6 +44,7 @@ mod tests {
 
     #[tokio::test]
     async fn product_model_crud_and_delete_queue() {
+        // Step 1 — Boot mem Valence; connections and delete hooks run in-process.
         let valence = Valence::builder()
             .add_backend("default", Arc::new(InMemoryBackend::new()))
             .with_actor(Actor::System {
@@ -52,15 +53,18 @@ mod tests {
             .build()
             .expect("build");
 
+        // Step 2 — Create parent Project (HasMany side of connection in project_valence_schema.rs).
         let project = Project::new("alpha".to_string()).expect("new");
         let created = Project::create(project, &valence)
             .await
             .expect("create project");
         let project_id = created.id().expect("id").id();
 
+        // Step 3 — Create child Task with BelongsTo RecordId pointing at the project row.
         let task = Task::new("ship".to_string(), RecordId::new("project", project_id)).expect("new");
         Task::create(task, &valence).await.expect("create task");
 
+        // Step 4 — Read and merge on the parent model.
         let fetched = Project::get(project_id, &valence).await.expect("get");
         assert_eq!(fetched.as_ref().map(|p| p.name().as_str()), Some("alpha"));
 
@@ -69,6 +73,7 @@ mod tests {
             .expect("merge");
         assert_eq!(merged.name(), "beta");
 
+        // Step 5 — Delete enqueues a DeletionRequest (on_delete: Cascade in schema); capture via dispatcher hook.
         let captured = capture_dispatcher();
         Project::delete(project_id, &valence)
             .await

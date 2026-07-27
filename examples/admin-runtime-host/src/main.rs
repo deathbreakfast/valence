@@ -17,6 +17,7 @@ use valence::{
 async fn main() {
     register_noop_deletion_dispatcher_for_tests();
 
+    // Step 1 — Seed a raw row on mem (admin reads bypass generated Model when exploring arbitrary tables).
     let backend: Arc<dyn DatabaseBackend> = Arc::new(InMemoryBackend::new());
     backend
         .create_record(
@@ -26,6 +27,7 @@ async fn main() {
         .await
         .expect("seed smoke row");
 
+    // Step 2 — Build Valence sharing the same backend Arc (QueryCore routes through the router).
     let valence = Valence::builder()
         .add_backend("default", Arc::clone(&backend))
         .with_actor(Actor::System {
@@ -34,16 +36,19 @@ async fn main() {
         .build()
         .expect("build valence");
 
+    // Step 3 — List registered schema and trait metadata (inventory-linked macros populate these).
     let schemas = SchemaRegistry::global().list_schemas();
     let traits = TraitRegistry::global().list_traits();
     println!("schemas={schemas:?} traits={traits:?}");
 
+    // Step 4 — Point read via QueryCore (JSON entity, privacy-aware path).
     let row = QueryCore::get_record_json("smoke", "demo", &valence)
         .await
         .expect("read")
         .expect("row exists");
     println!("entity={row}");
 
+    // Step 5 — Listing helper for admin UIs / tooling.
     let ids = QueryCore::latest_ids("smoke", 10, &valence)
         .await
         .expect("latest_ids");

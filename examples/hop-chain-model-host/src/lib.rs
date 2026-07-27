@@ -1,4 +1,8 @@
-//! Hop-chain host: Org→Project→Task→Note on hop_a..hop_d.
+//! Testkit fixture: four-table hop chain with abstract engine ids.
+//!
+//! Org → Project → Task → Note on `hop_a`…`hop_d` for nested inner-query hop E2E (bm-v25).
+//! Matrix and bench harnesses depend on this crate; integrators should run
+//! [`cross-backend-model-host`](../cross-backend-model-host/) for a real-engine demo.
 
 #![allow(
     clippy::unwrap_used,

@@ -1,6 +1,6 @@
 # valence-core
 
-Ports: `DatabaseBackend`, `DatabaseRouter`, `ValenceBuilder`, host injectable traits. Prefer the `valence` facade crate for application code; this crate exposes the port contracts for assembling `Valence::builder()`, injecting host ports, and implementing `DatabaseBackend` (and optional evaluators) in adapter crates.
+Ports: `DatabaseBackend`, `DatabaseRouter`, `ValenceBuilder`, host injectable traits. Prefer the public `valence` crate (`uf-valence`) for application code; this crate exposes the port contracts for assembling `Valence::builder()`, injecting host ports, and implementing `DatabaseBackend` (and optional evaluators) in adapter crates.
 
 ## API documentation
 

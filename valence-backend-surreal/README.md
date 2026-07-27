@@ -45,7 +45,7 @@ let router = bootstrap_embedded_router_from_inventory(
 )?;
 ```
 
-Runnable (facade): `cargo run -p uf-valence --example surreal_embedded --features surreal`
+Runnable: `cargo run -p uf-valence --example surreal_embedded --features surreal`
 
 Inventory bootstrap host: [`examples/embedded-bootstrap/`](../examples/embedded-bootstrap/).
 

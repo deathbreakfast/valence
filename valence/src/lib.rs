@@ -42,7 +42,8 @@
 //! The host process is a client to an external database (Postgres, MongoDB, Redis, Surreal
 //! remote). Start the service, set the URL env var, then run one example process.
 //!
-//! Runnable catalog: crate [`README.md`](https://github.com/unified-field-dev/valence/blob/main/valence/README.md#how-to-run-examples).
+//! Runnable catalog: [`examples/README.md`](https://github.com/unified-field-dev/valence/blob/main/examples/README.md)
+//! (walkthrough ladder) and crate [`README.md`](https://github.com/unified-field-dev/valence/blob/main/valence/README.md#how-to-run-examples).
 //!
 //! # Getting started
 //!
@@ -183,7 +184,7 @@
 //! belongs on another backend.
 //!
 //! See [`valence_schema!`] and [`valence_trait_schema!`] for the DSL field reference.
-//! Minimal schema example: workspace `examples/minimal-schema`.
+//! Minimal schema example: workspace [`examples/minimal-schema`](https://github.com/unified-field-dev/valence/blob/main/examples/minimal-schema/).
 //! Macros and `valence-codegen` share one syn DSL parser (`valence-schema-dsl`), so
 //! host `schemas/*_valence_schema.rs` files accept the same syntax and semantics
 //! (including `database:` evaluators).
@@ -216,8 +217,8 @@
 //! ```
 //!
 //! Schema files under `schemas/` are **scan inputs** for codegen; they are not
-//! `mod`-linked. End-to-end proof: workspace `examples/codegen-host` and
-//! `examples/product-model-host`. See the
+//! `mod`-linked. End-to-end proof: workspace [`examples/codegen-host`](https://github.com/unified-field-dev/valence/blob/main/examples/codegen-host/) and
+//! [`examples/product-model-host`](https://github.com/unified-field-dev/valence/blob/main/examples/product-model-host/). See the
 //! [valence-codegen](../valence_codegen/index.html) crate docs for custom roots via
 //! `build_with` / `CodegenConfig`.
 //!
@@ -235,7 +236,7 @@
 //! Widget::delete(created.id(), &valence).await?;
 //! ```
 //!
-//! Product-shaped schemas and connections: `examples/product-model-host`.
+//! Product-shaped schemas and connections: [`examples/product-model-host`](https://github.com/unified-field-dev/valence/blob/main/examples/product-model-host/).
 //!
 //! ## 5. Route multiple backends
 //!
@@ -262,7 +263,7 @@
 //! Runnable: `cargo run -p uf-valence --example multi_backend --features mem`
 //!
 //! Heterogeneous engines (mem Project ↔ sqlite Task) with hop + query:
-//! `cargo run -p cross-backend-model-host`.
+//! `cargo run -p cross-backend-model-host`. Walkthrough: [`examples/README.md`](https://github.com/unified-field-dev/valence/blob/main/examples/README.md).
 //!
 //! ## 6. Inject host ports
 //!
@@ -318,23 +319,25 @@
 //!
 //! | Task | Start here |
 //! |------|------------|
+//! | **Example walkthrough** | [`examples/README.md`](https://github.com/unified-field-dev/valence/blob/main/examples/README.md) |
 //! | Schema DSL fields | [`valence_schema!`], [`valence_trait_schema!`] |
-//! | Build-time codegen | [valence-codegen](../valence_codegen/index.html), `examples/codegen-host` |
+//! | Build-time codegen | [valence-codegen](../valence_codegen/index.html), [`examples/codegen-host`](https://github.com/unified-field-dev/valence/blob/main/examples/codegen-host/) |
 //! | Wire storage | [`Valence::builder()`], [`InMemoryBackend`] |
-//! | Model CRUD | [`Model`], `examples/product-model-host` |
+//! | Model CRUD | [`Model`], [`examples/product-model-host`](https://github.com/unified-field-dev/valence/blob/main/examples/product-model-host/) |
 //! | Multi-backend routing | [`DatabaseRouter`], `multi_backend` example |
-//! | Cross-backend hop + query | `cargo run -p cross-backend-model-host` |
+//! | Cross-backend hop + query | [`examples/cross-backend-model-host`](https://github.com/unified-field-dev/valence/blob/main/examples/cross-backend-model-host/) |
 //! | Hybrid multi-logical | `hybrid_multi_logical` example (`hybrid,mem`) |
-//! | Custom adapter | [`DatabaseBackend`], `examples/acme-valence-backend-stub` |
+//! | Custom adapter | [`DatabaseBackend`], [`examples/acme-valence-backend-stub`](https://github.com/unified-field-dev/valence/blob/main/examples/acme-valence-backend-stub/) |
+//! | Surreal inventory bootstrap | [`examples/embedded-bootstrap`](https://github.com/unified-field-dev/valence/blob/main/examples/embedded-bootstrap/) |
 //! | SQLite | [`SqliteBackend`], `quickstart_sqlite` example |
 //! | IndraDB | [`IndradbBackend`], `quickstart_indradb` example |
 //! | Surreal embedded | [`SurrealEmbeddedBackend`], `surreal_embedded` example |
 //! | Postgres | [`PostgresBackend`], `quickstart_postgres` (env-gated) |
 //! | MongoDB | [`MongoBackend`], `quickstart_mongodb` (env-gated) |
 //! | Redis | [`RedisBackend`], `quickstart_redis` (env-gated) |
-//! | Admin runtime | [`SchemaRegistry`], [`QueryCore`], `examples/admin-runtime-host` |
+//! | Admin runtime | [`SchemaRegistry`], [`QueryCore`], [`examples/admin-runtime-host`](https://github.com/unified-field-dev/valence/blob/main/examples/admin-runtime-host/) |
 //! | Config / env vars | crate [`README.md`](README.md) |
-//! | How to run examples | crate [`README.md`](https://github.com/unified-field-dev/valence/blob/main/valence/README.md#how-to-run-examples) |
+//! | How to run examples | [`examples/README.md`](https://github.com/unified-field-dev/valence/blob/main/examples/README.md) |
 //!
 //! # Entry points
 //!
@@ -354,6 +357,9 @@
 //!   `inventory` will not see them.
 //!
 //! # Runnable examples
+//!
+//! **Walkthrough ladder:** [`examples/README.md`](https://github.com/unified-field-dev/valence/blob/main/examples/README.md)
+//! — quickstarts, workspace hosts, and testkit hop fixtures in order.
 //!
 //! Canonical path (see crate README **How to run examples**):
 //!
@@ -377,6 +383,11 @@
 //! | `quickstart_mongodb` | `mongodb` | Requires `VALENCE_MONGODB_URI` |
 //! | `quickstart_redis` | `redis` | Requires `VALENCE_REDIS_URL` |
 //! | `quickstart_telemetry` | `mem,telemetry-console` | Console telemetry sink |
+//!
+//! Workspace hosts (see [`examples/README.md`](https://github.com/unified-field-dev/valence/blob/main/examples/README.md)):
+//! `minimal-schema`, `codegen-host`, `product-model-host`, `cross-backend-model-host`,
+//! `admin-runtime-host`, `embedded-bootstrap`, `acme-valence-backend-stub`.
+//! Hop crates (`hop-pair-model-host`, `hop-chain-model-host`) are testkit/matrix fixtures only.
 
 extern crate self as valence;
 

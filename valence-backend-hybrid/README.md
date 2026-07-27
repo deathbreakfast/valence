@@ -10,7 +10,7 @@ pub const ENGINE_ID: &str = "hybrid";
 
 ## Wiring
 
-See the facade example (mem primary, several logical names):
+See the `hybrid_multi_logical` example (mem primary, several logical names):
 
 ```bash
 cargo run -p uf-valence --example hybrid_multi_logical --features hybrid,mem

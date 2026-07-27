@@ -2,10 +2,7 @@
 
 Generated Project (mem / `default`) and Task (sqlite / `archive`) models with
 HasMany / BelongsTo connections — one process, two backends, hop + `Model::query`.
-
-## Audience
-
-Application developers learning heterogeneous routing, connection hops, and nested queries.
+Demonstrates heterogeneous routing, connection hops, and nested queries.
 
 ## Run
 

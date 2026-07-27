@@ -2,14 +2,7 @@
 
 Hybrid [`DatabaseBackend`](../valence-core/src/backend/port.rs): IndraDB warm-edge
 cache over a primary store (SQL in production; mem keeps the offline demo free of
-`DATABASE_URL`).
-
-## Audience
-
-| Reader | Use this crate for |
-|--------|-------------------|
-| **App developers** | Enable via public crate feature `hybrid` |
-| **Host integrators** | Multi-logical registration of one hybrid backend |
+`DATABASE_URL`). Enable via the public `valence` feature `hybrid` and register one hybrid backend under multiple logical names.
 
 ```rust
 pub const ENGINE_ID: &str = "hybrid";

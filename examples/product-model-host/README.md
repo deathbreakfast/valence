@@ -1,14 +1,10 @@
 # product-model-host
 
-Product-shaped schemas (projects/tasks), connections, and generated Model contract tests.
-
-## Audience
-
-Application developers extending beyond the minimal schema/codegen examples.
+Product-shaped schemas (projects/tasks), connections, and generated Model CRUD —
+including the deletion queue — demonstrated in `src/lib.rs` (`#[cfg(test)]`).
 
 ## Run
 
 ```bash
-cargo check -p product-model-host
-cargo test -p product-model-host --test model_contract
+cargo test -p product-model-host -- --test-threads=1
 ```

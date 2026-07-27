@@ -1,10 +1,6 @@
 # admin-runtime-host
 
-Boots admin runtime surfaces (`SchemaRegistry`, `QueryCore`, privacy) against a mem backend.
-
-## Audience
-
-Host integrators wiring admin/query tooling.
+Boots admin runtime surfaces (`SchemaRegistry`, `QueryCore`, privacy) against a mem backend — reference for wiring admin/query tooling.
 
 ## Run
 

@@ -1,14 +1,6 @@
 # valence-backend-redis
 
-Redis wire [`DatabaseBackend`](../valence-core/src/backend/port.rs) adapter.
-
-## Audience
-
-| Reader | Use this crate for |
-|--------|-------------------|
-| **App developers** | Enable via `valence` feature `redis` |
-| **Host integrators** | Remote Redis / fleet at boot |
-| **Adapter authors** | Wire builder + fleet routing pattern |
+Redis wire [`DatabaseBackend`](../valence-core/src/backend/port.rs) adapter. Enable via the public `valence` feature `redis` and wire remote Redis or fleet routing at boot.
 
 ```rust
 pub const ENGINE_ID: &str = "redis";

@@ -1,14 +1,6 @@
 # valence-core
 
-Ports: `DatabaseBackend`, `DatabaseRouter`, `ValenceBuilder`, host injectable traits.
-
-## Audience
-
-| Reader | Use this crate for |
-|--------|-------------------|
-| **Application developers** | Use via the `valence` crate; rarely depend on this crate directly |
-| **Host integrators** | Assemble `Valence::builder()` and inject ports |
-| **Adapter authors** | Implement `DatabaseBackend` and optional evaluators |
+Ports: `DatabaseBackend`, `DatabaseRouter`, `ValenceBuilder`, host injectable traits. Prefer the `valence` facade crate for application code; this crate exposes the port contracts for assembling `Valence::builder()`, injecting host ports, and implementing `DatabaseBackend` (and optional evaluators) in adapter crates.
 
 ## API documentation
 

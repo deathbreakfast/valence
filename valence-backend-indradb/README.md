@@ -1,14 +1,6 @@
 # valence-backend-indradb
 
-IndraDB embedded graph [`DatabaseBackend`](../valence-core/src/backend/port.rs) adapter.
-
-## Audience
-
-| Reader | Use this crate for |
-|--------|-------------------|
-| **App developers** | Enable via `valence` feature `indradb` |
-| **Host integrators** | In-process graph store |
-| **Adapter authors** | Graph-edge capability pattern |
+IndraDB embedded graph [`DatabaseBackend`](../valence-core/src/backend/port.rs) adapter. Enable via the public `valence` feature `indradb` for an in-process graph store; demonstrates graph-edge capability patterns for adapters.
 
 ```rust
 pub const ENGINE_ID: &str = "indradb";

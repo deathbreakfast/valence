@@ -1,14 +1,6 @@
 # valence-backend-sqlite
 
-SQLite [`DatabaseBackend`](../valence-core/src/backend/port.rs) adapter (embedded).
-
-## Audience
-
-| Reader | Use this crate for |
-|--------|-------------------|
-| **App developers** | Enable via `valence` feature `sqlite` |
-| **Host integrators** | Durable single-host storage |
-| **Adapter authors** | SQL document-row pattern shared with postgres |
+SQLite [`DatabaseBackend`](../valence-core/src/backend/port.rs) adapter (embedded). Enable via the public `valence` feature `sqlite` for durable single-host storage. Shares the SQL document-row pattern with postgres for adapter work.
 
 ```rust
 pub const ENGINE_ID: &str = "sqlite";

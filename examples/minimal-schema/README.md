@@ -1,10 +1,6 @@
 # minimal-schema
 
-Compile-only check that `valence_schema!` expands and registers metadata.
-
-## Audience
-
-Schema authors validating DSL syntax without codegen.
+Compile-only check that `valence_schema!` expands and registers metadata — validates DSL syntax without codegen.
 
 ## Run
 

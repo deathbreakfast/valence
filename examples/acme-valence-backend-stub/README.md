@@ -1,11 +1,6 @@
 # acme-valence-backend-stub
 
-Example third-party [`DatabaseBackend`](../../valence-core/src/backend/port.rs) with open `ENGINE_ID` (`acme_stub`). Exercises the `acme-stub` matrix row in `valence-testkit` / `valence-e2e` / `valence-bench` without a public crate feature flag.
-
-## Audience
-
-- **Adapter authors** — minimal reference for custom engine crates.
-- **Maintainers** — port contract + matrix catalog coverage for third-party adapters.
+Example third-party [`DatabaseBackend`](../../valence-core/src/backend/port.rs) with open `ENGINE_ID` (`acme_stub`). Exercises the `acme-stub` matrix row in `valence-testkit` / `valence-e2e` / `valence-bench` without a public crate feature flag. Minimal reference for custom engine crates and port contract + matrix catalog coverage for third-party adapters.
 
 ## Verify
 

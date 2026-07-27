@@ -1,14 +1,6 @@
 # valence-backend-mem
 
-In-memory [`DatabaseBackend`](../valence-core/src/backend/port.rs) reference adapter.
-
-## Audience
-
-| Reader | Use this crate for |
-|--------|-------------------|
-| **App developers** | Enable via `valence` feature `mem` (default) |
-| **Host integrators** | Default embedded storage; `install_default_mem_router()` for tests |
-| **Adapter authors** | Template for third-party `ENGINE_ID` + port impl |
+In-memory [`DatabaseBackend`](../valence-core/src/backend/port.rs) reference adapter. Enable via the public `valence` feature `mem` (default) for embedded storage; use `install_default_mem_router()` in tests. Serves as a template for third-party `ENGINE_ID` + port implementations.
 
 ```rust
 pub const ENGINE_ID: &str = "inmemory_mem";

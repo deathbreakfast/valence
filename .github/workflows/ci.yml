@@ -203,8 +203,8 @@ jobs:
           # Process-global telemetry/deletion harness state requires serial tests.
           cargo test -p valence-testkit -- --test-threads=1
           cargo test -p valence-e2e --test admin_runtime_catalog -- --test-threads=1
-          cargo test -p codegen-host --test compile_generated_models -- --test-threads=1
-          cargo test -p product-model-host --test model_contract -- --test-threads=1
+          cargo test -p codegen-host -- --test-threads=1
+          cargo test -p product-model-host -- --test-threads=1
           cargo check -p codegen-host -p product-model-host -p admin-runtime-host
       - name: Routing invariants
         run: |

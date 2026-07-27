@@ -1,14 +1,6 @@
 # valence-backend-mongodb
 
-MongoDB wire [`DatabaseBackend`](../valence-core/src/backend/port.rs) adapter.
-
-## Audience
-
-| Reader | Use this crate for |
-|--------|-------------------|
-| **App developers** | Enable via `valence` feature `mongodb` |
-| **Host integrators** | Remote Mongo at boot |
-| **Adapter authors** | Wire builder + `from_env_defaults` pattern |
+MongoDB wire [`DatabaseBackend`](../valence-core/src/backend/port.rs) adapter. Enable via the public `valence` feature `mongodb` and wire remote Mongo at boot using the builder's `from_env_defaults` pattern.
 
 ```rust
 pub const ENGINE_ID: &str = "mongodb";

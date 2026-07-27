@@ -7,10 +7,6 @@ publish = false
 [lib]
 path = "src/lib.rs"
 
-[[bin]]
-name = "codegen-host"
-path = "src/main.rs"
-
 [dependencies]
 valence = { path = "../../valence", features = ["mem"], package = "uf-valence" }
 serde = { workspace = true, features = ["derive"] }

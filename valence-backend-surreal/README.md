@@ -1,12 +1,6 @@
 # valence-backend-surreal
 
-SurrealDB-backed [`DatabaseBackend`](https://github.com/unified-field-dev/valence) reference adapter. All `surrealdb` dependencies stay in this crate only — never in `valence-core`.
-
-## Audience
-
-- **Adapter authors:** study alongside `valence-backend-mem` for the port contract.
-- **Host integrators:** enable via public crate `surreal` feature after wiring at boot.
-- **Maintainers:** `./scripts/gate.sh` blocks `surrealdb` in `valence-core`.
+SurrealDB-backed [`DatabaseBackend`](https://github.com/unified-field-dev/valence) reference adapter. All `surrealdb` dependencies stay in this crate only — never in `valence-core`. Enable via the public `valence` `surreal` feature after wiring at boot; study alongside `valence-backend-mem` for the port contract. `./scripts/gate.sh` blocks `surrealdb` in `valence-core`.
 
 ## Features
 

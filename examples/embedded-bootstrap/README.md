@@ -1,10 +1,6 @@
 # embedded-bootstrap
 
-Surreal embedded inventory bootstrap — discover logical DB names from linked schemas.
-
-## Audience
-
-Host integrators using `surreal-inventory` helpers.
+Surreal embedded inventory bootstrap — discover logical DB names from linked schemas using `surreal-inventory` helpers.
 
 ## Run
 

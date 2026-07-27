@@ -20,8 +20,8 @@ cargo test -p valence-e2e
 # Codegen / model runtime subset
 cargo test -p valence-e2e --test admin_runtime_catalog
 cargo test -p valence-e2e --test model_runtime_catalog
-cargo test -p codegen-host --test compile_generated_models
-cargo test -p product-model-host --test model_contract
+cargo test -p codegen-host -- --test-threads=1
+cargo test -p product-model-host -- --test-threads=1
 
 # Extended (RocksDB matrix)
 export VALENCE_BENCH_ROCKSDB=1

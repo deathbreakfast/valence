@@ -1,11 +1,6 @@
 # valence-e2e
 
-Matrix-driven integration tests exercising the shared `valence-testkit` correctness catalog.
-
-## Audience
-
-- **Maintainers** — add catalog scenarios in `valence-testkit` and expand matrix tests here.
-- **Host integrators** — reference for host-side adapter matrix expansion after git pin.
+Matrix-driven integration tests exercising the shared `valence-testkit` correctness catalog. Add catalog scenarios in `valence-testkit` and expand matrix tests here; useful reference when expanding host-side adapter matrix coverage after a git pin.
 
 ## Tests
 

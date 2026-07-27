@@ -1,13 +1,6 @@
 # valence-macros
 
-Procedural macros for Valence schemas.
-
-## Audience
-
-| Reader | Use this crate for |
-|--------|-------------------|
-| **App developers** | `valence_schema!` and `valence_trait_schema!` via the `valence` crate |
-| **Library maintainers** | Macro expansion and DSL syntax |
+Procedural macros for Valence schemas — use `valence_schema!` and `valence_trait_schema!` through the `valence` crate. Macro expansion and DSL syntax are documented here for workspace development.
 
 ## `valence_schema!`
 

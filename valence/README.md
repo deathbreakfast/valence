@@ -1,17 +1,10 @@
 # valence
 
-Public crate re-exporting core, macros, and optional reference adapters.
+Public crate re-exporting core, macros, and optional reference adapters — the primary dependency for Valence applications. Enable backend features explicitly (see below) and wire runtime storage with `Valence::builder()` at boot.
 
 Overview and quickstart: [../README.md](../README.md).
 
 **Source of truth:** `cargo doc -p uf-valence --open`
-
-## Audience
-
-| Reader | Use this crate for |
-|--------|-------------------|
-| **App developers** | Primary dependency; enable backend features explicitly |
-| **Host integrators** | `Valence::builder()` and prelude re-exports |
 
 ## Cargo features
 
@@ -70,9 +63,10 @@ cargo run -p uf-valence --example multi_backend --features mem
 ### 4. Codegen → Model — workspace `codegen-host`
 
 Typed `Model` impls need host `build.rs` + `valence-codegen` (not a facade `[[example]]`).
+Proof is the co-located test in `examples/codegen-host/src/lib.rs`.
 
 ```bash
-cargo check -p codegen-host
+cargo test -p codegen-host
 ```
 
 ### 5. Cross-backend hop + query — workspace `cross-backend-model-host`

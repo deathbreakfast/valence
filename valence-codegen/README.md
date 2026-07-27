@@ -1,13 +1,8 @@
 # valence-codegen
 
-Build-time code generation for Valence models from `valence_schema!` and `valence_trait_schema!` sources.
+Build-time code generation for Valence models from `valence_schema!` and `valence_trait_schema!` sources. Host crates own schema scan paths in `build.rs` / CI; generators live here while DSL parse/AST is shared with `valence-macros` via `valence-schema-dsl`.
 
 Depends on `valence-core` + shared [`valence-schema-dsl`](../valence-schema-dsl/README.md); generated output targets the `valence` crate.
-
-## Audience
-
-- **Host integrators** — own schema scan paths in `build.rs` / CI.
-- **Maintainers** — generators live here; DSL parse/AST is shared with `valence-macros` via `valence-schema-dsl`.
 
 ## Parser / metadata parity
 
@@ -56,5 +51,5 @@ See [`examples/codegen-host/`](../examples/codegen-host/).
 ```bash
 cargo check -p uf-valence-codegen
 cargo test -p uf-valence-codegen
-cargo check -p codegen-host
+cargo test -p codegen-host
 ```

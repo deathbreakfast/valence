@@ -361,7 +361,7 @@
 //! cargo run -p uf-valence --example quickstart --features mem
 //! cargo run -p uf-valence --example quickstart_sqlite --features sqlite
 //! cargo run -p uf-valence --example multi_backend --features mem
-//! cargo check -p codegen-host
+//! cargo test -p codegen-host
 //! cargo run -p cross-backend-model-host
 //! ```
 //!

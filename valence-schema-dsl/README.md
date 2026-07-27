@@ -1,13 +1,6 @@
 # valence-schema-dsl
 
-Shared syn-based parser for `valence_schema!` and `valence_trait_schema!`.
-
-## Audience
-
-| Reader | Use this crate for |
-|--------|-------------------|
-| **Maintainers** | One grammar/AST shared by macros and codegen |
-| **App developers** | Prefer the `valence` crate macros — do not depend on this crate directly |
+Shared syn-based parser for `valence_schema!` and `valence_trait_schema!`. One grammar/AST shared by macros and codegen — use the `valence` crate macros instead of depending on this crate directly.
 
 ## Role
 

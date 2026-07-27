@@ -14,6 +14,8 @@
 
 **Status:** v0.1.1 · MIT · crates.io package **`uf-valence`** (the name `valence` is taken); Rust imports stay `use valence::…`.
 
+Import `uf-valence` with the `mem` feature for a minimal embedded stack and follow rustdoc Getting started for a full walkthrough. Contributions: [CONTRIBUTING.md](CONTRIBUTING.md).
+
 ## Schema DSL
 
 ```rust
@@ -143,17 +145,17 @@ Follow the numbered **Getting started** guide in `cargo doc -p uf-valence` (wire
 
 ## Documentation
 
-| Doc | Audience |
-|-----|----------|
-| `cargo doc -p uf-valence --open` | Application developers — getting started, API map, examples |
-| [`valence/README.md`](valence/README.md) | Integrators — feature flags, configuration precedence, env vars |
-| [`valence-macros/README.md`](valence-macros/README.md) | Schema authors — DSL field reference |
+| Doc | For |
+|-----|-----|
+| `cargo doc -p uf-valence --open` | Getting started, API map, examples |
+| [`valence/README.md`](valence/README.md) | Feature flags, configuration precedence, env vars |
+| [`valence-macros/README.md`](valence-macros/README.md) | Schema DSL field reference |
 | [`valence-codegen/README.md`](valence-codegen/README.md) | Build pipeline — model generation |
 | [`examples/codegen-host/`](examples/codegen-host/) | End-to-end codegen → `Model` |
 | [`examples/cross-backend-model-host/`](examples/cross-backend-model-host/) | Mem↔sqlite hop + `Model::query` |
 | [`examples/product-model-host/`](examples/product-model-host/) | Product-shaped schemas and connections |
 | [`examples/acme-valence-backend-stub/`](examples/acme-valence-backend-stub/) | Third-party adapter checklist |
-| `cargo doc -p uf-valence-core --open` | Adapter authors / host integrators — `DatabaseBackend`, `ports`, `ValenceBuilder` |
+| `cargo doc -p uf-valence-core --open` | `DatabaseBackend`, `ports`, `ValenceBuilder` |
 | Per-crate READMEs | Backend- and crate-specific entry points |
 
 ### How to run examples
@@ -167,7 +169,7 @@ Full runbook: [`valence/README.md`](valence/README.md#how-to-run-examples)
 cargo run -p uf-valence --example quickstart --features mem
 cargo run -p uf-valence --example quickstart_sqlite --features sqlite
 cargo run -p uf-valence --example multi_backend --features mem
-cargo check -p codegen-host
+cargo test -p codegen-host
 cargo run -p cross-backend-model-host
 
 # Optional remote wire (skip when URL unset):
@@ -193,12 +195,6 @@ Yes. One [`DatabaseRouter`](valence-core/src/router.rs) holds heterogeneous back
 In the separate [`valence-backend-surreal`](valence-backend-surreal/) crate — never in `valence-core`.
 
 See `cargo doc -p uf-valence-core` (`DatabaseBackend`, `ports`) and `examples/acme-valence-backend-stub`.
-
-## Audience
-
-- **Application developers** — import `valence` with `mem`; follow rustdoc Getting started; use codegen for `Model`.
-- **Host integrators** — assemble `ValenceBuilder` at boot; register backends and inject ports.
-- **Library maintainers** — see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Development
 

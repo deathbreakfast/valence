@@ -1,14 +1,6 @@
 # valence-backend-postgres
 
-Postgres wire [`DatabaseBackend`](../valence-core/src/backend/port.rs) adapter.
-
-## Audience
-
-| Reader | Use this crate for |
-|--------|-------------------|
-| **App developers** | Enable via `valence` feature `postgres` |
-| **Host integrators** | Remote Postgres at boot |
-| **Adapter authors** | Wire builder + `from_env_defaults` pattern |
+Postgres wire [`DatabaseBackend`](../valence-core/src/backend/port.rs) adapter. Enable via the public `valence` feature `postgres` and wire remote Postgres at boot using the builder's `from_env_defaults` pattern.
 
 ```rust
 pub const ENGINE_ID: &str = "postgres";

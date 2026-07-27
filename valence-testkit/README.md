@@ -1,12 +1,6 @@
 # valence-testkit
 
-Matrix bootstrap, [`DatabaseBackend`](../valence-core/src/backend/port.rs) port contract, and declarative scenario catalog for `valence-e2e` and `valence-bench`.
-
-## Audience
-
-- **Maintainers** — extend matrix dimensions, catalog scenarios, and backend contract checks.
-- **Adapter authors** — wire `run_backend_contract` in adapter integration tests before adding matrix rows.
-- **Host integrators** — optional dev-dependency for integration tests (same patterns as `valence-e2e`).
+Matrix bootstrap, [`DatabaseBackend`](../valence-core/src/backend/port.rs) port contract, and declarative scenario catalog for `valence-e2e` and `valence-bench`. Extend matrix dimensions, catalog scenarios, and backend contract checks here; wire `run_backend_contract` in adapter integration tests before adding matrix rows. Optional dev-dependency for integration tests using the same patterns as `valence-e2e`.
 
 ## Matrix dimensions
 

@@ -30,11 +30,20 @@ let valence = Valence::builder()
 
 Builder: `PostgresBackend::builder().url(...).from_env_defaults().build().await?`
 
+## Docker
+
+```bash
+docker run --rm -d --name valence-postgres -p 5432:5432 -e POSTGRES_PASSWORD=postgres postgres:16
+export DATABASE_URL=postgres://postgres:postgres@127.0.0.1:5432/postgres
+```
+
 Runnable (skips when unset):
 
 ```bash
-DATABASE_URL=postgres://localhost/valence \
+DATABASE_URL=postgres://postgres:postgres@127.0.0.1:5432/postgres \
   cargo run -p uf-valence --example quickstart_postgres --features postgres
 ```
+
+Live multi-remote routing alongside Redis: [`examples/remote-multi-backend-host`](../examples/remote-multi-backend-host/).
 
 See `DatabaseBackend` rustdoc (`cargo doc -p uf-valence-core --open`).

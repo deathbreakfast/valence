@@ -54,7 +54,8 @@ valence-backend-surreal = { workspace = true, optional = true }
 [dev-dependencies]
 tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
 valence-backend-surreal = { workspace = true, features = ["embedded-mem", "inventory"] }
-surrealdb = { workspace = true, features = ["kv-mem"] }
+surrealdb = { workspace = true, features = ["kv-mem", "protocol-ws", "protocol-http"] }
+tempfile = { workspace = true }
 
 [[example]]
 name = "quickstart"
@@ -79,6 +80,14 @@ required-features = ["indradb"]
 [[example]]
 name = "surreal_embedded"
 required-features = ["surreal"]
+
+[[example]]
+name = "surreal_rocksdb"
+required-features = ["surreal-rocksdb"]
+
+[[example]]
+name = "surreal_remote"
+required-features = ["surreal-remote"]
 
 [[example]]
 name = "quickstart_postgres"

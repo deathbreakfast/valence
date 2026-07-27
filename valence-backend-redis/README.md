@@ -29,11 +29,20 @@ let valence = Valence::builder()
     .build()?;
 ```
 
+## Docker
+
+```bash
+docker run --rm -d --name valence-redis -p 6379:6379 redis:7
+export VALENCE_REDIS_URL=redis://127.0.0.1:6379
+```
+
 Runnable (skips when unset):
 
 ```bash
 VALENCE_REDIS_URL=redis://127.0.0.1:6379 \
   cargo run -p uf-valence --example quickstart_redis --features redis
 ```
+
+Live multi-remote routing alongside Postgres: [`examples/remote-multi-backend-host`](../examples/remote-multi-backend-host/).
 
 See `DatabaseBackend` rustdoc (`cargo doc -p uf-valence-core --open`).

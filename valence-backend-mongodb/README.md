@@ -28,10 +28,17 @@ let valence = Valence::builder()
     .build()?;
 ```
 
+## Docker
+
+```bash
+docker run --rm -d --name valence-mongodb -p 27017:27017 mongo:7
+export VALENCE_MONGODB_URI=mongodb://127.0.0.1:27017
+```
+
 Runnable (skips when unset):
 
 ```bash
-VALENCE_MONGODB_URI=mongodb://localhost:27017 \
+VALENCE_MONGODB_URI=mongodb://127.0.0.1:27017 \
   cargo run -p uf-valence --example quickstart_mongodb --features mongodb
 ```
 

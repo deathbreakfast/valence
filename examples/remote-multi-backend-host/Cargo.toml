@@ -1,0 +1,18 @@
+[package]
+name = "remote-multi-backend-host"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Example: live Project(Postgres) + Task(Redis) multi-remote routing"
+
+[[bin]]
+name = "remote-multi-backend-host"
+path = "src/main.rs"
+
+[dependencies]
+valence = { path = "../../valence", features = ["postgres", "redis"], package = "uf-valence" }
+serde_json = { workspace = true }
+tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
+
+[lints]
+workspace = true

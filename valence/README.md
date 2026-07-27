@@ -83,14 +83,15 @@ Success: stdout prints `cross-backend-model-host: Project(mem) ↔ Task(sqlite) 
 
 ### 6. Remote wire — `quickstart_postgres` (optional)
 
-Start Postgres, set the shared URL, then run one example process (skips cleanly when unset):
+Start Postgres with Docker, set the shared URL, then run one example process (skips cleanly when unset):
 
 ```bash
-export DATABASE_URL=postgres://localhost/valence
+docker run --rm -d --name valence-postgres -p 5432:5432 -e POSTGRES_PASSWORD=postgres postgres:16
+export DATABASE_URL=postgres://postgres:postgres@127.0.0.1:5432/postgres
 cargo run -p uf-valence --example quickstart_postgres --features postgres
 ```
 
-MongoDB / Redis follow the same pattern with `VALENCE_MONGODB_URI` / `VALENCE_REDIS_URL` (see Other examples).
+MongoDB / Redis follow the same pattern with `VALENCE_MONGODB_URI` / `VALENCE_REDIS_URL` (see Other examples and the [Docker one-liners](../examples/README.md#docker-one-liners) in the examples walkthrough). For all four remote backends live at once, see workspace [`remote-multi-backend-host`](../examples/remote-multi-backend-host/) below.
 
 ### Other examples
 
@@ -98,6 +99,8 @@ MongoDB / Redis follow the same pattern with `VALENCE_MONGODB_URI` / `VALENCE_RE
 |---------|----------|----------|-------|
 | `hybrid_multi_logical` | Embedded | `hybrid,mem` | Hybrid primary under several logical names |
 | `surreal_embedded` | Embedded | `surreal` | Surreal mem engine boot |
+| `surreal_rocksdb` | Embedded (disk) | `surreal-rocksdb` | On-disk embedded Surreal via RocksDB |
+| `surreal_remote` | Remote (wire) | `surreal-remote` | Requires `VALENCE_SURREAL_URL` |
 | `quickstart_indradb` | Embedded | `indradb` | Graph backend boot |
 | `quickstart_mongodb` | Remote (wire) | `mongodb` | Requires `VALENCE_MONGODB_URI` |
 | `quickstart_redis` | Remote (wire) | `redis` | Requires `VALENCE_REDIS_URL` |
@@ -114,6 +117,8 @@ See [`examples/README.md`](../examples/README.md) for the full ordered ladder.
 | [`examples/product-model-host`](../examples/product-model-host/) | Product schemas / connections / deletion |
 | [`examples/cross-backend-model-host`](../examples/cross-backend-model-host/) | Hop + query demo (path step 5) |
 | [`examples/admin-runtime-host`](../examples/admin-runtime-host/) | Admin / `QueryCore` smoke |
+| [`examples/privacy-actor-ports`](../examples/privacy-actor-ports/) | `SecretProvider` / `ActorFactory` / `DatabaseEndpointResolver` ports + privacy deny/allow |
+| [`examples/remote-multi-backend-host`](../examples/remote-multi-backend-host/) | Live Postgres + Redis multi-remote routing |
 | [`examples/embedded-bootstrap`](../examples/embedded-bootstrap/) | Surreal inventory bootstrap |
 | [`examples/acme-valence-backend-stub`](../examples/acme-valence-backend-stub/) | Third-party `DatabaseBackend` checklist |
 | [`examples/hop-pair-model-host`](../examples/hop-pair-model-host/) | Testkit fixture — adapter-pair hop models |

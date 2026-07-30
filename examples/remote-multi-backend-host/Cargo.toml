@@ -2,6 +2,7 @@
 name = "remote-multi-backend-host"
 version = "0.1.0"
 edition = "2021"
+license.workspace = true
 publish = false
 description = "Example: live Project(Postgres) + Task(Redis) multi-remote routing"
 

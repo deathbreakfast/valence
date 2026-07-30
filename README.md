@@ -199,9 +199,6 @@ Publish (or depend on) a crate that implements [`DatabaseBackend`](valence-core/
 **Q: Can one `Valence` use multiple engines?**  
 Yes. One [`DatabaseRouter`](valence-core/src/router.rs) holds heterogeneous backends. Schema `database:` evaluators pick the router key per table.
 
-**Q: Where does SurrealDB live?**  
-In the separate [`valence-backend-surreal`](valence-backend-surreal/) crate — never in `valence-core`.
-
 See `cargo doc -p uf-valence-core` (`DatabaseBackend`, `ports`) and `examples/acme-valence-backend-stub`.
 
 ## Development

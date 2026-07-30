@@ -6,7 +6,7 @@
 //! - Model API: only `chrono::DateTime<chrono::Utc>` (never raw integers on the public surface).
 //!
 //! On deserialize, an RFC3339 string is accepted as a best-effort read tolerance for
-//! legacy rows. This is not a migration framework.
+//! legacy rows. This helper only round-trips datetime fields.
 
 use chrono::{DateTime, TimeZone, Utc};
 use serde::{Deserialize, Deserializer, Serializer};

@@ -1,6 +1,6 @@
 # hop-chain-model-host
 
-**Testkit / matrix fixture** — not a day-to-day application host. Four-table chain (Org → Project → Task → Note) on abstract engines `hop_a`…`hop_d` for nested inner-query hop E2E and bm-v25 matrix rows. Adapter developers and bench/e2e harnesses depend on this crate; application integrators should use [`cross-backend-model-host`](../cross-backend-model-host/) for a runnable multi-backend demo.
+**Testkit / matrix fixture** for adapter developers and bench/e2e harnesses. Four-table chain (Org → Project → Task → Note) on abstract engines `hop_a`…`hop_d` for nested inner-query hop E2E and bm-v25 matrix rows. Application integrators should use [`cross-backend-model-host`](../cross-backend-model-host/) for a runnable multi-backend demo.
 
 ## Prerequisites
 

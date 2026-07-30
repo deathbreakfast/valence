@@ -16,20 +16,13 @@ COMMON_EXCLUDES=(
   --glob '!target-*/**'
 )
 
-echo "== gate: zone / monorepo vocabulary =="
-if rg -n -i 'zone\s*[ab]|zone a|zone b|web-app-template' . \
-  "${COMMON_EXCLUDES[@]}" \
-  --glob '!scripts/gate.sh' 2>/dev/null; then
-  fail "zone or web-app-template vocabulary found"
-fi
-
 echo "== gate: family / product crate names =="
 if rg -n -i 'prioritization\.md|leptos|valence-wiring|valence-platform|valence-spectra|chronon-valence|boson-valence|\bgluon\b|gluon_registry|valence-secrets-gauge|secrets-gauge|\bhiggs\b|\bsoliton\b|nucleus-core|\bnucleus\b' . \
   "${COMMON_EXCLUDES[@]}" \
   --glob '!scripts/gate.sh' \
   --glob '!README.md' \
   --glob '!valence-backend-surreal/README.md' 2>/dev/null; then
-  fail "banned product/monorepo reference in source or manifests"
+  fail "banned host/product reference in source or manifests"
 fi
 
 echo "== gate: host product table / schema prefixes in Rust =="

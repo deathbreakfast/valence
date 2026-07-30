@@ -1,6 +1,6 @@
 # AWS E2E & bench campaign runbook
 
-Full matrix correctness and performance campaigns run on AWS — not the constrained local WSL gate.
+Full matrix correctness and performance campaigns run on AWS.
 
 ## Env contract
 

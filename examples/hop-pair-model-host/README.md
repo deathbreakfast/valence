@@ -1,6 +1,6 @@
 # hop-pair-model-host
 
-**Testkit / matrix fixture** — not a day-to-day application host. Supplies generated Project/Task models with abstract engine ids `hop_a` / `hop_b` so `valence-testkit` can register any physical `StorageAdapter` pair under stable keys. Adapter and matrix developers use this crate; integrators building apps should start with [`cross-backend-model-host`](../cross-backend-model-host/) instead.
+**Testkit / matrix fixture** for adapter and matrix developers. Supplies generated Project/Task models with abstract engine ids `hop_a` / `hop_b` so `valence-testkit` can register any physical `StorageAdapter` pair under stable keys. Integrators building apps should start with [`cross-backend-model-host`](../cross-backend-model-host/) instead.
 
 ## Prerequisites
 

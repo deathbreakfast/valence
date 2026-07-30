@@ -2,6 +2,7 @@
 name = "hop-chain-model-host"
 version = "0.1.0"
 edition = "2021"
+license.workspace = true
 publish = false
 description = "Org→Project→Task→Note chain across hop_a..hop_d engines"
 

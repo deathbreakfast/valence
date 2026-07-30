@@ -2,6 +2,7 @@
 name = "cross-backend-model-host"
 version = "0.1.0"
 edition = "2021"
+license.workspace = true
 publish = false
 description = "Example: Project(mem) ↔ Task(sqlite) hop + Model::query"
 

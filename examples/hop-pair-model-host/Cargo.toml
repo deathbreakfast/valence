@@ -2,6 +2,7 @@
 name = "hop-pair-model-host"
 version = "0.1.0"
 edition = "2021"
+license.workspace = true
 publish = false
 description = "Project/Task schemas with abstract hop_a/hop_b engines for Cartesian pair tests"
 

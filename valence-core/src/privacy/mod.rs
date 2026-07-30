@@ -7,7 +7,8 @@
 //! [`crate::query::QueryCore::execute`] drops rows the viewer cannot read.
 //! Absent field-level policy means no extra restriction beyond entity checks.
 //!
-//! Privacy is not a builder port — declare `policies:` on schemas (or `impl` [`PolicyEvaluator`]).
+//! Declare `policies:` on schemas (or `impl` [`PolicyEvaluator`]). Privacy evaluation is
+//! schema-driven.
 //!
 //! ```
 //! use valence_core::actor::Actor;

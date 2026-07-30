@@ -150,7 +150,7 @@ fn alias_engine_registers_second_key() {
         backend,
         &["default"],
         RegisterBackendLogicalNamesOptions {
-            // Same dialect migration shim only — not a cross-engine alias.
+            // Same-dialect migration shim for a legacy engine id.
             register_alias_engine_id: Some("legacy_mem"),
         },
     );

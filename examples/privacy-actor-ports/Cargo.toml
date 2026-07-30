@@ -2,6 +2,7 @@
 name = "privacy-actor-ports"
 version = "0.1.0"
 edition = "2021"
+license.workspace = true
 publish = false
 description = "Example: SecretProvider / ActorFactory / DatabaseEndpointResolver ports + privacy deny/allow"
 

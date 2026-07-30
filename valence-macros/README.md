@@ -25,7 +25,7 @@ Defines a schema using a Rust DSL. The macro registers schema metadata into
 
 ### Backend selection
 
-`database:` takes an evaluator constant, not a backend instance:
+`database:` takes an evaluator constant (a `DatabaseFromEngine` value), then you register the matching adapter by logical name:
 
 ```rust
 use valence::{Database, DatabaseFromEngine, SQLITE_ENGINE_ID};

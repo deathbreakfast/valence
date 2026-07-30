@@ -18,7 +18,7 @@ use valence::{
     PrivacyOperation, SchemaRegistry, StaticEndpointResolver, Valence,
 };
 
-// Step 1 — Schema-level `policies:` are the privacy contract, not a builder port. Each operation
+// Step 1 — Schema-level `policies:` are the privacy contract. Each operation
 // gets its own allow-list; empty/absent lists default-deny every actor except `Actor::System`.
 valence::valence_schema! {
     Note {

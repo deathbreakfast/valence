@@ -20,7 +20,7 @@
 #![allow(clippy::unwrap_or_default)]
 #![allow(clippy::implicit_clone)]
 #![allow(clippy::enum_glob_use)]
-// Internal test harness: Result APIs and fluent builders are not a published surface.
+// Internal test harness: Result APIs and fluent builders are for CI and integration authors.
 #![allow(
     clippy::missing_errors_doc,
     clippy::missing_panics_doc,

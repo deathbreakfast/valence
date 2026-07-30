@@ -19,6 +19,7 @@ publishables=(
   valence-backend-postgres/Cargo.toml
   valence-backend-mongodb/Cargo.toml
   valence-backend-indradb/Cargo.toml
+  valence-backend-hybrid/Cargo.toml
   valence-backend-redis/Cargo.toml
   valence-backend-surreal/Cargo.toml
 )

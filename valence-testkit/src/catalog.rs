@@ -291,8 +291,105 @@ pub fn embedded_catalog() -> &'static [CatalogEntry] {
         entry("m2m-relate-smoke", PathKind::Happy, |_| {
             ScenarioSpec::m2m_relate_smoke()
         }),
+        entry("ttl-native-expire", PathKind::Happy, |storage| {
+            ScenarioSpec::ttl_native_expire(ttl_record_id(storage, "native"))
+        }),
+        entry("ttl-deferred-stamp", PathKind::Happy, |storage| {
+            ScenarioSpec::ttl_deferred_stamp(ttl_record_id(storage, "deferred"))
+        }),
+        entry("ttl-create-only-no-refresh", PathKind::Happy, |storage| {
+            ScenarioSpec::ttl_create_only_no_refresh(ttl_record_id(storage, "create_only"))
+        }),
+        entry_sad("ttl-non-native-warn", |_| {
+            ScenarioSpec::ttl_non_native_warn()
+        }),
+        entry("ttl-deferred-sweep-delete", PathKind::Happy, |storage| {
+            ScenarioSpec::ttl_deferred_sweep_delete(ttl_record_id(storage, "sweep_delete"))
+        }),
+        entry("iter-scan-complete", PathKind::Happy, |_| {
+            ScenarioSpec::iter_scan_complete()
+        }),
+        entry("on-delete-cascade-same-backend", PathKind::Happy, |_| {
+            ScenarioSpec::on_delete_cascade_same_backend()
+        }),
+        entry("on-delete-set-null", PathKind::Happy, |_| {
+            ScenarioSpec::on_delete_set_null()
+        }),
+        entry("on-delete-remove-edge", PathKind::Happy, |_| {
+            ScenarioSpec::on_delete_remove_edge()
+        }),
+        entry_sad("on-delete-restrict-blocks", |_| {
+            ScenarioSpec::on_delete_restrict_blocks()
+        }),
+        entry("on-delete-cascade-cross-engine", PathKind::Happy, |_| {
+            ScenarioSpec::on_delete_cascade_cross_engine()
+        }),
+        entry("on-delete-set-null-cross-engine", PathKind::Happy, |_| {
+            ScenarioSpec::on_delete_set_null_cross_engine()
+        }),
     ];
     CATALOG
+}
+
+fn ttl_record_id(storage: StorageAdapter, kind: &str) -> String {
+    format!("ttl_{}_{kind}", storage.slug())
+}
+
+/// Whether a TTL catalog entry applies to this storage adapter.
+fn ttl_catalog_applies(entry_id: &str, storage: StorageAdapter) -> bool {
+    if !entry_id.starts_with("ttl-") {
+        return true;
+    }
+    if matches!(storage, StorageAdapter::AcmeStub) {
+        return false;
+    }
+    match entry_id {
+        "ttl-native-expire" => matches!(storage, StorageAdapter::Redis | StorageAdapter::MongoDb),
+        "ttl-deferred-stamp" => !matches!(storage, StorageAdapter::Redis | StorageAdapter::MongoDb),
+        "ttl-deferred-sweep-delete" => matches!(
+            storage,
+            StorageAdapter::Mem
+                | StorageAdapter::Sqlite
+                | StorageAdapter::Postgres
+                | StorageAdapter::HybridIndraPg
+                | StorageAdapter::SurrealMem
+                | StorageAdapter::SurrealRocksdb
+        ),
+        "ttl-create-only-no-refresh" => !matches!(storage, StorageAdapter::IndraDb),
+        "ttl-non-native-warn" => {
+            !matches!(storage, StorageAdapter::Redis | StorageAdapter::MongoDb)
+        }
+        _ => true,
+    }
+}
+
+/// Whether an iter catalog entry applies to this storage adapter.
+fn iter_catalog_applies(entry_id: &str, storage: StorageAdapter) -> bool {
+    if entry_id != "iter-scan-complete" {
+        return true;
+    }
+    // Platform paging for redis/mongo/indra is unsupported until keyset pushdown exists.
+    !matches!(
+        storage,
+        StorageAdapter::Redis
+            | StorageAdapter::MongoDb
+            | StorageAdapter::IndraDb
+            | StorageAdapter::AcmeStub
+    )
+}
+
+/// Whether an OnDelete catalog entry applies to this storage adapter.
+fn on_delete_catalog_applies(entry_id: &str, storage: StorageAdapter) -> bool {
+    if !entry_id.starts_with("on-delete-") {
+        return true;
+    }
+    if matches!(storage, StorageAdapter::AcmeStub) {
+        return false;
+    }
+    if entry_id.contains("cross-engine") {
+        return crate::on_delete::on_delete_cross_engine_secondary(storage).is_some();
+    }
+    true
 }
 
 /// Storage adapters participating in default PR CI matrix.
@@ -338,6 +435,21 @@ pub async fn run_catalog_entry(entry: &CatalogEntry, storage: StorageAdapter) {
     }
 
     if entry.generated_model_only && !storage.supports_model_runtime() {
+        return;
+    }
+
+    if !ttl_catalog_applies(entry.id, storage) {
+        return;
+    }
+    if !iter_catalog_applies(entry.id, storage) {
+        eprintln!(
+            "catalog entry {}/{}: iter unsupported on this adapter until paging fix — skipping",
+            entry.id,
+            storage.slug()
+        );
+        return;
+    }
+    if !on_delete_catalog_applies(entry.id, storage) {
         return;
     }
 
@@ -423,6 +535,12 @@ pub fn catalog_for_storage(storage: StorageAdapter) -> Vec<&'static CatalogEntry
                 return false;
             }
             if entry.generated_model_only && !storage.supports_model_runtime() {
+                return false;
+            }
+            if !ttl_catalog_applies(entry.id, storage) {
+                return false;
+            }
+            if !on_delete_catalog_applies(entry.id, storage) {
                 return false;
             }
             true

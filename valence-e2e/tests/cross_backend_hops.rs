@@ -9,7 +9,7 @@
 use valence_testkit::{
     directed_pairs, hop_quads_representative, hop_triples_representative,
     run_cross_backend_hop_contract, run_hop_chain_contract, run_hop_pair_contract,
-    run_hop_quad_contract, CrossBackendLayout,
+    run_hop_quad_contract, run_on_delete_hop_pairs, CrossBackendLayout,
 };
 
 #[test]
@@ -54,6 +54,13 @@ fn cross_backend_hop_quads_representative() {
         rt.block_on(run_hop_quad_contract(quad, None))
             .unwrap_or_else(|e| panic!("hop quad {}: {e}", quad.slug()));
     }
+}
+
+#[test]
+fn on_delete_hop_pairs_representative() {
+    let rt = tokio::runtime::Runtime::new().expect("runtime");
+    rt.block_on(run_on_delete_hop_pairs(None))
+        .expect("on-delete hop pairs");
 }
 
 #[test]

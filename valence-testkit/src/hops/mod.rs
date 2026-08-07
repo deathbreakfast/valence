@@ -7,7 +7,8 @@ mod layout;
 mod pair;
 
 pub use capability::{
-    pair_nested_where_skip, quad_nested_where_skip, triple_nested_where_skip, HopSkip,
+    hop_adapter_excluded, pair_nested_where_skip, quad_nested_where_skip, triple_nested_where_skip,
+    HopSkip,
 };
 
 pub use chain::{run_hop_chain_contract, run_hop_quad_contract};

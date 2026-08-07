@@ -1,7 +1,5 @@
 //! Valence core ports: storage routing, host-injectable traits, and runtime builder.
 //!
-//! **Audience:** adapter authors, host integrators, and generated model code.
-//!
 //! ## Stack position
 //!
 //! ```text
@@ -16,6 +14,8 @@
 //! - [`DatabaseRouter`] — heterogeneous engine registry
 //! - [`ports`] — secrets, actor, endpoints (host-injectable)
 //! - [`Model`] — generated CRUD surface
+//! - [`ttl`] — schema TTL policy, [`prepare_create_content`], ensure via
+//!   [`Valence::ensure_ttl_for_all`] / [`Valence::ensure_ttl_for_table`]
 //!
 //! ## Examples
 //!
@@ -36,6 +36,7 @@
 //! - Engine SDKs and product host crates must never appear in this crate
 //!   (use `valence-backend-*` and separate host adapters)
 //! - Host-owned codegen lives in `valence-codegen`, not here
+//! - Table TTL is create-only; Deferred backends need the platform sweeper (Future)
 
 #![cfg_attr(test, allow(clippy::expect_used, clippy::unwrap_used))]
 
@@ -103,7 +104,7 @@ pub use actor::Actor;
 pub use actor_policy::{
     is_system_shaped_actor, ActorJsonPolicy, ActorTrust, RejectExternalSystemActor,
 };
-pub use admin_entity_delete::queue_delete_entity;
+pub use admin_entity_delete::{queue_delete_entity, queue_delete_entity_returning_run_id};
 #[cfg(feature = "compiler-indradb")]
 pub use backend::IndraQueryCompiler;
 #[cfg(feature = "compiler-mongodb")]
@@ -124,8 +125,13 @@ pub use connection::{
 pub use currency::{Currency, CurrencyCode, CurrencyError, ParseCurrencyCodeError};
 pub use database_retry::retry_on_database_tx_conflict;
 pub use deletion::{
+    apply_deletion_node, check_dag_delete_privacy, check_dag_delete_privacy_with_registry,
     dispatch, is_deletion_dispatcher_registered, register_deletion_dispatcher,
     register_noop_deletion_dispatcher_for_tests, DeletionRequest, DeletionService,
+};
+#[doc(hidden)]
+pub use deletion::{
+    dispatch_queued_delete_side_effects, DeleteSideEffectDescriptor, DeleteSideEffectDispatchFn,
 };
 pub use entity::ValenceEntity;
 pub use error::{Error, Result};
@@ -190,7 +196,10 @@ pub use trait_schema::{
     TraitDefinition, TraitDefinitionInit, TraitFieldDef, TraitImplementor, TraitPolicies,
     TraitPolicyRules,
 };
-pub use ttl::{BackendTtlCapability, SchemaTtlPolicy};
+pub use ttl::{
+    list_ttl_table_names, prepare_create_content, reset_ttl_warn_state_for_tests,
+    ttl_warn_emit_count_for_tests, BackendTtlCapability, SchemaTtlPolicy, EXPIRE_AT_FIELD,
+};
 pub use valence_telemetry::{ConsoleSink, NoOpSink, TelemetrySink};
 
 #[cfg(feature = "instrumentation")]

@@ -72,6 +72,7 @@ pub(super) fn model_delete_method_tokens(cx: &CrudEmitCtx<'_>) -> TokenStream {
                     dag.restrict_violations
                 )));
             }
+            valence::deletion::check_dag_delete_privacy(&dag, valence).await?;
 
             #mark
 

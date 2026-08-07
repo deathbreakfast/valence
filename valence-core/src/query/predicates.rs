@@ -40,6 +40,8 @@ pub enum StringPredicate {
     StartsWith(String),
     /// Field ends with value
     EndsWith(String),
+    /// Field is lexicographically less than value (e.g. RFC3339 expire-at vs now)
+    LessThan(String),
 }
 
 /// Predicate for datetime fields.

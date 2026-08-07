@@ -130,6 +130,40 @@ impl ScoreTracker {
         }
     }
 }
+#[cfg(not(target_family = "wasm"))]
+fn __valence_delete_side_effect_dispatch_score_tracker(
+    v: valence::Valence,
+    row: serde_json::Value,
+) -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send + 'static>> {
+    Box::pin(async move {
+        let before: ScoreTracker = match serde_json::from_value(row) {
+            Ok(m) => m,
+            Err(e) => {
+                valence::instrumentation::record_side_effect_error(
+                    "score_tracker",
+                    &e.to_string(),
+                );
+                return;
+            }
+        };
+        let field_changes = ScoreTrackerFieldChanges::compute(Some(&before), None);
+        let mutation = valence::Mutation::new(
+            valence::MutationKind::Delete,
+            Some(before),
+            None,
+            field_changes,
+            &v,
+        );
+        ScoreTracker::dispatch_side_effects(&mutation).await;
+    })
+}
+#[cfg(not(target_family = "wasm"))]
+const _: () = {
+    valence::inventory::submit! {
+        valence::deletion::DeleteSideEffectDescriptor { table_name : "score_tracker",
+        dispatch : __valence_delete_side_effect_dispatch_score_tracker, }
+    }
+};
 #[async_trait::async_trait]
 impl valence::Model for ScoreTracker {
     type Schema = ScoreTrackerSchema;
@@ -238,6 +272,12 @@ impl valence::Model for ScoreTracker {
                     async move {
                         let backend = valence
                             .backend_for_table(<Self as valence::Model>::table_name())?;
+                        let mut record = record;
+                        valence::prepare_create_content(
+                            <Self as valence::Model>::table_name(),
+                            backend.as_ref(),
+                            &mut record,
+                        )?;
                         let row = backend
                             .create_record(Self::table_name(), record)
                             .await?;
@@ -301,6 +341,7 @@ impl valence::Model for ScoreTracker {
                 ),
             );
         }
+        valence::deletion::check_dag_delete_privacy(&dag, valence).await?;
         if before_snapshot.is_some() {
             let __bare = valence::ownership::normalize_record_id_for_ownership(id);
             valence::ownership::OwnershipService::mark_pending_deletion(
@@ -348,9 +389,18 @@ impl valence::Model for ScoreTracker {
                 || {
                     let id = id.clone();
                     let record = record.clone();
+                    let creating = before_snapshot.is_none();
                     async move {
                         let backend = valence
                             .backend_for_table(<Self as valence::Model>::table_name())?;
+                        let mut record = record;
+                        if creating {
+                            valence::prepare_create_content(
+                                <Self as valence::Model>::table_name(),
+                                backend.as_ref(),
+                                &mut record,
+                            )?;
+                        }
                         let row = backend
                             .upsert_record(Self::table_name(), id.as_str(), record)
                             .await?;

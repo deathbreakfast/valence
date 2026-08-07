@@ -2,8 +2,10 @@
 
 mod crud;
 mod model;
+mod on_delete;
 mod privacy;
 mod telemetry;
+mod ttl;
 mod wiring;
 
 use crate::bootstrap::BootstrapSession;
@@ -52,6 +54,19 @@ pub(super) async fn run_step(
         | ScenarioStep::AssertValidationRejects { .. }
         | ScenarioStep::AssertValidationAccepts { .. } => privacy::run(session, step, mode).await,
         ScenarioStep::AssertTelemetryCounter { .. } => telemetry::run(session, step, mode).await,
+        ScenarioStep::EnsureTtlForAll
+        | ScenarioStep::EnsureTtlForTable
+        | ScenarioStep::TtlNativeOrLingerContract { .. }
+        | ScenarioStep::TtlCreateOnlyNoRefresh { .. }
+        | ScenarioStep::TtlNonNativeWarnOnce
+        | ScenarioStep::TtlDeferredSweepDelete { .. }
+        | ScenarioStep::IterScanComplete => ttl::run(session, step, mode).await,
+        ScenarioStep::OnDeleteCascadeSameBackend
+        | ScenarioStep::OnDeleteSetNull
+        | ScenarioStep::OnDeleteRemoveEdge
+        | ScenarioStep::OnDeleteRestrictBlocks
+        | ScenarioStep::OnDeleteCascadeCrossEngine
+        | ScenarioStep::OnDeleteSetNullCrossEngine => on_delete::run(session, step, mode).await,
     }
 }
 
@@ -97,5 +112,18 @@ pub(super) fn step_label(step: &ScenarioStep) -> String {
         ScenarioStep::ReadCacheSmoke => "read_cache_smoke".into(),
         ScenarioStep::QueryUnionJoinSmoke => "query_union_join_smoke".into(),
         ScenarioStep::M2mRelateSmoke => "m2m_relate_smoke".into(),
+        ScenarioStep::EnsureTtlForAll => "ensure_ttl_for_all".into(),
+        ScenarioStep::EnsureTtlForTable => "ensure_ttl_for_table".into(),
+        ScenarioStep::TtlNativeOrLingerContract { .. } => "ttl_native_or_linger".into(),
+        ScenarioStep::TtlCreateOnlyNoRefresh { .. } => "ttl_create_only_no_refresh".into(),
+        ScenarioStep::TtlNonNativeWarnOnce => "ttl_non_native_warn_once".into(),
+        ScenarioStep::TtlDeferredSweepDelete { .. } => "ttl_deferred_sweep_delete".into(),
+        ScenarioStep::IterScanComplete => "iter_scan_complete".into(),
+        ScenarioStep::OnDeleteCascadeSameBackend => "on_delete_cascade_same_backend".into(),
+        ScenarioStep::OnDeleteSetNull => "on_delete_set_null".into(),
+        ScenarioStep::OnDeleteRemoveEdge => "on_delete_remove_edge".into(),
+        ScenarioStep::OnDeleteRestrictBlocks => "on_delete_restrict_blocks".into(),
+        ScenarioStep::OnDeleteCascadeCrossEngine => "on_delete_cascade_cross_engine".into(),
+        ScenarioStep::OnDeleteSetNullCrossEngine => "on_delete_set_null_cross_engine".into(),
     }
 }

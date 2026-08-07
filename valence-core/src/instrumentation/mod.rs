@@ -8,6 +8,7 @@ pub(crate) mod metrics;
 pub(crate) mod privacy;
 pub(crate) mod query;
 pub(crate) mod timing;
+pub(crate) mod ttl;
 
 pub use backend::{wrap_backend, InstrumentedBackend};
 pub use deletion::{record_dag_computed, record_restrict_blocked, record_run_queued};

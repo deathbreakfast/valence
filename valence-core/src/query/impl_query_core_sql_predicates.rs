@@ -65,6 +65,10 @@ impl QueryCore {
                     params,
                 )
             }
+            StringPredicate::LessThan(s) => {
+                let params = vec![(param_key.clone(), serde_json::Value::String(s.clone()))];
+                (format!("{field} < ${param_key}"), params)
+            }
         }
     }
 

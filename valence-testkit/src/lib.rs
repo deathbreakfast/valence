@@ -40,6 +40,7 @@ mod hop_contract;
 mod hops;
 mod matrix;
 mod model_contract;
+mod on_delete;
 mod runner;
 mod scenario;
 
@@ -75,6 +76,11 @@ pub use model_contract::run_model_contract_acme_stub;
 pub use model_contract::run_model_contract_surreal_mem;
 pub use model_contract::{
     backend_for_storage, run_model_contract, run_model_contract_for, run_model_contract_mem,
+};
+pub use on_delete::{
+    on_delete_cross_engine_secondary, run_on_delete_cascade_cross_engine,
+    run_on_delete_cascade_same_backend, run_on_delete_hop_pairs, run_on_delete_remove_edge,
+    run_on_delete_restrict_blocks, run_on_delete_set_null, run_on_delete_set_null_cross_engine,
 };
 pub use runner::{RunMode, ScenarioResult, ScenarioRunner, StepTiming};
 pub use scenario::{ScenarioSpec, ScenarioStep};

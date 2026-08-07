@@ -10,6 +10,19 @@ use crate::query::QueryCore;
 use crate::runtime::Valence;
 use crate::schema::SchemaRegistry;
 
+/// Queue a privacy-checked deletion run for `table`/`id`.
+///
+/// # Errors
+///
+/// Returns an error when the requested operation cannot be completed.
+pub async fn queue_delete_entity(table: &str, id: &str, v: &Valence) -> Result<()> {
+    let _ = queue_delete_entity_returning_run_id(table, id, v).await?;
+    Ok(())
+}
+
+/// Like [`queue_delete_entity`], but returns the new `valence_deletion_run` id when a run
+/// was created (`None` when the row was already missing or already `pending_deletion`).
+///
 /// # Errors
 ///
 /// Returns an error when the requested operation cannot be completed.
@@ -18,7 +31,11 @@ use crate::schema::SchemaRegistry;
     clippy::cast_sign_loss,
     reason = "deletion metrics require a usize count after clamping negative values"
 )]
-pub async fn queue_delete_entity(table: &str, id: &str, v: &Valence) -> Result<()> {
+pub async fn queue_delete_entity_returning_run_id(
+    table: &str,
+    id: &str,
+    v: &Valence,
+) -> Result<Option<String>> {
     if table_skips_pending_deletion_filter(table) {
         return Err(Error::Validation(format!(
             "queued delete is not supported for table {table:?}"
@@ -31,10 +48,9 @@ pub async fn queue_delete_entity(table: &str, id: &str, v: &Valence) -> Result<(
         .ok_or_else(|| Error::NotFound(format!("unknown table {table}")))?;
 
     let Some(existing) = QueryCore::get_record_json(table, id, v).await? else {
-        return Ok(());
+        return Ok(None);
     };
 
-    PrivacyEvaluator::check_entity_read(schema, &existing, v).await?;
     PrivacyEvaluator::check_entity_access(schema, PrivacyOperation::Delete, &existing, v).await?;
 
     let bare = ownership::normalize_record_id_for_ownership(id);
@@ -42,7 +58,7 @@ pub async fn queue_delete_entity(table: &str, id: &str, v: &Valence) -> Result<(
         ownership::OwnershipService::get_ownership_json(table, &bare, v).await
     {
         if ownership.get("status").and_then(|s| s.as_str()) == Some("pending_deletion") {
-            return Ok(());
+            return Ok(None);
         }
     }
 
@@ -62,6 +78,7 @@ pub async fn queue_delete_entity(table: &str, id: &str, v: &Valence) -> Result<(
             dag.restrict_violations
         )));
     }
+    crate::deletion::check_dag_delete_privacy(&dag, v).await?;
 
     ownership::OwnershipService::mark_pending_deletion(table, &bare, v).await?;
 
@@ -73,12 +90,12 @@ pub async fn queue_delete_entity(table: &str, id: &str, v: &Valence) -> Result<(
         crate::instrumentation::record_run_queued(table, &bare, dag.nodes.len(), max_depth);
     }
     dispatch(DeletionRequest {
-        run_id,
+        run_id: run_id.clone(),
         root_table: table.to_string(),
         root_record_id: bare,
         actor_json,
     })
     .await?;
 
-    Ok(())
+    Ok(Some(run_id))
 }

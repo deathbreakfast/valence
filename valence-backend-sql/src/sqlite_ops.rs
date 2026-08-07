@@ -160,6 +160,12 @@ pub async fn create_record_sqlite(
     content: Value,
 ) -> Result<Value> {
     ensure_table_sqlite(pool, table).await?;
+    let mut content = content;
+    valence_core::ttl::prepare_create_content_with_capability(
+        table,
+        valence_core::ttl::BackendTtlCapability::Deferred,
+        &mut content,
+    )?;
     let id = storage_id(&content).unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
     let mut body = upsert_body_fields(content);
     body.remove("id");
@@ -295,6 +301,27 @@ pub async fn get_edge_targets_sqlite(
         .collect())
 }
 
+pub async fn get_edge_sources_sqlite(
+    pool: &sqlx::SqlitePool,
+    to: &RecordId,
+    edge_table: &str,
+) -> Result<Vec<RecordId>> {
+    let rows = sqlx::query(
+        "SELECT from_table, from_id FROM valence_edges \
+         WHERE to_table = ? AND to_id = ? AND edge_type = ?",
+    )
+    .bind(to.table())
+    .bind(to.id())
+    .bind(edge_table)
+    .fetch_all(pool)
+    .await
+    .map_err(|e| Error::database(e.to_string()))?;
+    Ok(rows
+        .iter()
+        .map(|r| RecordId::new(r.get::<String, _>(0), r.get::<String, _>(1)))
+        .collect())
+}
+
 pub async fn define_unique_index_sqlite(
     pool: &sqlx::SqlitePool,
     table: &str,
@@ -320,11 +347,23 @@ pub fn ttl_deferred() -> valence_core::ttl::BackendTtlCapability {
     valence_core::ttl::BackendTtlCapability::Deferred
 }
 
-#[allow(dead_code, clippy::unused_async)]
-pub async fn apply_ttl_noop(
-    _table: &str,
+/// Idempotent non-unique index on `__valence_expire_at` for platform TTL sweep discovery.
+pub async fn apply_ttl_policy_sqlite(
+    pool: &sqlx::SqlitePool,
+    table: &str,
     _policy: &valence_core::ttl::SchemaTtlPolicy,
 ) -> Result<()> {
+    assert_safe_table(table)?;
+    ensure_table_sqlite(pool, table).await?;
+    let field = valence_core::ttl::EXPIRE_AT_FIELD;
+    valence_core::safe_ident::assert_safe_ident(field)?;
+    let idx = format!("valence_ttl_expire_at_{table}");
+    let q =
+        format!("CREATE INDEX IF NOT EXISTS {idx} ON {table} (json_extract(body, '$.{field}'))");
+    sqlx::query(&q)
+        .execute(pool)
+        .await
+        .map_err(|e| Error::database(e.to_string()))?;
     Ok(())
 }
 

@@ -55,7 +55,7 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
-    /// List registered experiment IDs (see EXPERIMENTS.md).
+    /// List registered experiment IDs (see PERFORMANCE.md / lab EXPERIMENTS).
     Experiments,
     /// Run one experiment id against a matrix slice.
     Run(RunArgs),

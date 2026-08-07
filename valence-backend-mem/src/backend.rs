@@ -109,12 +109,15 @@ impl DatabaseBackend for InMemoryBackend {
                         .unwrap_or("")
                         .trim();
                     if !table.is_empty() {
-                        let count = {
+                        let mut rows = {
                             let tables = self.table_records_read(table).await;
                             tables
                                 .get(table)
-                                .map_or(0, |m| i64::try_from(m.len()).unwrap_or(i64::MAX))
+                                .map(|m| m.values().cloned().collect::<Vec<_>>())
+                                .unwrap_or_default()
                         };
+                        rows = crate::query_filter::apply_equality_where(rows, compiled);
+                        let count = i64::try_from(rows.len()).unwrap_or(i64::MAX);
                         return Ok(vec![serde_json::json!(count)]);
                     }
                 }
@@ -187,11 +190,11 @@ impl DatabaseBackend for InMemoryBackend {
                     rows =
                         crate::query_filter::apply_order_limit_offset(rows, &compiled.query_string);
                     if upper.contains("SELECT VALUE") || upper.contains("SELECT id") {
+                        // Emit bare id cells (string or RecordId object) — not
+                        // `{"id": …}` wrappers — so `extract_id_from_select_value` works.
                         return Ok(rows
                             .into_iter()
-                            .filter_map(|r| {
-                                r.get("id").cloned().map(|id| serde_json::json!({"id": id}))
-                            })
+                            .filter_map(|r| r.get("id").cloned())
                             .collect());
                     }
                     return Ok(rows);
@@ -211,6 +214,8 @@ impl DatabaseBackend for InMemoryBackend {
         table: &str,
         content: serde_json::Value,
     ) -> Result<serde_json::Value> {
+        let mut content = content;
+        valence_core::ttl::prepare_create_content(table, self, &mut content)?;
         let id = storage_id_from_content(&content).unwrap_or_else(uuid_simple);
         let mut record = content;
         if let Some(obj) = record.as_object_mut() {
@@ -324,6 +329,37 @@ impl DatabaseBackend for InMemoryBackend {
             })
             .unwrap_or_default())
     }
+
+    async fn get_edge_sources(&self, to: &RecordId, edge_table: &str) -> Result<Vec<RecordId>> {
+        let edges = self.edges.read().await;
+        let prefix = format!("{edge_table}:");
+        let mut sources = Vec::new();
+        let to_key = (to.table().to_string(), to.id().to_string());
+        for (key, set) in edges.iter() {
+            if !key.starts_with(&prefix) || !set.contains(&to_key) {
+                continue;
+            }
+            // key = "{edge_table}:{from_table}:{from_id}"
+            let rest = &key[prefix.len()..];
+            if let Some((ft, fid)) = rest.split_once(':') {
+                if !ft.is_empty() && !fid.is_empty() {
+                    sources.push(RecordId::new(ft, fid));
+                }
+            }
+        }
+        Ok(sources)
+    }
+
+    /// No DDL on mem — uniqueness is enforced by the `SELECT VALUE id` probe in codegen.
+    async fn define_unique_index(&self, _table: &str, _field: &str) -> Result<()> {
+        Err(valence_core::Error::Internal(
+            "unique indexes not supported on in-memory backend".into(),
+        ))
+    }
+
+    fn ttl_capability(&self) -> valence_core::ttl::BackendTtlCapability {
+        valence_core::ttl::BackendTtlCapability::Deferred
+    }
 }
 
 fn edge_key(edge_table: &str, from: &RecordId) -> String {
@@ -386,5 +422,14 @@ mod tests {
 
         backend.delete_record("user", &id).await.unwrap();
         assert!(backend.get_record("user", &id).await.unwrap().is_none());
+    }
+
+    #[test]
+    fn ttl_capability_is_deferred() {
+        let backend = InMemoryBackend::new();
+        assert_eq!(
+            backend.ttl_capability(),
+            valence_core::ttl::BackendTtlCapability::Deferred
+        );
     }
 }

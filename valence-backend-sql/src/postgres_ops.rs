@@ -132,6 +132,12 @@ pub async fn get_record_postgres(pool: &PgPool, table: &str, id: &str) -> Result
 
 pub async fn create_record_postgres(pool: &PgPool, table: &str, content: Value) -> Result<Value> {
     ensure_table_postgres(pool, table).await?;
+    let mut content = content;
+    valence_core::ttl::prepare_create_content_with_capability(
+        table,
+        valence_core::ttl::BackendTtlCapability::Deferred,
+        &mut content,
+    )?;
     let id = storage_id(&content).unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
     let mut body = upsert_body_fields(content);
     body.remove("id");
@@ -259,12 +265,52 @@ pub async fn get_edge_targets_postgres(
         .collect())
 }
 
+pub async fn get_edge_sources_postgres(
+    pool: &PgPool,
+    to: &RecordId,
+    edge_table: &str,
+) -> Result<Vec<RecordId>> {
+    let rows = sqlx::query(
+        "SELECT from_table, from_id FROM valence_edges \
+         WHERE to_table = $1 AND to_id = $2 AND edge_type = $3",
+    )
+    .bind(to.table())
+    .bind(to.id())
+    .bind(edge_table)
+    .fetch_all(pool)
+    .await
+    .map_err(|e| Error::database(e.to_string()))?;
+    Ok(rows
+        .iter()
+        .map(|r| RecordId::new(r.get::<String, _>(0), r.get::<String, _>(1)))
+        .collect())
+}
+
 pub async fn define_unique_index_postgres(pool: &PgPool, table: &str, field: &str) -> Result<()> {
     assert_safe_table(table)?;
     valence_core::safe_ident::assert_safe_ident(field)?;
     ensure_table_postgres(pool, table).await?;
     let idx = format!("valence_unique_{table}_{field}");
     let q = format!("CREATE UNIQUE INDEX IF NOT EXISTS {idx} ON {table} ((body->>'{field}'))");
+    sqlx::query(&q)
+        .execute(pool)
+        .await
+        .map_err(|e| Error::database(e.to_string()))?;
+    Ok(())
+}
+
+/// Idempotent non-unique index on `__valence_expire_at` for platform TTL sweep discovery.
+pub async fn apply_ttl_policy_postgres(
+    pool: &PgPool,
+    table: &str,
+    _policy: &valence_core::ttl::SchemaTtlPolicy,
+) -> Result<()> {
+    assert_safe_table(table)?;
+    let field = valence_core::ttl::EXPIRE_AT_FIELD;
+    valence_core::safe_ident::assert_safe_ident(field)?;
+    ensure_table_postgres(pool, table).await?;
+    let idx = format!("valence_ttl_expire_at_{table}");
+    let q = format!("CREATE INDEX IF NOT EXISTS {idx} ON {table} ((body->>'{field}'))");
     sqlx::query(&q)
         .execute(pool)
         .await

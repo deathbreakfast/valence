@@ -12,7 +12,7 @@ mod imp {
     use valence_core::compiled_query::CompiledQuery;
     use valence_core::error::{Error, Result};
     use valence_core::record_id::RecordId;
-    use valence_core::ttl::{BackendTtlCapability, SchemaTtlPolicy};
+    use valence_core::ttl::{BackendTtlCapability, SchemaTtlPolicy, EXPIRE_AT_FIELD};
 
     use crate::embedded::{
         row_json_after_create, strip_id_from_content, surreal_capabilities, ENGINE_ID,
@@ -85,10 +85,19 @@ mod imp {
             content: serde_json::Value,
         ) -> Result<serde_json::Value> {
             ensure_schemaless_table(&self.db, table).await?;
+            let mut content = content;
+            valence_core::ttl::prepare_create_content(table, self, &mut content)?;
             let explicit_id = content
                 .get("id")
-                .and_then(|v| v.as_str())
-                .map(|s| thing_to_id_only(s.to_string()))
+                .and_then(|v| {
+                    v.as_str().map(str::to_string).or_else(|| {
+                        v.as_object()
+                            .and_then(|o| o.get("id"))
+                            .and_then(|x| x.as_str())
+                            .map(str::to_string)
+                    })
+                })
+                .map(thing_to_id_only)
                 .filter(|s| !s.is_empty());
             let json_content = strip_id_from_content(content);
             let resource = match explicit_id.as_deref() {
@@ -270,8 +279,23 @@ mod imp {
             BackendTtlCapability::Deferred
         }
 
-        async fn apply_ttl_policy(&self, _table: &str, _policy: &SchemaTtlPolicy) -> Result<()> {
-            Ok(())
+        async fn apply_ttl_policy(&self, table: &str, _policy: &SchemaTtlPolicy) -> Result<()> {
+            ensure_schemaless_table(&self.db, table).await?;
+            let field = EXPIRE_AT_FIELD;
+            valence_core::safe_ident::assert_safe_ident(field)?;
+            let index_name = format!("valence_ttl_expire_at_{table}");
+            let query = format!("DEFINE INDEX {index_name} ON TABLE {table} COLUMNS {field}");
+            match self.db.query(&query).await {
+                Ok(_) => Ok(()),
+                Err(e) => {
+                    let message = e.to_string().to_lowercase();
+                    if message.contains("already") && message.contains("index") {
+                        Ok(())
+                    } else {
+                        Err(db_err(e))
+                    }
+                }
+            }
         }
     }
 }

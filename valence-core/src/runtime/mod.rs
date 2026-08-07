@@ -188,6 +188,29 @@ impl Valence {
         backend.define_unique_index(table, field).await
     }
 
+    /// Apply native TTL (or warn once) for every schema that declares `ttl:`.
+    ///
+    /// Primary host wire-up after backends are registered. Scrapes
+    /// [`crate::SchemaRegistry`] (inventory / `auto_discover`) — no hand list of tables.
+    ///
+    /// # Errors
+    ///
+    /// See [`crate::ttl::ensure_ttl_for_all`].
+    pub async fn ensure_ttl_for_all(&self) -> Result<()> {
+        crate::ttl::ensure_ttl_for_all(self).await
+    }
+
+    /// Apply native TTL for `table`, or warn once when the backend is Deferred/Unsupported.
+    ///
+    /// Prefer [`Self::ensure_ttl_for_all`] at boot; use this for incremental/single-table cases.
+    ///
+    /// # Errors
+    ///
+    /// See [`crate::ttl::ensure_ttl_for_table`].
+    pub async fn ensure_ttl_for_table(&self, table: &str) -> Result<()> {
+        crate::ttl::ensure_ttl_for_table(self, table).await
+    }
+
     pub fn is_system(&self) -> bool {
         self.actor.is_system()
     }

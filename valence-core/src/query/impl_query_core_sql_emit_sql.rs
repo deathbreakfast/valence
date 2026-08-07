@@ -175,6 +175,7 @@ impl QueryCore {
                 serde_json::Value::String(format!("%{}", escape_like_pattern(s))),
                 true,
             ),
+            StringPredicate::LessThan(s) => ("<", serde_json::Value::String(s.clone()), false),
         };
         let params = vec![(param_key.clone(), value)];
         let sql = if like_escape {

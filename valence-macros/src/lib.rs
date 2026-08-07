@@ -39,7 +39,7 @@ mod codegen;
 /// | `database` | no | Path to a `const`/`static` `DatabaseEvaluator`; defaults to `DEFAULT_IN_MEMORY` |
 /// | `policies` | no | Read/write/update/delete allow lists |
 /// | `connections` | no | Graph/FK edges (`Cardinality`, `OnDelete`) |
-/// | `ttl` | no | Time-to-live policy |
+/// | `ttl` | no | Create-only TTL (`ttl: { seconds }`); native Redis/Mongo; Deferred backends stamp `__valence_expire_at`, ensure an expire-at index, and warn until `valence_platform::ttl_sweep::register_ttl_service`; boot with `Valence::ensure_ttl_for_all` (see `valence::ttl`) |
 /// | `side_effects` | no | Mutation hooks |
 /// | `composite_key` | no | Multi-field primary key |
 /// | `traits` | no | Mix in `valence_trait_schema!` names |

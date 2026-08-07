@@ -29,6 +29,18 @@ pub fn apply_equality_where(
     }
 
     for (key, value) in &compiled.params {
+        let lt_needle = format!("< ${key}");
+        if let Some(lt_at) = clause.find(&lt_needle) {
+            let before = clause[..lt_at].trim_end();
+            let field = extract_field_ref(before);
+            if !field.is_empty() {
+                if let Some(threshold) = value.as_str() {
+                    rows.retain(|row| row_string_field(row, field).is_some_and(|s| s < threshold));
+                }
+            }
+            continue;
+        }
+
         let needle = format!("= ${key}");
         if let Some(eq_at) = clause.find(&needle) {
             let before = clause[..eq_at].trim_end();
@@ -232,17 +244,25 @@ mod tests {
     }
 
     #[test]
-    fn order_limit_offset_window() {
-        let rows = vec![
-            serde_json::json!({"id": "1", "name": "c"}),
-            serde_json::json!({"id": "2", "name": "a"}),
-            serde_json::json!({"id": "3", "name": "b"}),
-        ];
-        let out = apply_order_limit_offset(
-            rows,
-            "SELECT * FROM project ORDER BY name ASC LIMIT 1 OFFSET 1",
+    fn count_where_thing_eq_or_clause_filters_record_fk() {
+        // Exact shape emitted by `compiled_query_factory::count_where_thing_eq` for SQL/mem.
+        let compiled = CompiledQuery::new(
+            "SELECT COUNT(*) AS count FROM account \
+             WHERE json_extract(body, '$.user') = $bare_id \
+                OR json_extract(body, '$.user.id') = $bare_id \
+                OR json_extract(body, '$.user') = $parent_rid"
+                .into(),
+            vec![
+                ("bare_id".into(), serde_json::json!("persona")),
+                ("parent_rid".into(), serde_json::json!("user:persona")),
+            ],
         );
+        let rows = vec![
+            serde_json::json!({"id": "a1", "user": {"table": "user", "id": "owner"}}),
+            serde_json::json!({"id": "a2", "user": {"table": "user", "id": "persona"}}),
+        ];
+        let out = apply_equality_where(rows, &compiled);
         assert_eq!(out.len(), 1);
-        assert_eq!(out[0]["name"], "b");
+        assert_eq!(out[0]["id"], "a2");
     }
 }

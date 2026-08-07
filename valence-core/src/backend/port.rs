@@ -178,6 +178,14 @@ pub trait DatabaseBackend: Send + Sync + std::fmt::Debug + 'static {
     /// List target record ids reachable via outgoing edges in `edge_table`.
     async fn get_edge_targets(&self, from: &RecordId, edge_table: &str) -> Result<Vec<RecordId>>;
 
+    /// List source record ids with an outgoing edge to `to` in `edge_table`.
+    ///
+    /// **Contract:** default returns an empty list (adapters that store edges should override).
+    async fn get_edge_sources(&self, to: &RecordId, edge_table: &str) -> Result<Vec<RecordId>> {
+        let _ = (to, edge_table);
+        Ok(Vec::new())
+    }
+
     /// Define a unique index on `table.field` when the engine supports DDL.
     ///
     /// **Contract:** default returns `Error::Internal`.

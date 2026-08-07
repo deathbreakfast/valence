@@ -86,6 +86,7 @@ pub fn generate_side_effects(
 /// Generate the side effect dispatch helper as a private method on the model.
 fn generate_dispatch_code(schema: &SchemaContext) -> TokenStream {
     let struct_name = format_ident!("{}", to_pascal_case(&schema.table_name));
+    let field_changes_name = format_ident!("{}FieldChanges", struct_name);
 
     // Build the list of side effect type instantiations
     let effect_instantiations: Vec<TokenStream> = schema
@@ -117,6 +118,10 @@ fn generate_dispatch_code(schema: &SchemaContext) -> TokenStream {
         };
     }
 
+    let table_name_lit = syn::LitStr::new(&schema.table_name, proc_macro2::Span::call_site());
+    let frag_table = crate::codegen::utils::sanitize_for_rust_ident(&schema.table_name);
+    let dispatch_fn = format_ident!("__valence_delete_side_effect_dispatch_{}", frag_table);
+
     quote! {
         impl #struct_name {
             /// Dispatch registered side effects after a successful mutation.
@@ -147,5 +152,43 @@ fn generate_dispatch_code(schema: &SchemaContext) -> TokenStream {
                 }
             }
         }
+
+        #[cfg(not(target_family = "wasm"))]
+        fn #dispatch_fn(
+            v: valence::Valence,
+            row: serde_json::Value,
+        ) -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send + 'static>> {
+            Box::pin(async move {
+                let before: #struct_name = match serde_json::from_value(row) {
+                    Ok(m) => m,
+                    Err(e) => {
+                        valence::instrumentation::record_side_effect_error(
+                            #table_name_lit,
+                            &e.to_string(),
+                        );
+                        return;
+                    }
+                };
+                let field_changes = #field_changes_name::compute(Some(&before), None);
+                let mutation = valence::Mutation::new(
+                    valence::MutationKind::Delete,
+                    Some(before),
+                    None,
+                    field_changes,
+                    &v,
+                );
+                #struct_name::dispatch_side_effects(&mutation).await;
+            })
+        }
+
+        #[cfg(not(target_family = "wasm"))]
+        const _: () = {
+            valence::inventory::submit! {
+                valence::deletion::DeleteSideEffectDescriptor {
+                    table_name: #table_name_lit,
+                    dispatch: #dispatch_fn,
+                }
+            }
+        };
     }
 }

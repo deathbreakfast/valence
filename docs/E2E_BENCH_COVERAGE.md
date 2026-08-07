@@ -10,7 +10,7 @@ Living coverage map for Valence. Status legend:
 | `H` | Host-owned (outside this repo) |
 | `D` | Deferred by design |
 
-**Target contract:** every single-backend feature E2E row runs on all storage adapters (mem, sqlite, surreal-mem, surreal-rocksdb, indradb, postgres, mongodb, redis; acme-stub where the port applies). Full matrix + benches execute on **AWS** — see [AWS_E2E_BENCH_CAMPAIGN.md](AWS_E2E_BENCH_CAMPAIGN.md). Local `./scripts/gate.sh` stays unit/clippy only.
+**Target contract:** every single-backend feature E2E row runs on all storage adapters (mem, sqlite, surreal-mem, surreal-rocksdb, indradb, postgres, mongodb, redis; acme-stub where the port applies). Full matrix + benches execute on **AWS**. Local `./scripts/gate.sh` stays unit/clippy only.
 
 ## Feature × Happy / Sad / Bench
 
@@ -64,7 +64,9 @@ Living coverage map for Valence. Status legend:
 | Same-backend HasOne/HasMany | P | N | bm-v15→v24 |
 | Cross-backend depth-2 | Y (Cartesian generator) | Y (missing mid-hop) | **bm-v24** |
 | Depth 3–4 nested where | Y (chain host) | Y | **bm-v25** |
-| OnDelete Restrict | N | N | N |
+| OnDelete Restrict | Y (`on-delete-restrict-blocks`) | Y | N |
+| OnDelete Cascade / SetNull / RemoveEdge | Y (`on-delete-cascade-same-backend`, `on-delete-set-null`, `on-delete-remove-edge`) | Y (Restrict) | N |
+| OnDelete cross-engine | Y (`on-delete-cascade-cross-engine`, `on-delete-set-null-cross-engine`; hop pairs soft-skip without wire) | N | N |
 
 ### Privacy / ownership / validation
 
@@ -92,11 +94,22 @@ Living coverage map for Valence. Status legend:
 | Recording/console telemetry | Y | N | bm-v2/18 |
 | Admin registry/read/delete | Y (all storages via contract) | P | N |
 | DeletionService queue | Y | N | bm-v9 |
-| DAG plan vs live graph | N | N | N |
+| Pre-queue DAG Delete privacy (CascadeDelete-only) | Y (`dag_privacy` integ + SetNull filter) | Y (child Deny) | N |
+| Deletion requester actor restore | Y (platform `requester_actor`) | Y (missing `requested_by`) | N |
+| DAG plan vs live graph | Y (platform + catalog OnDelete) | Y (Restrict) | N |
 
 ### Schema extras
 
-TTL, side effects, iters, trait mixin, encrypted fields — mostly `N` / codegen-only; schedule after query+hop program.
+| Feature | Happy | Sad | Notes |
+|---------|-------|-----|-------|
+| Table TTL (create-only) | Y | Y | Catalog: `ttl-native-expire` (Redis/Mongo), `ttl-deferred-stamp` (Deferred/Unsupported linger without Chronon), `ttl-deferred-sweep-delete` (Deferred adapters: expired row gone), `ttl-create-only-no-refresh`, `ttl-non-native-warn`. Platform budgeted sweeper: `valence-platform` `ttl_sweep_*` / hybrid integ. Bench: **not required**. Mongo purge timing not waited (TTL monitor). |
+| Side effects on queued/cascade physical delete | Y (platform TM-V3 cascade-child SE) | Y (Restrict → SE=0) | Platform integ; L0 catalog uses `apply_deletion_node` without Chronon SE |
+| Iters / trait mixin / encrypted | Y (`iter-scan-complete` on SQL/Surreal/mem/hybrid) | soft-skip | Soft-skip Redis/Mongo/Indra/Acme until platform keyset pushdown. Platform: `iter_scan_complete` test. Trait mixin / encrypted still N. |
+
+Registered campaign scenario IDs: `ttl-native-expire`, `ttl-deferred-stamp`, `ttl-deferred-sweep-delete`, `ttl-create-only-no-refresh`, `ttl-non-native-warn`,
+`iter-scan-complete`,
+`on-delete-cascade-same-backend`, `on-delete-set-null`, `on-delete-remove-edge`, `on-delete-restrict-blocks`,
+`on-delete-cascade-cross-engine`, `on-delete-set-null-cross-engine` (AcmeStub skipped for OnDelete / TTL).
 
 ## Storage × suite
 

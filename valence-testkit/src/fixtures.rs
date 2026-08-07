@@ -207,6 +207,135 @@ pub fn system_only_field_schema() -> &'static SchemaMetadata {
     })
 }
 
+/// Catalog TTL probe table name (short create-only TTL for matrix e2e).
+pub const CATALOG_TTL_PROBE_TABLE: &str = "catalog_ttl_probe";
+
+/// TTL seconds on [`CATALOG_TTL_PROBE_TABLE`] (short enough for Redis expiry waits).
+pub const CATALOG_TTL_PROBE_SECONDS: u64 = 2;
+
+fn catalog_ttl_probe_schema() -> &'static Schema {
+    static SCHEMA: OnceLock<&'static Schema> = OnceLock::new();
+    SCHEMA.get_or_init(|| {
+        Box::leak(Box::new(Schema {
+            name: CATALOG_TTL_PROBE_TABLE.to_string(),
+            version: "0.1.0".to_string(),
+            databases: vec![DEFAULT_IN_MEMORY.name().to_string()],
+            database_evaluator: &DEFAULT_IN_MEMORY,
+            privacy: SchemaPrivacy {
+                read: "public".to_string(),
+                write: "public".to_string(),
+            },
+            policies: None,
+            fields: vec![SchemaField {
+                name: "id".to_string(),
+                field_type: "string".to_string(),
+                primary: true,
+                nullable: false,
+                indexed: false,
+                unique: false,
+                default: None,
+                fk: None,
+                validations: Vec::new(),
+                policies: None,
+                encrypted: false,
+                enum_variants: Vec::new(),
+                enum_type: None,
+                model_path: None,
+            }],
+            edges: Vec::new(),
+            connections: Vec::new(),
+            side_effects: Vec::new(),
+            iters: Vec::new(),
+            composite_key: Vec::new(),
+            traits: Vec::new(),
+            ttl: Some(valence_core::ttl::SchemaTtlPolicy {
+                seconds: CATALOG_TTL_PROBE_SECONDS,
+                mode: "backend_capability".into(),
+            }),
+            ownership: None,
+            meta: SchemaMeta {
+                retention: "365 days".to_string(),
+                row_count: 0,
+                owner: "system".to_string(),
+                description: Some("matrix TTL probe".into()),
+            },
+        }))
+    })
+}
+
+/// Schema metadata for the TTL matrix probe (also submitted via inventory).
+pub fn catalog_ttl_probe_metadata() -> &'static SchemaMetadata {
+    static METADATA: OnceLock<SchemaMetadata> = OnceLock::new();
+    METADATA.get_or_init(|| SchemaMetadata::from_schema(catalog_ttl_probe_schema()))
+}
+
+fn catalog_ttl_probe_inventory_init() -> &'static SchemaMetadata {
+    catalog_ttl_probe_metadata()
+}
+
+valence_core::inventory::submit! {
+    valence_core::SchemaMetadataInit(catalog_ttl_probe_inventory_init)
+}
+
+/// Catalog iter multi-page probe table (no TTL).
+pub const CATALOG_ITER_PROBE_TABLE: &str = "catalog_iter_probe";
+
+fn catalog_iter_probe_schema() -> &'static Schema {
+    static SCHEMA: OnceLock<&'static Schema> = OnceLock::new();
+    SCHEMA.get_or_init(|| {
+        Box::leak(Box::new(Schema {
+            name: CATALOG_ITER_PROBE_TABLE.to_string(),
+            version: "0.1.0".to_string(),
+            databases: vec![DEFAULT_IN_MEMORY.name().to_string()],
+            database_evaluator: &DEFAULT_IN_MEMORY,
+            privacy: SchemaPrivacy {
+                read: "public".to_string(),
+                write: "public".to_string(),
+            },
+            policies: None,
+            fields: vec![SchemaField {
+                name: "id".to_string(),
+                field_type: "string".to_string(),
+                primary: true,
+                nullable: false,
+                indexed: false,
+                unique: false,
+                default: None,
+                fk: None,
+                validations: Vec::new(),
+                policies: None,
+                encrypted: false,
+                enum_variants: Vec::new(),
+                enum_type: None,
+                model_path: None,
+            }],
+            edges: Vec::new(),
+            connections: Vec::new(),
+            side_effects: Vec::new(),
+            iters: Vec::new(),
+            composite_key: Vec::new(),
+            traits: Vec::new(),
+            ttl: None,
+            ownership: None,
+            meta: SchemaMeta {
+                retention: "365 days".to_string(),
+                row_count: 0,
+                owner: "system".to_string(),
+                description: Some("matrix iter scan probe".into()),
+            },
+        }))
+    })
+}
+
+fn catalog_iter_probe_inventory_init() -> &'static SchemaMetadata {
+    static METADATA: OnceLock<SchemaMetadata> = OnceLock::new();
+    METADATA.get_or_init(|| SchemaMetadata::from_schema(catalog_iter_probe_schema()))
+}
+
+valence_core::inventory::submit! {
+    valence_core::SchemaMetadataInit(catalog_iter_probe_inventory_init)
+}
+
 /// Invalid router compound key for the given storage slug (catalog sad-path).
 ///
 /// Uses the storage adapter's own engine id so the sad path proves an

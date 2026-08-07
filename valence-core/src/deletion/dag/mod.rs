@@ -15,8 +15,8 @@ use crate::schema::{schema_connections_for_table, SchemaRegistry};
 use crate::trait_registry::TraitRegistry;
 
 use build::{
-    count_m2m_edges_from_root, count_where_thing_eq, select_child_ids_hasmany,
-    select_hasone_cascade_children,
+    count_m2m_edges_from_root, count_where_thing_eq, list_m2m_edge_pairs_for_endpoint,
+    select_child_ids_hasmany, select_hasone_cascade_children,
 };
 use validate::{assert_safe_bare_thing_id, assert_safe_ident, skip_graph_table};
 
@@ -299,8 +299,160 @@ async fn bfs_cascade_expansion(
     Ok(visited)
 }
 
+async fn collect_set_null_and_remove_edge_for_entity(
+    v: &Valence,
+    tbl: &str,
+    rid: &str,
+    depth: u32,
+    registry: &SchemaRegistry,
+    traits: &TraitRegistry,
+    nodes: &mut Vec<DeletionNode>,
+) -> Result<()> {
+    if let Some(meta) = registry.get_schema(tbl) {
+        for conn in schema_connections_for_table(meta).iter() {
+            if !conn.on_delete.eq_ignore_ascii_case("setnull") {
+                continue;
+            }
+            match conn.cardinality.as_str() {
+                "HasMany" => {
+                    let Some(rf) = conn.reverse_field.as_deref() else {
+                        continue;
+                    };
+                    for child_table in connection_child_tables(conn, traits) {
+                        if skip_graph_table(&child_table) {
+                            continue;
+                        }
+                        let kids = select_child_ids_hasmany(v, &child_table, rf, tbl, rid).await?;
+                        for kid in kids {
+                            nodes.push(DeletionNode {
+                                table: child_table.clone(),
+                                record_id: kid,
+                                action: DeletionAction::SetNull {
+                                    field: rf.to_string(),
+                                },
+                                depth,
+                                connection_name: conn.name.clone(),
+                                from_table: tbl.to_string(),
+                            });
+                        }
+                    }
+                }
+                "ManyToMany" => {
+                    let Some(edge) = conn.edge_table.as_deref() else {
+                        continue;
+                    };
+                    let pairs = list_m2m_edge_pairs_for_endpoint(v, edge, tbl, rid).await?;
+                    if pairs.is_empty() {
+                        continue;
+                    }
+                    let already = nodes.iter().any(|n| {
+                        n.table == tbl
+                            && n.record_id == rid
+                            && matches!(
+                                &n.action,
+                                DeletionAction::RemoveEdge { edge_table: e } if e == edge
+                            )
+                    });
+                    if already {
+                        continue;
+                    }
+                    nodes.push(DeletionNode {
+                        table: tbl.to_string(),
+                        record_id: rid.to_string(),
+                        action: DeletionAction::RemoveEdge {
+                            edge_table: edge.to_string(),
+                        },
+                        depth,
+                        connection_name: conn.name.clone(),
+                        from_table: tbl.to_string(),
+                    });
+                }
+                _ => {}
+            }
+        }
+    }
+
+    // Incoming HasOne SetNull: other tables whose from_field points at this row.
+    for other in registry.list_schemas() {
+        if skip_graph_table(other) {
+            continue;
+        }
+        let Some(om) = registry.get_schema(other) else {
+            continue;
+        };
+        for conn in schema_connections_for_table(om).iter() {
+            if conn.cardinality != "HasOne"
+                || !conn.on_delete.eq_ignore_ascii_case("setnull")
+                || !conn_targets_table(conn, tbl, traits)
+            {
+                continue;
+            }
+            for kid in select_hasone_cascade_children(v, other, &conn.from_field, tbl, rid).await? {
+                nodes.push(DeletionNode {
+                    table: other.to_string(),
+                    record_id: kid,
+                    action: DeletionAction::SetNull {
+                        field: conn.from_field.clone(),
+                    },
+                    depth,
+                    connection_name: conn.name.clone(),
+                    from_table: tbl.to_string(),
+                });
+            }
+        }
+    }
+
+    // Incoming M2M SetNull declared on other tables targeting this table.
+    for other in registry.list_schemas() {
+        if skip_graph_table(other) || other == tbl {
+            continue;
+        }
+        let Some(om) = registry.get_schema(other) else {
+            continue;
+        };
+        for conn in schema_connections_for_table(om).iter() {
+            if conn.cardinality != "ManyToMany"
+                || !conn.on_delete.eq_ignore_ascii_case("setnull")
+                || !conn_targets_table(conn, tbl, traits)
+            {
+                continue;
+            }
+            let Some(edge) = conn.edge_table.as_deref() else {
+                continue;
+            };
+            let pairs = list_m2m_edge_pairs_for_endpoint(v, edge, tbl, rid).await?;
+            if pairs.is_empty() {
+                continue;
+            }
+            let already = nodes.iter().any(|n| {
+                n.table == tbl
+                    && n.record_id == rid
+                    && matches!(
+                        &n.action,
+                        DeletionAction::RemoveEdge { edge_table: e } if e == edge
+                    )
+            });
+            if already {
+                continue;
+            }
+            nodes.push(DeletionNode {
+                table: tbl.to_string(),
+                record_id: rid.to_string(),
+                action: DeletionAction::RemoveEdge {
+                    edge_table: edge.to_string(),
+                },
+                depth,
+                connection_name: conn.name.clone(),
+                from_table: other.to_string(),
+            });
+        }
+    }
+    Ok(())
+}
+
 impl DeletionDag {
-    /// Compute cascade nodes and `Restrict` violations for deleting `(root_table, root_record_id)`.
+    /// Compute cascade / SetNull / RemoveEdge nodes and `Restrict` violations for deleting
+    /// `(root_table, root_record_id)`.
     /// # Errors
     ///
     /// Returns an error when the requested operation cannot be completed.
@@ -385,7 +537,22 @@ impl DeletionDag {
 
         let visited =
             bfs_cascade_expansion(v, root_table, root_record_id, registry, traits).await?;
-        let dag = Self::nodes_from_visited(root_table, root_record_id, visited, violations);
+
+        let mut nodes = Vec::new();
+        for ((t, r), d) in &visited {
+            nodes.push(DeletionNode {
+                table: t.clone(),
+                record_id: r.clone(),
+                action: DeletionAction::CascadeDelete,
+                depth: *d,
+                connection_name: "cascade".to_string(),
+                from_table: t.clone(),
+            });
+            collect_set_null_and_remove_edge_for_entity(v, t, r, *d, registry, traits, &mut nodes)
+                .await?;
+        }
+
+        let dag = Self::from_nodes(root_table, root_record_id, nodes, violations);
         #[cfg(feature = "instrumentation")]
         {
             let max_depth = dag.nodes.iter().map(|n| n.depth).max().unwrap_or(0) as usize;

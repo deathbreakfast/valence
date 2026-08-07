@@ -160,11 +160,24 @@ valence_schema! {
         generated.contains("valence::deletion::DeletionService::create_run"),
         "Expected queued deletion run creation in generated delete()"
     );
+    assert!(
+        generated.contains("valence::deletion::check_dag_delete_privacy"),
+        "Expected pre-queue DAG Delete privacy check in generated delete()"
+    );
 
     // Side effect errors are logged, not propagated
     assert!(
         generated.contains("record_side_effect_error"),
         "Expected side-effect error instrumentation in dispatch"
+    );
+
+    assert!(
+        generated.contains("DeleteSideEffectDescriptor"),
+        "Expected inventory DeleteSideEffectDescriptor registration"
+    );
+    assert!(
+        generated.contains("inventory::submit"),
+        "Expected inventory::submit for delete side-effect dispatch"
     );
 
     insta::assert_snapshot!(generated);
@@ -215,6 +228,11 @@ valence_schema! {
     assert!(
         !generated.contains("Box::new"),
         "No-op dispatch should not contain side effect instantiations"
+    );
+
+    assert!(
+        !generated.contains("DeleteSideEffectDescriptor"),
+        "No-op path should not register DeleteSideEffectDescriptor"
     );
 
     insta::assert_snapshot!(generated);

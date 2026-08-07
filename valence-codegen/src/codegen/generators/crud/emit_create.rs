@@ -20,6 +20,12 @@ pub(super) fn model_create_method_tokens(cx: &CrudEmitCtx<'_>) -> TokenStream {
                 let record = record.clone();
                 async move {
                     let backend = valence.backend_for_table(<Self as valence::Model>::table_name())?;
+                    let mut record = record;
+                    valence::prepare_create_content(
+                        <Self as valence::Model>::table_name(),
+                        backend.as_ref(),
+                        &mut record,
+                    )?;
                     let row = backend
                         .create_record(Self::table_name(), record)
                         .await?;
@@ -72,8 +78,17 @@ pub(super) fn model_upsert_method_tokens(cx: &CrudEmitCtx<'_>) -> TokenStream {
             let upserted: Self = valence::retry_on_database_tx_conflict("Model::upsert", || {
                 let id = id.clone();
                 let record = record.clone();
+                let creating = before_snapshot.is_none();
                 async move {
                     let backend = valence.backend_for_table(<Self as valence::Model>::table_name())?;
+                    let mut record = record;
+                    if creating {
+                        valence::prepare_create_content(
+                            <Self as valence::Model>::table_name(),
+                            backend.as_ref(),
+                            &mut record,
+                        )?;
+                    }
                     let row = backend
                         .upsert_record(Self::table_name(), id.as_str(), record)
                         .await?;

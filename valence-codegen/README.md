@@ -16,7 +16,7 @@ Policy emission matches the macro path (`Box::leak` of `&dyn PolicyEvaluator`).
 
 ## Host `build.rs`
 
-Default layout: `$CARGO_MANIFEST_DIR/schemas/*_valence_schema.rs` (and optional `*_valence_trait.rs`) → `$OUT_DIR/generated_models.rs`.
+Default layout: `$CARGO_MANIFEST_DIR/schemas/` scanned recursively for `*_valence_schema.rs` (and optional `*_valence_trait.rs`) → `$OUT_DIR/generated_models.rs`. Nested dirs such as `schemas/valence/` are included.
 
 ```rust
 fn main() {

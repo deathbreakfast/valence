@@ -236,6 +236,11 @@ impl DatabaseBackend for HybridBackend {
         self.primary.get_edge_targets(from, edge_table).await
     }
 
+    async fn get_edge_sources(&self, to: &RecordId, edge_table: &str) -> Result<Vec<RecordId>> {
+        // Indra mirror often lacks reverse lookup; durable SQL primary owns edge rows.
+        self.primary.get_edge_sources(to, edge_table).await
+    }
+
     async fn define_unique_index(&self, table: &str, field: &str) -> Result<()> {
         self.primary.define_unique_index(table, field).await
     }

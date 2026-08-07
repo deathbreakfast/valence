@@ -87,3 +87,22 @@ fn starts_with_emits_surreal_string_fn_not_like() {
     assert!(sql.contains("START 10"));
     assert_eq!(params[0].1, serde_json::json!("cx-"));
 }
+
+#[test]
+fn string_less_than_emits_lt_and_limit() {
+    let query = QueryCore::new("catalog_ttl_probe".to_string())
+        .select(vec!["id".to_string()])
+        .where_string(
+            crate::ttl::EXPIRE_AT_FIELD.to_string(),
+            StringPredicate::LessThan("2020-01-01T00:00:00+00:00".to_string()),
+        )
+        .order_by(crate::ttl::EXPIRE_AT_FIELD.to_string(), SortDirection::Asc)
+        .limit(32);
+    let (sql, params) = query.to_surrealql().expect("compile");
+    assert!(
+        sql.contains(&format!("{} < $param_0", crate::ttl::EXPIRE_AT_FIELD)),
+        "got {sql}"
+    );
+    assert!(sql.contains("LIMIT 32"), "got {sql}");
+    assert_eq!(params[0].1, serde_json::json!("2020-01-01T00:00:00+00:00"));
+}

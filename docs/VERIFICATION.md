@@ -14,8 +14,15 @@ cargo test --workspace
 cargo test -p uf-valence-core --lib privacy::bypass redact error::tests query::clamp_tests
 cargo test -p uf-valence-core --lib privacy::evaluator::tests::test_filter_entity_fields
 
-# Matrix E2E
+# Deletion DAG privacy + queued delete side-effect dispatch + SetNull/RemoveEdge apply
+cargo test -p uf-valence-core --test dag_privacy --test delete_side_effects --test deletion_set_null_apply
+
+# Host: requester actor + OnDelete (SetNull / RemoveEdge / cascade SE)
+# cargo test -p valence-platform --test requester_actor --test public_contracts --test deletion_on_delete
+
+# Matrix E2E (includes on-delete-* catalog; wire soft-skip)
 cargo test -p valence-e2e
+cargo test -p valence-e2e --test cross_backend_hops on_delete_hop
 
 # Codegen / model runtime subset
 cargo test -p valence-e2e --test admin_runtime_catalog

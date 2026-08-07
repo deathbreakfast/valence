@@ -175,6 +175,21 @@ impl DatabaseBackend for FleetRedisBackend {
         }
         Ok(())
     }
+
+    fn ttl_capability(&self) -> valence_core::ttl::BackendTtlCapability {
+        crate::ttl::ttl_capability()
+    }
+
+    async fn apply_ttl_policy(
+        &self,
+        table: &str,
+        policy: &valence_core::ttl::SchemaTtlPolicy,
+    ) -> Result<()> {
+        for backend in &self.backends {
+            backend.apply_ttl_policy(table, policy).await?;
+        }
+        Ok(())
+    }
 }
 
 /// Install a fleet backend as `Arc<dyn DatabaseBackend>`.

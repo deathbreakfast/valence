@@ -59,13 +59,26 @@ pub fn bare_id_from_query_cell(value: &Value) -> String {
         return bare;
     }
     if let Some(obj) = value.as_object() {
-        if let Some(id) = obj.get("id").and_then(|v| v.as_str()) {
+        if let Some(id_val) = obj.get("id") {
+            if let Some(s) = id_val.as_str() {
+                return strip_surreal_thing_decorations(s);
+            }
+            if let Some(inner) = id_val.as_object() {
+                if let Some(s) = inner.get("id").and_then(|v| v.as_str()) {
+                    return strip_surreal_thing_decorations(s);
+                }
+            }
+        }
+        // SELECT id AS column sometimes returns { "id": "c1" } already handled; bare PK only.
+    }
+    let s = value.to_string();
+    let trimmed = s.trim().trim_matches('"');
+    if let Some((_table, id)) = trimmed.split_once(':') {
+        if !id.is_empty() && !id.contains('{') {
             return strip_surreal_thing_decorations(id);
         }
     }
-    let s = value.to_string();
-    let tail = s.rsplit(':').next().unwrap_or(&s);
-    strip_surreal_thing_decorations(tail)
+    strip_surreal_thing_decorations(trimmed)
 }
 
 #[allow(
@@ -81,15 +94,23 @@ async fn run_count_query(
         Err(e) if query_err_is_missing_table(&e.to_string()) => return Ok(0),
         Err(e) => return Err(Error::database(e.to_string())),
     };
-    Ok(rows
-        .into_iter()
-        .next()
-        .and_then(|v| {
-            v.as_i64()
-                .or_else(|| v.get("count").and_then(|c| c.as_i64()))
-                .or_else(|| v.as_f64().map(|f| f as i64))
-        })
-        .unwrap_or(0))
+    if rows.is_empty() {
+        return Ok(0);
+    }
+    // Prefer an explicit aggregate cell (`COUNT(*) AS count` or bare integer).
+    if let Some(n) = rows.first().and_then(|v| {
+        v.as_i64()
+            .or_else(|| v.get("count").and_then(|c| c.as_i64()))
+            .or_else(|| v.as_f64().map(|f| f as i64))
+    }) {
+        // Document engines often return filtered row objects for COUNT SQL instead of
+        // an aggregate — only trust a single scalar/count row.
+        if rows.len() == 1 {
+            return Ok(n);
+        }
+    }
+    // Filtered document rows (Mongo/Redis/Indra apply WHERE in-process).
+    Ok(i64::try_from(rows.len()).unwrap_or(i64::MAX))
 }
 
 async fn run_id_query(
@@ -191,4 +212,30 @@ pub async fn select_hasone_cascade_children(
         bare_parent_id,
     )?;
     run_id_query(backend.as_ref(), compiled).await
+}
+
+/// List M2M edge endpoint pairs involving `(endpoint_table, endpoint_id)`.
+///
+/// Returns `(from, to)` for each edge so the worker can call `unrelate_edge`.
+/// # Errors
+///
+/// Returns an error when the requested operation cannot be completed.
+pub async fn list_m2m_edge_pairs_for_endpoint(
+    v: &Valence,
+    edge_table: &str,
+    endpoint_table: &str,
+    endpoint_id: &str,
+) -> Result<Vec<(crate::record_id::RecordId, crate::record_id::RecordId)>> {
+    assert_safe_ident(edge_table)?;
+    assert_safe_ident(endpoint_table)?;
+    let endpoint = crate::record_id::RecordId::new(endpoint_table, endpoint_id);
+    let backend = backend_for_deletion_query(v, endpoint_table)?;
+    let mut out = Vec::new();
+    for to in backend.get_edge_targets(&endpoint, edge_table).await? {
+        out.push((endpoint.clone(), to));
+    }
+    for from in backend.get_edge_sources(&endpoint, edge_table).await? {
+        out.push((from, endpoint.clone()));
+    }
+    Ok(out)
 }

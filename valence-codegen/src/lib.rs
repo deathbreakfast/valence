@@ -169,18 +169,33 @@ fn validate_schemas_dir(path: &Path) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Collect `*.rs` paths under `dir` whose file stem ends with `suffix` (e.g. `_valence_schema`).
+/// Collect `*.rs` paths under `dir` (recursively) whose file stem ends with `suffix`.
+///
+/// Matching uses the stem suffix only (e.g. `_valence_schema`); results are stable-sorted.
 fn collect_files_with_suffix(dir: &Path, suffix: &str) -> anyhow::Result<Vec<PathBuf>> {
-    use std::fs;
-
     let stem_suffix = suffix.strip_suffix(".rs").unwrap_or(suffix);
+    let mut paths = Vec::new();
+    collect_files_with_suffix_into(dir, stem_suffix, &mut paths)?;
+    paths.sort();
+    Ok(paths)
+}
+
+fn collect_files_with_suffix_into(
+    dir: &Path,
+    stem_suffix: &str,
+    paths: &mut Vec<PathBuf>,
+) -> anyhow::Result<()> {
+    use std::fs;
 
     let entries =
         fs::read_dir(dir).map_err(|e| anyhow::anyhow!("Failed to read schemas directory: {e}"))?;
 
-    let mut paths = Vec::new();
     for entry in entries.filter_map(|entry| entry.ok()) {
         let path = entry.path();
+        if path.is_dir() {
+            collect_files_with_suffix_into(&path, stem_suffix, paths)?;
+            continue;
+        }
         let matches_suffix = path
             .file_stem()
             .and_then(|s| s.to_str())
@@ -190,8 +205,7 @@ fn collect_files_with_suffix(dir: &Path, suffix: &str) -> anyhow::Result<Vec<Pat
             paths.push(path);
         }
     }
-
-    Ok(paths)
+    Ok(())
 }
 
 /// Parse all trait schema files into a map keyed by trait name.
@@ -302,8 +316,8 @@ mod build_defaults_tests {
     use std::time::{SystemTime, UNIX_EPOCH};
 
     use super::{
-        build, build_with, BuildOptions, DEFAULT_SCHEMAS_SUBDIR, DEFAULT_SCHEMA_SUFFIX,
-        DEFAULT_TRAIT_SUFFIX,
+        build, build_with, collect_files_with_suffix, BuildOptions, DEFAULT_SCHEMAS_SUBDIR,
+        DEFAULT_SCHEMA_SUFFIX, DEFAULT_TRAIT_SUFFIX,
     };
 
     static ENV_LOCK: Mutex<()> = Mutex::new(());
@@ -469,5 +483,38 @@ valence_schema! {
         assert_eq!(defaults.file_suffix, DEFAULT_SCHEMA_SUFFIX);
         assert_eq!(defaults.trait_file_suffix, DEFAULT_TRAIT_SUFFIX);
         assert_eq!(defaults.schemas_subdir, DEFAULT_SCHEMAS_SUBDIR);
+    }
+
+    #[test]
+    fn collect_files_with_suffix_walks_nested_directories() {
+        let root = TempRoot::new("nested");
+        let nested = root.path().join("valence").join("domain");
+        fs::create_dir_all(&nested).expect("nested dir");
+        fs::write(nested.join("widget_valence_schema.rs"), MINIMAL_SCHEMA).expect("schema");
+        fs::write(root.path().join("skip.txt"), "nope").expect("non-rs");
+
+        let found = collect_files_with_suffix(root.path(), DEFAULT_SCHEMA_SUFFIX).expect("collect");
+        assert_eq!(found.len(), 1);
+        assert!(found[0].ends_with("valence/domain/widget_valence_schema.rs"));
+    }
+
+    #[test]
+    fn build_with_discovers_nested_schema_files() {
+        let root = TempRoot::new("nested-build");
+        let nested = root.path().join("schemas").join("valence");
+        fs::create_dir_all(&nested).expect("nested schemas");
+        fs::write(nested.join("widget_valence_schema.rs"), MINIMAL_SCHEMA).expect("schema");
+        let out = root.path().join("out");
+        fs::create_dir_all(&out).expect("out dir");
+
+        build_with(BuildOptions {
+            manifest_dir: Some(root.path().to_path_buf()),
+            out_dir: Some(out.clone()),
+            ..BuildOptions::default()
+        })
+        .expect("nested schema codegen should succeed");
+
+        let generated = fs::read_to_string(out.join("generated_models.rs")).expect("read");
+        assert!(generated.contains("Widget") || generated.contains("widget"));
     }
 }

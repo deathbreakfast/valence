@@ -39,5 +39,8 @@ Valence is an **in-process ORM**. Hosts own session auth, HTTP exposure, and whe
 | Backends | Do not expose raw `DatabaseBackend` / router keys to clients; wire through typed `Model` / host-authorized APIs. |
 | Query paging | `QueryCore` clamps `limit`/`offset` to `MAX_QUERY_LIMIT` (1000) / `MAX_QUERY_OFFSET`. |
 | Errors | `Error::database` redacts URL userinfo in database error strings. |
+| Queued delete | `Model::delete` / admin queue walk **CascadeDelete** DAG nodes with **Delete only** under the calling actor before mark/run. Read is not required. `SetNull` / `RemoveEdge` nodes are not Delete-checked at pre-queue. |
+| SetNull / RemoveEdge | Cleared under the **requester** Valence as a consequence of authorized CascadeDelete — via `merge_record` / `unrelate_edge`, not Update-gated `Model::merge`. No System elevation and no privacy bypass for these clears. |
+| Background deletion | Hosts (valence-platform) must restore the deleting actor from `valence_deletion_run.requested_by` for cascade privacy, physical delete, SetNull/RemoveEdge clears, and Delete side effects. Do not run those steps as System. Invalid `requested_by` must fail closed. |
 
 See also `uf-valence` crate docs (§ Features).

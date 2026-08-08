@@ -2,7 +2,7 @@
 
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use anyhow::Result;
 use valence_core::DatabaseBackend;
@@ -28,6 +28,16 @@ pub async fn run_write_firehose(
     let ok = Arc::new(AtomicU64::new(0));
     let errors = Arc::new(AtomicUsize::new(0));
     let seq = Arc::new(AtomicU64::new(0));
+    // Per-run nonce so adapters sharing a physical store (hybrid ⇄ postgres primary) do
+    // not collide on `id` and inflate the error rate with duplicate-key failures.
+    let nonce = Instant::now().elapsed().as_nanos();
+    let nonce = format!(
+        "{}-{}",
+        std::process::id(),
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_or(nonce, |d| d.as_nanos())
+    );
     let deadline = Instant::now() + Duration::from_secs(duration_secs);
 
     let mut handles = Vec::with_capacity(concurrency);
@@ -37,10 +47,11 @@ pub async fn run_write_firehose(
         let errors = Arc::clone(&errors);
         let seq = Arc::clone(&seq);
         let table = table.to_string();
+        let nonce = nonce.clone();
         handles.push(tokio::spawn(async move {
             while Instant::now() < deadline {
                 let n = seq.fetch_add(1, Ordering::Relaxed);
-                let id = format!("fh-{n}");
+                let id = format!("fh-{nonce}-{n}");
                 match backend
                     .create_record(&table, serde_json::json!({"id": id, "n": n}))
                     .await

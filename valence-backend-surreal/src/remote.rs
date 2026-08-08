@@ -21,7 +21,8 @@ mod imp {
     use crate::query_exec::execute_compiled_query_inner;
     use crate::record_id::{surreal_from_valence, valence_from_surreal};
     use crate::row_json::{
-        ensure_schemaless_table, json_to_surreal_content_value, select_record_json,
+        ensure_schemaless_table, ensure_typed_table, json_to_surreal_content_value,
+        select_record_json, sync_typed_table,
         thing_to_id_only,
     };
 
@@ -253,6 +254,20 @@ mod imp {
 
         async fn ensure_schemaless_table(&self, table: &str) -> Result<()> {
             ensure_schemaless_table(&self.db, table).await
+        }
+
+        async fn ensure_typed_table(
+            &self,
+            layout: &valence_core::storage_layout::StorageLayout,
+        ) -> Result<()> {
+            ensure_typed_table(&self.db, layout).await
+        }
+
+        async fn sync_typed_table(
+            &self,
+            layout: &valence_core::storage_layout::StorageLayout,
+        ) -> Result<()> {
+            sync_typed_table(&self.db, layout).await
         }
 
         async fn define_unique_index(&self, table: &str, field: &str) -> Result<()> {

@@ -462,8 +462,8 @@ impl PlainModel {
             .await?;
         let compiled = valence::__internal::CompiledQuery {
             query_string: format!(
-                "SELECT VALUE id FROM {} WHERE {} = $value LIMIT 2", < Self as
-                valence::Model > ::table_name(), field_name,
+                "SELECT id FROM {} WHERE {} = $value LIMIT 2", < Self as valence::Model >
+                ::table_name(), field_name,
             ),
             params: vec![("value".to_string(), field_value.clone())],
         };
@@ -920,6 +920,14 @@ impl PlainModelSchema {
                 }
             });
         m
+    }
+    /// Physical storage layout derived from [`Self::full`] (typed columns / fields).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`valence::Error::Validation`] for unsafe identifiers or unknown types.
+    pub fn storage_layout() -> valence::Result<valence::StorageLayout> {
+        valence::StorageLayout::from_schema(Self::full())
     }
 }
 impl valence::SchemaMetadata for PlainModel {

@@ -14,6 +14,16 @@ pub async fn run(ctx: &RunContext) -> Result<BenchReport> {
     let valence = session.ensure_valence()?;
     let backend = valence.active_backend()?;
 
+    // Isolate from prior adapters that share a physical store (e.g. hybrid reuses the
+    // postgres primary the standalone postgres adapter already wrote): clear the ids
+    // this run creates so the create-throughput measurement starts from empty rows.
+    for i in 0..ctx.warmup {
+        let _ = backend.delete_record("bm_v0", &format!("warm{i}")).await;
+    }
+    for i in 0..ctx.plan.default_ops {
+        let _ = backend.delete_record("bm_v0", &format!("rec{i}")).await;
+    }
+
     for i in 0..ctx.warmup {
         let id = format!("warm{i}");
         backend

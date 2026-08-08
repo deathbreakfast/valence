@@ -4,10 +4,11 @@ use sqlx::postgres::PgPool;
 
 use valence_backend_sql::{
     apply_ttl_policy_postgres, create_record_postgres, define_unique_index_postgres,
-    delete_record_postgres, ensure_edges_postgres, ensure_table_postgres, execute_select_postgres,
-    get_edge_sources_postgres, get_edge_targets_postgres, get_record_postgres,
-    merge_record_postgres, relate_edge_postgres, sql_capabilities, ttl_deferred,
-    unrelate_edge_postgres, update_record_postgres,
+    delete_record_postgres, ensure_edges_postgres, ensure_table_postgres,
+    ensure_typed_table_postgres, execute_select_postgres, get_edge_sources_postgres,
+    get_edge_targets_postgres, get_record_postgres, inspect_typed_layout_postgres,
+    merge_record_postgres, relate_edge_postgres, sql_capabilities, sync_typed_table_postgres,
+    ttl_deferred, unrelate_edge_postgres, update_record_postgres,
 };
 use valence_core::backend::DatabaseBackend;
 use valence_core::compiled_query::CompiledQuery;
@@ -22,7 +23,7 @@ pub const ENGINE_ID: &str = KnownEngines::POSTGRES;
 /// Schema evaluator const for `database:` routing.
 pub const PRIMARY: DatabaseFromEngine = Database::from_engine("primary", ENGINE_ID);
 
-/// Postgres-backed [`DatabaseBackend`] using JSONB document rows.
+/// Postgres-backed [`DatabaseBackend`] using typed columns (JSONB cells for `Json` fields).
 ///
 /// # Examples
 ///
@@ -117,6 +118,27 @@ impl DatabaseBackend for PostgresBackend {
 
     async fn ensure_schemaless_table(&self, table: &str) -> Result<()> {
         ensure_table_postgres(&self.pool, table).await
+    }
+
+    async fn inspect_typed_layout(
+        &self,
+        table: &str,
+    ) -> Result<Option<valence_core::storage_layout::StorageLayout>> {
+        inspect_typed_layout_postgres(&self.pool, table).await
+    }
+
+    async fn ensure_typed_table(
+        &self,
+        layout: &valence_core::storage_layout::StorageLayout,
+    ) -> Result<()> {
+        ensure_typed_table_postgres(&self.pool, layout).await
+    }
+
+    async fn sync_typed_table(
+        &self,
+        layout: &valence_core::storage_layout::StorageLayout,
+    ) -> Result<()> {
+        sync_typed_table_postgres(&self.pool, layout).await
     }
 
     async fn get_record(&self, table: &str, id: &str) -> Result<Option<serde_json::Value>> {

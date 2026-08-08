@@ -108,9 +108,37 @@ pub trait DatabaseBackend: Send + Sync + std::fmt::Debug + 'static {
     /// Ensure a schemaless table exists before first write.
     ///
     /// **Contract:** default implementation is a no-op; adapters may create tables lazily elsewhere.
+    /// Prefer [`Self::ensure_typed_table`] for schema-backed models.
     async fn ensure_schemaless_table(&self, table: &str) -> Result<()> {
         let _ = table;
         Ok(())
+    }
+
+    /// Inspect physical columns/fields currently present for `table`.
+    ///
+    /// **Contract:** default returns `Ok(None)` (unknown / unsupported). Empty table →
+    /// `Ok(Some(layout))` with only discovered fields (may be empty aside from conventions).
+    async fn inspect_typed_layout(
+        &self,
+        table: &str,
+    ) -> Result<Option<crate::storage_layout::StorageLayout>> {
+        let _ = table;
+        Ok(None)
+    }
+
+    /// Create a typed table/collection from [`StorageLayout`] when missing.
+    ///
+    /// **Contract:** default falls back to [`Self::ensure_schemaless_table`] using `layout.table`
+    /// (deprecated path). SQL / Surreal / Redis adapters override.
+    async fn ensure_typed_table(&self, layout: &crate::storage_layout::StorageLayout) -> Result<()> {
+        self.ensure_schemaless_table(&layout.table).await
+    }
+
+    /// Additive sync: add missing fields/indexes from `layout`; refuse drops/renames/type changes.
+    ///
+    /// **Contract:** default calls [`Self::ensure_typed_table`] (create-only).
+    async fn sync_typed_table(&self, layout: &crate::storage_layout::StorageLayout) -> Result<()> {
+        self.ensure_typed_table(layout).await
     }
 
     /// Fetch one record by primary key.

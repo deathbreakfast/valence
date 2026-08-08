@@ -327,6 +327,13 @@ pub fn embedded_catalog() -> &'static [CatalogEntry] {
         entry("on-delete-set-null-cross-engine", PathKind::Happy, |_| {
             ScenarioSpec::on_delete_set_null_cross_engine()
         }),
+        entry("typed-sync-add-field", PathKind::Happy, |storage| {
+            let table = format!(
+                "typed_sync_{}",
+                storage.slug().replace('-', "_")
+            );
+            ScenarioSpec::typed_sync_add_field(table)
+        }),
     ];
     CATALOG
 }
@@ -392,6 +399,14 @@ fn on_delete_catalog_applies(entry_id: &str, storage: StorageAdapter) -> bool {
     true
 }
 
+/// Whether typed-sync catalog entries apply (skip acme stub — no typed layout port).
+fn typed_sync_catalog_applies(entry_id: &str, storage: StorageAdapter) -> bool {
+    if entry_id != "typed-sync-add-field" {
+        return true;
+    }
+    !matches!(storage, StorageAdapter::AcmeStub)
+}
+
 /// Storage adapters participating in default PR CI matrix.
 #[must_use]
 pub fn e2e_storage_backends() -> Vec<StorageAdapter> {
@@ -450,6 +465,9 @@ pub async fn run_catalog_entry(entry: &CatalogEntry, storage: StorageAdapter) {
         return;
     }
     if !on_delete_catalog_applies(entry.id, storage) {
+        return;
+    }
+    if !typed_sync_catalog_applies(entry.id, storage) {
         return;
     }
 
@@ -541,6 +559,9 @@ pub fn catalog_for_storage(storage: StorageAdapter) -> Vec<&'static CatalogEntry
                 return false;
             }
             if !on_delete_catalog_applies(entry.id, storage) {
+                return false;
+            }
+            if !typed_sync_catalog_applies(entry.id, storage) {
                 return false;
             }
             true

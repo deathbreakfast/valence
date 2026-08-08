@@ -7,7 +7,11 @@ use valence_core::DatabaseBackend;
 
 const BATCH: usize = 1000;
 
-/// Insert `count` schemaless rows into `table` via the adapter.
+/// Populate `count` rows in `table` via the adapter (typed columns from content keys).
+///
+/// Uses upsert so the workload is idempotent across shared wire stores — the hybrid
+/// adapter and the standalone SQL adapter target the same physical table, and a plain
+/// insert would collide on the primary key when both prefill the same rows.
 pub async fn prefill_table(
     backend: Arc<dyn DatabaseBackend>,
     table: &str,
@@ -18,11 +22,13 @@ pub async fn prefill_table(
     while inserted < count {
         let end = (inserted + BATCH).min(count);
         for i in inserted..end {
+            let id = format!("prefill-{i}");
             backend
-                .create_record(
+                .upsert_record(
                     table,
+                    &id,
                     serde_json::json!({
-                        "id": format!("prefill-{i}"),
+                        "id": id,
                         "idx": i,
                         "label": format!("row-{i}"),
                     }),

@@ -5,9 +5,10 @@ use std::str::FromStr;
 
 use valence_backend_sql::{
     apply_ttl_policy_sqlite, create_record_sqlite, define_unique_index_sqlite,
-    delete_record_sqlite, ensure_table_sqlite, execute_select_sqlite, get_edge_sources_sqlite,
-    get_edge_targets_sqlite, get_record_sqlite, merge_record_sqlite, relate_edge_sqlite,
-    sql_capabilities, ttl_deferred, unrelate_edge_sqlite, update_record_sqlite,
+    delete_record_sqlite, ensure_table_sqlite, ensure_typed_table_sqlite, execute_select_sqlite,
+    get_edge_sources_sqlite, get_edge_targets_sqlite, get_record_sqlite,
+    inspect_typed_layout_sqlite, merge_record_sqlite, relate_edge_sqlite, sql_capabilities,
+    sync_typed_table_sqlite, ttl_deferred, unrelate_edge_sqlite, update_record_sqlite,
 };
 use valence_core::backend::DatabaseBackend;
 use valence_core::compiled_query::CompiledQuery;
@@ -22,7 +23,7 @@ pub const ENGINE_ID: &str = KnownEngines::SQLITE;
 /// Schema evaluator const for `database:` routing.
 pub const PRIMARY: DatabaseFromEngine = Database::from_engine("primary", ENGINE_ID);
 
-/// SQLite-backed [`DatabaseBackend`] using JSON document rows.
+/// SQLite-backed [`DatabaseBackend`] using typed columns from schema layout.
 ///
 /// # Examples
 ///
@@ -126,6 +127,27 @@ impl DatabaseBackend for SqliteBackend {
 
     async fn ensure_schemaless_table(&self, table: &str) -> Result<()> {
         ensure_table_sqlite(&self.pool, table).await
+    }
+
+    async fn inspect_typed_layout(
+        &self,
+        table: &str,
+    ) -> Result<Option<valence_core::storage_layout::StorageLayout>> {
+        inspect_typed_layout_sqlite(&self.pool, table).await
+    }
+
+    async fn ensure_typed_table(
+        &self,
+        layout: &valence_core::storage_layout::StorageLayout,
+    ) -> Result<()> {
+        ensure_typed_table_sqlite(&self.pool, layout).await
+    }
+
+    async fn sync_typed_table(
+        &self,
+        layout: &valence_core::storage_layout::StorageLayout,
+    ) -> Result<()> {
+        sync_typed_table_sqlite(&self.pool, layout).await
     }
 
     async fn get_record(&self, table: &str, id: &str) -> Result<Option<serde_json::Value>> {

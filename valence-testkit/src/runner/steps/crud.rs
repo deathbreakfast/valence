@@ -3,6 +3,7 @@
 use valence_core::compiled_query::CompiledQuery;
 use valence_core::query::QueryCore;
 use valence_core::record_id::RecordId;
+use valence_core::storage_layout::{FieldStorage, LayoutField, StorageLayout};
 use valence_core::StringPredicate;
 
 use crate::bootstrap::BootstrapSession;
@@ -114,6 +115,93 @@ pub(super) async fn run(
                 .unrelate_edge(&from, "m2m_edge", &to)
                 .await
                 .map_err(|e| e.to_string())?;
+        }
+        ScenarioStep::TypedSyncAddField { table } => {
+            if mode == RunMode::Benchmark {
+                return Ok(());
+            }
+            let valence = session.ensure_valence().map_err(|e| e.to_string())?;
+            let backend = valence.active_backend().map_err(|e| e.to_string())?;
+            let layout_v1 = StorageLayout {
+                table: table.clone(),
+                fields: vec![
+                    LayoutField {
+                        name: "id".into(),
+                        storage: FieldStorage::String,
+                        primary_key: true,
+                        nullable: false,
+                        unique: true,
+                        indexed: false,
+                    },
+                    LayoutField {
+                        name: "name".into(),
+                        storage: FieldStorage::String,
+                        primary_key: false,
+                        nullable: true,
+                        unique: false,
+                        indexed: false,
+                    },
+                ],
+            };
+            backend
+                .ensure_typed_table(&layout_v1)
+                .await
+                .map_err(|e| e.to_string())?;
+            let _ = backend.delete_record(table, "r1").await;
+            backend
+                .create_record(
+                    table,
+                    serde_json::json!({
+                        "id": {"table": table, "id": "r1"},
+                        "name": "alpha"
+                    }),
+                )
+                .await
+                .map_err(|e| e.to_string())?;
+
+            let mut layout_v2 = layout_v1.clone();
+            layout_v2.fields.push(LayoutField {
+                name: "score".into(),
+                storage: FieldStorage::Integer,
+                primary_key: false,
+                nullable: true,
+                unique: false,
+                indexed: false,
+            });
+            backend
+                .sync_typed_table(&layout_v2)
+                .await
+                .map_err(|e| e.to_string())?;
+
+            if let Some(inspected) = backend
+                .inspect_typed_layout(table)
+                .await
+                .map_err(|e| e.to_string())?
+            {
+                if !inspected.fields.iter().any(|f| f.name == "score") {
+                    return Err(format!(
+                        "score field missing after sync on {table}: {inspected:?}"
+                    ));
+                }
+            }
+
+            backend
+                .update_record(
+                    table,
+                    "r1",
+                    serde_json::json!({"name": "alpha", "score": 7}),
+                )
+                .await
+                .map_err(|e| e.to_string())?;
+            let got = backend
+                .get_record(table, "r1")
+                .await
+                .map_err(|e| e.to_string())?
+                .ok_or_else(|| format!("row missing after typed sync update on {table}"))?;
+            let score = got.get("score").and_then(|v| v.as_i64());
+            if score != Some(7) {
+                return Err(format!("expected score=7 after typed sync, got {got}"));
+            }
         }
         other => return Err(format!("crud step mismatch: {other:?}")),
     }

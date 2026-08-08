@@ -214,6 +214,10 @@ impl DatabaseBackend for InMemoryBackend {
         table: &str,
         content: serde_json::Value,
     ) -> Result<serde_json::Value> {
+        if let Ok(layout) = valence_core::storage_layout::StorageLayout::from_registry_table(table)
+        {
+            valence_core::storage_layout::validate_write_types(&layout, &content)?;
+        }
         let mut content = content;
         valence_core::ttl::prepare_create_content(table, self, &mut content)?;
         let id = storage_id_from_content(&content).unwrap_or_else(uuid_simple);

@@ -1,21 +1,18 @@
-//! Table layout: `(id TEXT PRIMARY KEY, body JSON)`.
+//! Shared SQL helpers (edges + legacy row shaping).
+//!
+//! Document-era `(id, body)` tables are gone — typed columns live in [`crate::typed_table`].
 
 use serde_json::{Map, Value};
 
-/// Primary key column name in SQL document tables.
+/// Primary key column name.
 pub const ID_COLUMN: &str = "id";
-pub const BODY_COLUMN: &str = "body";
 
 /// Edge junction table shared by SQL backends.
 pub const EDGES_TABLE: &str = "valence_edges";
 
-/// DDL for a Valence schemaless table.
+/// Minimal DDL for schemaless/ad-hoc tables (`id` only; fields added on write).
 pub fn ensure_table_ddl(table: &str) -> String {
-    format!(
-        "CREATE TABLE IF NOT EXISTS {table} (\
-         {ID_COLUMN} TEXT PRIMARY KEY NOT NULL, \
-         {BODY_COLUMN} TEXT NOT NULL DEFAULT '{{}}')"
-    )
+    format!("CREATE TABLE IF NOT EXISTS {table} ({ID_COLUMN} TEXT PRIMARY KEY NOT NULL)")
 }
 
 /// DDL for the shared edge junction table.
@@ -36,7 +33,7 @@ pub fn ensure_table(table: &str) -> String {
     ensure_table_ddl(table)
 }
 
-/// Build a JSON row object from stored body + id.
+/// Build a JSON row object from flat fields + id (Valence wire shape).
 pub fn row_from_body(table: &str, id: &str, body: Value) -> Value {
     let mut obj = match body {
         Value::Object(map) => map,
@@ -52,7 +49,7 @@ pub fn row_from_body(table: &str, id: &str, body: Value) -> Value {
     Value::Object(obj)
 }
 
-/// Merge content fields into body map for insert/update.
+/// Merge content fields into a map for insert/update.
 pub fn upsert_body_fields(content: Value) -> Map<String, Value> {
     match content {
         Value::Object(map) => map,

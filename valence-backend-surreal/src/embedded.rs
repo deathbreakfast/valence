@@ -17,7 +17,8 @@ use crate::error::db_err;
 use crate::query_exec::execute_compiled_query_inner;
 use crate::record_id::{surreal_from_valence, valence_from_surreal};
 use crate::row_json::{
-    ensure_schemaless_table, json_to_surreal_content_value, map_looks_like_surreal_thing_only,
+    ensure_schemaless_table, ensure_typed_table, json_to_surreal_content_value,
+    map_looks_like_surreal_thing_only, sync_typed_table,
     record_map_to_json_object, select_record_json, thing_only_key_from_tb_id_map, thing_to_id_only,
     try_value_as_record_map,
 };
@@ -364,6 +365,20 @@ impl DatabaseBackend for SurrealEmbeddedBackend {
 
     async fn ensure_schemaless_table(&self, table: &str) -> Result<()> {
         ensure_schemaless_table(&self.db, table).await
+    }
+
+    async fn ensure_typed_table(
+        &self,
+        layout: &valence_core::storage_layout::StorageLayout,
+    ) -> Result<()> {
+        ensure_typed_table(&self.db, layout).await
+    }
+
+    async fn sync_typed_table(
+        &self,
+        layout: &valence_core::storage_layout::StorageLayout,
+    ) -> Result<()> {
+        sync_typed_table(&self.db, layout).await
     }
 
     async fn define_unique_index(&self, table: &str, field: &str) -> Result<()> {

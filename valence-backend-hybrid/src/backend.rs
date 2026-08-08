@@ -143,6 +143,27 @@ impl DatabaseBackend for HybridBackend {
         self.primary.ensure_schemaless_table(table).await
     }
 
+    async fn inspect_typed_layout(
+        &self,
+        table: &str,
+    ) -> Result<Option<valence_core::storage_layout::StorageLayout>> {
+        self.primary.inspect_typed_layout(table).await
+    }
+
+    async fn ensure_typed_table(
+        &self,
+        layout: &valence_core::storage_layout::StorageLayout,
+    ) -> Result<()> {
+        self.primary.ensure_typed_table(layout).await
+    }
+
+    async fn sync_typed_table(
+        &self,
+        layout: &valence_core::storage_layout::StorageLayout,
+    ) -> Result<()> {
+        self.primary.sync_typed_table(layout).await
+    }
+
     async fn get_record(&self, table: &str, id: &str) -> Result<Option<Value>> {
         self.get_record_inner(table, id).await
     }

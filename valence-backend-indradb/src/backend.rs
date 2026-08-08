@@ -19,8 +19,6 @@ pub const ENGINE_ID: &str = KnownEngines::INDRADB;
 /// Schema evaluator const for `database:` routing.
 pub const PRIMARY: DatabaseFromEngine = Database::from_engine("primary", ENGINE_ID);
 
-const BODY_PROPERTY: &str = "body";
-
 type IndraDb = indradb::Database<MemoryDatastore>;
 
 /// Embedded IndraDB [`DatabaseBackend`] mapping Valence tables to vertex types.
@@ -104,8 +102,8 @@ impl IndradbBackend {
         Identifier::new(edge_table).map_err(Self::id_err)
     }
 
-    fn body_property() -> Result<Identifier> {
-        Identifier::new(BODY_PROPERTY).map_err(Self::id_err)
+    fn field_property(name: &str) -> Result<Identifier> {
+        Identifier::new(name).map_err(Self::id_err)
     }
 
     fn vertex_uuid(table: &str, id: &str) -> Uuid {
@@ -119,34 +117,98 @@ impl IndradbBackend {
         Ok(vertex)
     }
 
-    fn read_body(&self, vertex_id: Uuid) -> Result<Option<serde_json::Value>> {
+    /// Read one property per field into a Valence JSON object (includes nested `id`).
+    fn read_fields(&self, table: &str, id: &str, vertex_id: Uuid) -> Result<Option<serde_json::Value>> {
         let query = PipePropertyQuery::new(Box::new(SpecificVertexQuery::single(vertex_id).into()))
             .map_err(Self::id_err)?;
         let output = self.db.get(query).map_err(Self::db_err)?;
+        let mut map = serde_json::Map::new();
+        let mut found = false;
         for item in output {
             if let QueryOutputValue::VertexProperties(vps) = item {
                 for vp in vps {
                     for prop in vp.props {
-                        if prop.name.as_str() == BODY_PROPERTY {
-                            return Ok(Some(prop.value.0.as_ref().clone()));
-                        }
+                        found = true;
+                        map.insert(prop.name.as_str().to_string(), prop.value.0.as_ref().clone());
                     }
                 }
             }
         }
-        Ok(None)
+        if !found {
+            return Ok(None);
+        }
+        // Prefer the caller-supplied id; fall back to the stored bare id so table
+        // scans (empty probe id) can rebuild the wire RecordId shape.
+        let stored_bare = map
+            .remove("__valence_id")
+            .and_then(|v| match v {
+                serde_json::Value::String(s) => Some(s),
+                _ => None,
+            });
+        let bare = if id.is_empty() {
+            stored_bare.unwrap_or_default()
+        } else {
+            id.to_string()
+        };
+        if !bare.is_empty() {
+            map.insert(
+                "id".into(),
+                serde_json::json!({"table": table, "id": bare}),
+            );
+        }
+        Ok(Some(serde_json::Value::Object(map)))
     }
 
-    fn write_body(&self, table: &str, id: &str, body: serde_json::Value) -> Result<()> {
+    /// Write each top-level field (except nested `id`) as its own Indra property.
+    fn write_fields(&self, table: &str, id: &str, record: serde_json::Value) -> Result<()> {
         let vertex = self.ensure_vertex(table, id)?;
-        let prop = Self::body_property()?;
+        // Bare id for reverse lookup when scanning vertices.
+        let id_prop = Self::field_property("__valence_id")?;
         self.db
             .set_properties(
                 SpecificVertexQuery::single(vertex.id),
-                prop,
-                &Json::new(body),
+                id_prop,
+                &Json::new(serde_json::Value::String(id.to_string())),
             )
-            .map_err(Self::db_err)
+            .map_err(Self::db_err)?;
+        let obj = match record {
+            serde_json::Value::Object(m) => m,
+            other => {
+                let mut m = serde_json::Map::new();
+                m.insert("_value".into(), other);
+                m
+            }
+        };
+        for (key, value) in obj {
+            if key == "id" {
+                continue;
+            }
+            valence_core::safe_ident::assert_safe_ident(&key)?;
+            let prop = Self::field_property(&key)?;
+            self.db
+                .set_properties(
+                    SpecificVertexQuery::single(vertex.id),
+                    prop,
+                    &Json::new(value),
+                )
+                .map_err(Self::db_err)?;
+        }
+        Ok(())
+    }
+
+    fn record_id_from_props(map: &serde_json::Map<String, serde_json::Value>) -> Option<String> {
+        map.get("__valence_id")
+            .and_then(|v| v.as_str())
+            .map(str::to_string)
+            .or_else(|| {
+                map.get("id").and_then(|v| match v {
+                    serde_json::Value::String(s) => Some(s.clone()),
+                    serde_json::Value::Object(o) => {
+                        o.get("id").and_then(|x| x.as_str()).map(str::to_string)
+                    }
+                    _ => None,
+                })
+            })
     }
 
     async fn check_unique_fields(
@@ -164,7 +226,7 @@ impl IndradbBackend {
                 continue;
             };
             if exclude_id.is_some_and(|id| {
-                self.read_body(Self::vertex_uuid(table, id))
+                self.read_fields(table, id, Self::vertex_uuid(table, id))
                     .ok()
                     .flatten()
                     .and_then(|row| row.get(field).and_then(|v| v.as_str()).map(str::to_string))
@@ -217,8 +279,15 @@ impl IndradbBackend {
         for item in output {
             if let QueryOutputValue::Vertices(vertices) = item {
                 for vertex in vertices {
-                    if let Some(body) = self.read_body(vertex.id)? {
-                        rows.push(body);
+                    // Empty probe id: recover bare id from `__valence_id` inside read_fields.
+                    if let Some(row) = self.read_fields(table, "", vertex.id)? {
+                        if row
+                            .as_object()
+                            .and_then(Self::record_id_from_props)
+                            .is_some_and(|bare| !bare.is_empty())
+                        {
+                            rows.push(row);
+                        }
                     }
                 }
             }
@@ -310,7 +379,7 @@ impl DatabaseBackend for IndradbBackend {
     }
 
     async fn get_record(&self, table: &str, id: &str) -> Result<Option<serde_json::Value>> {
-        self.read_body(Self::vertex_uuid(table, id))
+        self.read_fields(table, id, Self::vertex_uuid(table, id))
     }
 
     async fn create_record(
@@ -318,6 +387,10 @@ impl DatabaseBackend for IndradbBackend {
         table: &str,
         content: serde_json::Value,
     ) -> Result<serde_json::Value> {
+        if let Ok(layout) = valence_core::storage_layout::StorageLayout::from_registry_table(table)
+        {
+            valence_core::storage_layout::validate_write_types(&layout, &content)?;
+        }
         self.check_unique_fields(table, &content, None).await?;
         let id = storage_id_from_content(&content).unwrap_or_else(uuid_simple);
         let mut record = content;
@@ -327,7 +400,7 @@ impl DatabaseBackend for IndradbBackend {
                 obj.insert("id".into(), record_id_json(table, &id));
             }
         }
-        self.write_body(table, &id, record.clone())?;
+        self.write_fields(table, &id, record.clone())?;
         self.track_unique_fields(table, &record).await;
         Ok(record)
     }
@@ -345,7 +418,7 @@ impl DatabaseBackend for IndradbBackend {
             self.untrack_unique_fields(table, &existing).await;
         }
         self.check_unique_fields(table, &content, Some(id)).await?;
-        self.write_body(table, id, content.clone())?;
+        self.write_fields(table, id, content.clone())?;
         self.track_unique_fields(table, &content).await;
         Ok(content)
     }
@@ -369,7 +442,7 @@ impl DatabaseBackend for IndradbBackend {
             }
         }
         self.check_unique_fields(table, &record, Some(id)).await?;
-        self.write_body(table, id, record.clone())?;
+        self.write_fields(table, id, record.clone())?;
         self.track_unique_fields(table, &record).await;
         Ok(record)
     }
@@ -388,7 +461,7 @@ impl DatabaseBackend for IndradbBackend {
         if let Some(obj) = record.as_object_mut() {
             obj.insert("id".into(), record_id_json(table, id));
         }
-        self.write_body(table, id, record.clone())?;
+        self.write_fields(table, id, record.clone())?;
         self.track_unique_fields(table, &record).await;
         Ok(record)
     }
@@ -460,9 +533,12 @@ impl DatabaseBackend for IndradbBackend {
                         })
                         .unwrap_or_else(|| from.table().to_string());
                     let body = self
-                        .read_body(edge.inbound_id)?
+                        .read_fields(&inbound_table, "", edge.inbound_id)?
                         .unwrap_or_else(|| serde_json::json!({}));
-                    let target_id = storage_id_from_content(&body)
+                    let target_id = body
+                        .as_object()
+                        .and_then(Self::record_id_from_props)
+                        .or_else(|| storage_id_from_content(&body))
                         .unwrap_or_else(|| edge.inbound_id.to_string());
                     targets.push(RecordId::new(inbound_table, target_id));
                 }

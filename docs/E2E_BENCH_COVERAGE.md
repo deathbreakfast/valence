@@ -33,6 +33,7 @@ Living coverage map for Valence. Status legend:
 | Update / upsert | Y (contract + model) | P | merge bm-v8; upsert via model contract |
 | Hard delete | P (contract) | P | N |
 | Unique index | Y (contract) | Y (duplicate) | N |
+| Typed ensure / additive sync | Y (`typed-sync-add-field` catalog + `typed_sync_add_field` sqlite) | Y (destructive refuse unit) | N |
 | Graph edges | Y | N | N |
 
 ### Model / ORM

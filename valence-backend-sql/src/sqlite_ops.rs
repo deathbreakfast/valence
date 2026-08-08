@@ -1,12 +1,20 @@
 //! Shared SQL document backend logic for SQLite and Postgres.
 
-use serde_json::{Map, Value};
-use sqlx::Row;
+use serde_json::Value;
+use sqlx::{Column, Row};
 use valence_core::compiled_query::CompiledQuery;
 use valence_core::error::{Error, Result};
 use valence_core::record_id::RecordId;
 
-use crate::{ensure_table, json_merge, prepare_compiled, row_from_body, upsert_body_fields};
+use valence_core::storage_layout::StorageLayout;
+
+use crate::json_merge;
+use crate::prepare_compiled;
+use crate::typed_table::{
+    create_record_typed_sqlite, define_unique_index_column_sqlite, ensure_layout_for_write_sqlite,
+    get_record_typed_sqlite, map_select_row_sqlite, update_record_typed_sqlite,
+};
+use crate::ensure_table;
 
 /// Dialect-specific SQL fragments.
 #[allow(dead_code)]
@@ -30,16 +38,6 @@ pub fn storage_id(content: &Value) -> Option<String> {
             .map(str::to_string)
             .or_else(|| v.as_str().map(str::to_string))
     })
-}
-
-pub fn expand_body_rows(table: &str, rows: Vec<(String, String)>) -> Result<Vec<Value>> {
-    rows.into_iter()
-        .map(|(id, body_text)| {
-            let body: Value =
-                serde_json::from_str(&body_text).unwrap_or_else(|_| Value::Object(Map::new()));
-            Ok(row_from_body(table, &id, body))
-        })
-        .collect()
 }
 
 pub fn bind_json_value<'q>(
@@ -79,21 +77,12 @@ pub async fn execute_select_sqlite(
         Err(e) => return Err(Error::database(e.to_string())),
     };
 
-    if sql.contains("COUNT(") {
+    if sql.to_ascii_uppercase().contains("COUNT(") {
         let count = rows
             .first()
             .and_then(|r| r.try_get::<i64, _>(0).ok())
             .unwrap_or(0);
         return Ok(vec![Value::Number(count.into())]);
-    }
-
-    if sql.contains("SELECT id") && !sql.contains("body") {
-        // Return object rows so callers can deserialize as `IdOnlyRecord` / model types.
-        return Ok(rows
-            .iter()
-            .filter_map(|r| r.try_get::<String, _>(0).ok())
-            .map(|id| serde_json::json!({ "id": id }))
-            .collect());
     }
 
     let table = compiled
@@ -103,15 +92,26 @@ pub async fn execute_select_sqlite(
         .and_then(|s| s.split_whitespace().next())
         .unwrap_or(default_table);
 
-    let pairs: Vec<(String, String)> = rows
+    // Unique probes / id-only: SELECT id … with a single column.
+    let upper = sql.to_ascii_uppercase();
+    if upper.contains("SELECT ID")
+        && !upper.contains("SELECT *")
+        && rows
+            .first()
+            .map(|r| r.columns().len() == 1)
+            .unwrap_or(false)
+    {
+        return Ok(rows
+            .iter()
+            .filter_map(|r| r.try_get::<String, _>(0).ok())
+            .map(|id| serde_json::json!({ "id": id }))
+            .collect());
+    }
+
+    Ok(rows
         .iter()
-        .map(|r| {
-            let id: String = r.try_get(0).unwrap_or_default();
-            let body: String = r.try_get(1).unwrap_or_else(|_| "{}".into());
-            (id, body)
-        })
-        .collect();
-    expand_body_rows(table, pairs)
+        .map(|r| map_select_row_sqlite(table, r))
+        .collect())
 }
 
 pub async fn ensure_edges_sqlite(pool: &sqlx::SqlitePool) -> Result<()> {
@@ -136,22 +136,7 @@ pub async fn get_record_sqlite(
     table: &str,
     id: &str,
 ) -> Result<Option<Value>> {
-    ensure_table_sqlite(pool, table).await?;
-    let q = format!("SELECT id, body FROM {table} WHERE id = ?");
-    let row = sqlx::query(&q)
-        .bind(id)
-        .fetch_optional(pool)
-        .await
-        .map_err(|e| Error::database(e.to_string()))?;
-    Ok(row.map(|r| {
-        let id: String = r.get(0);
-        let body: String = r.get(1);
-        row_from_body(
-            table,
-            &id,
-            serde_json::from_str(&body).unwrap_or_else(|_| Value::Object(Map::new())),
-        )
-    }))
+    get_record_typed_sqlite(pool, table, id).await
 }
 
 pub async fn create_record_sqlite(
@@ -159,29 +144,8 @@ pub async fn create_record_sqlite(
     table: &str,
     content: Value,
 ) -> Result<Value> {
-    ensure_table_sqlite(pool, table).await?;
-    let mut content = content;
-    valence_core::ttl::prepare_create_content_with_capability(
-        table,
-        valence_core::ttl::BackendTtlCapability::Deferred,
-        &mut content,
-    )?;
-    let id = storage_id(&content).unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
-    let mut body = upsert_body_fields(content);
-    body.remove("id");
-    let body_text = serde_json::to_string(&Value::Object(body)).map_err(Error::from)?;
-    let q = format!("INSERT INTO {table} (id, body) VALUES (?, ?)");
-    sqlx::query(&q)
-        .bind(&id)
-        .bind(&body_text)
-        .execute(pool)
-        .await
-        .map_err(|e| Error::database(e.to_string()))?;
-    Ok(row_from_body(
-        table,
-        &id,
-        serde_json::from_str(&body_text).unwrap_or_else(|_| Value::Object(Map::new())),
-    ))
+    let layout = StorageLayout::resolve_for_write(table, &content)?;
+    create_record_typed_sqlite(pool, &layout, content).await
 }
 
 pub async fn update_record_sqlite(
@@ -190,24 +154,8 @@ pub async fn update_record_sqlite(
     id: &str,
     content: Value,
 ) -> Result<Value> {
-    if get_record_sqlite(pool, table, id).await?.is_none() {
-        return Err(Error::NotFound(format!("{table}:{id}")));
-    }
-    let mut body = upsert_body_fields(content);
-    body.remove("id");
-    let body_text = serde_json::to_string(&Value::Object(body)).map_err(Error::from)?;
-    let q = format!("UPDATE {table} SET body = ? WHERE id = ?");
-    sqlx::query(&q)
-        .bind(&body_text)
-        .bind(id)
-        .execute(pool)
-        .await
-        .map_err(|e| Error::database(e.to_string()))?;
-    Ok(row_from_body(
-        table,
-        id,
-        serde_json::from_str(&body_text).unwrap_or_else(|_| Value::Object(Map::new())),
-    ))
+    let layout = StorageLayout::resolve_for_write(table, &content)?;
+    update_record_typed_sqlite(pool, &layout, id, content).await
 }
 
 pub async fn merge_record_sqlite(
@@ -328,19 +276,36 @@ pub async fn define_unique_index_sqlite(
     field: &str,
 ) -> Result<()> {
     assert_safe_table(table)?;
-    if !field.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
-        return Err(Error::Validation(format!("unsafe field: {field}")));
+    valence_core::safe_ident::assert_safe_ident(field)?;
+    // Ensure column exists: registry layout or placeholder table + column add via sync.
+    if let Ok(layout) = StorageLayout::from_registry_table(table) {
+        ensure_layout_for_write_sqlite(pool, &layout).await?;
+    } else {
+        ensure_table_sqlite(pool, table).await?;
+        let layout = StorageLayout {
+            table: table.to_string(),
+            fields: vec![
+                valence_core::storage_layout::LayoutField {
+                    name: "id".into(),
+                    storage: valence_core::storage_layout::FieldStorage::String,
+                    primary_key: true,
+                    nullable: false,
+                    unique: true,
+                    indexed: false,
+                },
+                valence_core::storage_layout::LayoutField {
+                    name: field.to_string(),
+                    storage: valence_core::storage_layout::FieldStorage::String,
+                    primary_key: false,
+                    nullable: true,
+                    unique: true,
+                    indexed: false,
+                },
+            ],
+        };
+        ensure_layout_for_write_sqlite(pool, &layout).await?;
     }
-    ensure_table_sqlite(pool, table).await?;
-    let idx = format!("valence_unique_{table}_{field}");
-    let q = format!(
-        "CREATE UNIQUE INDEX IF NOT EXISTS {idx} ON {table} (json_extract(body, '$.{field}'))"
-    );
-    sqlx::query(&q)
-        .execute(pool)
-        .await
-        .map_err(|e| Error::database(e.to_string()))?;
-    Ok(())
+    define_unique_index_column_sqlite(pool, table, field).await
 }
 
 pub fn ttl_deferred() -> valence_core::ttl::BackendTtlCapability {
@@ -354,12 +319,38 @@ pub async fn apply_ttl_policy_sqlite(
     _policy: &valence_core::ttl::SchemaTtlPolicy,
 ) -> Result<()> {
     assert_safe_table(table)?;
-    ensure_table_sqlite(pool, table).await?;
+    if let Ok(layout) = StorageLayout::from_registry_table(table) {
+        ensure_layout_for_write_sqlite(pool, &layout).await?;
+    } else {
+        ensure_table_sqlite(pool, table).await?;
+        let field = valence_core::ttl::EXPIRE_AT_FIELD;
+        let layout = StorageLayout {
+            table: table.to_string(),
+            fields: vec![
+                valence_core::storage_layout::LayoutField {
+                    name: "id".into(),
+                    storage: valence_core::storage_layout::FieldStorage::String,
+                    primary_key: true,
+                    nullable: false,
+                    unique: true,
+                    indexed: false,
+                },
+                valence_core::storage_layout::LayoutField {
+                    name: field.to_string(),
+                    storage: valence_core::storage_layout::FieldStorage::String,
+                    primary_key: false,
+                    nullable: true,
+                    unique: false,
+                    indexed: true,
+                },
+            ],
+        };
+        ensure_layout_for_write_sqlite(pool, &layout).await?;
+    }
     let field = valence_core::ttl::EXPIRE_AT_FIELD;
     valence_core::safe_ident::assert_safe_ident(field)?;
     let idx = format!("valence_ttl_expire_at_{table}");
-    let q =
-        format!("CREATE INDEX IF NOT EXISTS {idx} ON {table} (json_extract(body, '$.{field}'))");
+    let q = format!("CREATE INDEX IF NOT EXISTS {idx} ON {table} ({field})");
     sqlx::query(&q)
         .execute(pool)
         .await

@@ -192,6 +192,11 @@ pub enum ScenarioStep {
     OnDeleteCascadeCrossEngine,
     /// Cross-engine SetNull on secondary engine.
     OnDeleteSetNullCrossEngine,
+    /// Ensure typed layout, add a field via additive sync, read/write the new column.
+    TypedSyncAddField {
+        /// Physical table name (unique per storage on shared wire stores).
+        table: String,
+    },
 }
 
 /// Declarative scenario specification (JSON-serializable).
@@ -665,6 +670,19 @@ impl ScenarioSpec {
             steps: vec![
                 ScenarioStep::BuildValence,
                 ScenarioStep::OnDeleteSetNullCrossEngine,
+            ],
+        }
+    }
+
+    /// Ensure → create → additive sync (new field) → inspect (when supported) → update/get.
+    pub fn typed_sync_add_field(table: impl Into<String>) -> Self {
+        Self {
+            id: "typed-sync-add-field".into(),
+            steps: vec![
+                ScenarioStep::BuildValence,
+                ScenarioStep::TypedSyncAddField {
+                    table: table.into(),
+                },
             ],
         }
     }

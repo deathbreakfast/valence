@@ -6,6 +6,7 @@ use std::sync::{Arc, Mutex};
 use serde_json::{Map, Value};
 use sqlx::{Column, Row};
 use valence_core::error::{Error, Result};
+use valence_core::safe_ident::quote_sql_ident;
 use valence_core::schema::SchemaRegistry;
 use valence_core::storage_layout::{
     decode_sql_cell, layout_diff, postgres_add_column, postgres_drop_default, postgres_set_default,
@@ -115,7 +116,7 @@ pub async fn inspect_typed_layout_sqlite(
     table: &str,
 ) -> Result<Option<StorageLayout>> {
     assert_safe_table(table)?;
-    let rows = sqlx::query(&format!("PRAGMA table_info({table})"))
+    let rows = sqlx::query(&format!("PRAGMA table_info({})", quote_sql_ident(table)))
         .fetch_all(pool)
         .await
         .map_err(|e| Error::database(e.to_string()))?;
@@ -311,7 +312,11 @@ pub async fn define_unique_index_column_sqlite(
     assert_safe_table(table)?;
     valence_core::safe_ident::assert_safe_ident(field)?;
     let idx = format!("valence_unique_{table}_{field}");
-    let q = format!("CREATE UNIQUE INDEX IF NOT EXISTS {idx} ON {table} ({field})");
+    let q = format!(
+        "CREATE UNIQUE INDEX IF NOT EXISTS {idx} ON {} ({})",
+        quote_sql_ident(table),
+        quote_sql_ident(field)
+    );
     sqlx::query(&q)
         .execute(pool)
         .await
@@ -327,7 +332,11 @@ pub async fn define_index_column_sqlite(
     assert_safe_table(table)?;
     valence_core::safe_ident::assert_safe_ident(field)?;
     let idx = format!("valence_idx_{table}_{field}");
-    let q = format!("CREATE INDEX IF NOT EXISTS {idx} ON {table} ({field})");
+    let q = format!(
+        "CREATE INDEX IF NOT EXISTS {idx} ON {} ({})",
+        quote_sql_ident(table),
+        quote_sql_ident(field)
+    );
     sqlx::query(&q)
         .execute(pool)
         .await
@@ -460,7 +469,7 @@ fn column_list(layout: &StorageLayout) -> String {
     layout
         .fields
         .iter()
-        .map(|f| f.name.as_str())
+        .map(|f| quote_sql_ident(&f.name))
         .collect::<Vec<_>>()
         .join(", ")
 }
@@ -500,7 +509,10 @@ pub async fn create_record_typed_sqlite(
 
     let cols = column_list(&layout);
     let ph = placeholders_sqlite(layout.fields.len());
-    let q = format!("INSERT INTO {} ({cols}) VALUES ({ph})", layout.table);
+    let q = format!(
+        "INSERT INTO {} ({cols}) VALUES ({ph})",
+        quote_sql_ident(&layout.table)
+    );
     let mut query = sqlx::query(&q);
     let mut out_fields = Map::new();
     for f in &layout.fields {
@@ -542,7 +554,10 @@ pub async fn create_record_typed_postgres(
 
     let cols = column_list(&layout);
     let ph = placeholders_postgres(layout.fields.len());
-    let q = format!("INSERT INTO {} ({cols}) VALUES ({ph})", layout.table);
+    let q = format!(
+        "INSERT INTO {} ({cols}) VALUES ({ph})",
+        quote_sql_ident(&layout.table)
+    );
     let mut query = sqlx::query(&q);
     let mut out_fields = Map::new();
     for f in &layout.fields {
@@ -642,7 +657,11 @@ pub async fn get_record_typed_sqlite(
         }
     };
     let cols = column_list(&layout);
-    let q = format!("SELECT {cols} FROM {table} WHERE id = ?");
+    let q = format!(
+        "SELECT {cols} FROM {} WHERE {} = ?",
+        quote_sql_ident(table),
+        quote_sql_ident("id")
+    );
     let row = sqlx::query(&q)
         .bind(id)
         .fetch_optional(pool)
@@ -668,7 +687,11 @@ pub async fn get_record_typed_postgres(
         }
     };
     let cols = column_list(&layout);
-    let q = format!("SELECT {cols} FROM {table} WHERE id = $1");
+    let q = format!(
+        "SELECT {cols} FROM {} WHERE {} = $1",
+        quote_sql_ident(table),
+        quote_sql_ident("id")
+    );
     let row = sqlx::query(&q)
         .bind(id)
         .fetch_optional(pool)
@@ -791,10 +814,14 @@ pub async fn update_record_typed_sqlite(
     }
     let sets = data
         .iter()
-        .map(|f| format!("{} = ?", f.name))
+        .map(|f| format!("{} = ?", quote_sql_ident(&f.name)))
         .collect::<Vec<_>>()
         .join(", ");
-    let q = format!("UPDATE {} SET {sets} WHERE id = ?", layout.table);
+    let q = format!(
+        "UPDATE {} SET {sets} WHERE {} = ?",
+        quote_sql_ident(&layout.table),
+        quote_sql_ident("id")
+    );
     let mut query = sqlx::query(&q);
     let mut out = Map::new();
     for f in &data {
@@ -834,11 +861,15 @@ pub async fn update_record_typed_postgres(
     let sets = data
         .iter()
         .enumerate()
-        .map(|(i, f)| format!("{} = ${}", f.name, i + 1))
+        .map(|(i, f)| format!("{} = ${}", quote_sql_ident(&f.name), i + 1))
         .collect::<Vec<_>>()
         .join(", ");
     let id_ph = data.len() + 1;
-    let q = format!("UPDATE {} SET {sets} WHERE id = ${id_ph}", layout.table);
+    let q = format!(
+        "UPDATE {} SET {sets} WHERE {} = ${id_ph}",
+        quote_sql_ident(&layout.table),
+        quote_sql_ident("id")
+    );
     let mut query = sqlx::query(&q);
     let mut out = Map::new();
     for f in &data {

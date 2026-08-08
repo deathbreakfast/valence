@@ -98,7 +98,7 @@ fn sqlite_create(layout: &StorageLayout) -> Result<String> {
         let null = if f.primary_key { " NOT NULL" } else { null };
         cols.push(format!(
             "{} {}{}{}",
-            f.name,
+            crate::safe_ident::quote_sql_ident(&f.name),
             f.storage.sqlite_ddl(),
             pk,
             if f.primary_key { "" } else { null }
@@ -106,7 +106,7 @@ fn sqlite_create(layout: &StorageLayout) -> Result<String> {
     }
     Ok(format!(
         "CREATE TABLE IF NOT EXISTS {} ({})",
-        layout.table,
+        crate::safe_ident::quote_sql_ident(&layout.table),
         cols.join(", ")
     ))
 }
@@ -183,8 +183,9 @@ pub fn sqlite_add_column(table: &str, field: &super::LayoutField) -> Result<Stri
     assert_safe_ident(table)?;
     assert_safe_ident(&field.name)?;
     Ok(format!(
-        "ALTER TABLE {table} ADD COLUMN {} {}",
-        field.name,
+        "ALTER TABLE {} ADD COLUMN {} {}",
+        crate::safe_ident::quote_sql_ident(table),
+        crate::safe_ident::quote_sql_ident(&field.name),
         field.storage.sqlite_ddl()
     ))
 }

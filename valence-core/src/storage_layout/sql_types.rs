@@ -119,17 +119,22 @@ pub fn logical_type_to_storage(field_type: &str) -> Result<FieldStorage> {
         .trim()
         .to_ascii_lowercase();
     match base.as_str() {
-        "string" | "enum" => Ok(FieldStorage::String),
-        "integer" | "int" | "datetime" => Ok(FieldStorage::Integer),
+        "string" | "enum" | "text" | "uuid" => Ok(FieldStorage::String),
+        // Codegen metadata maps `datetime` → `timestamptz` (unix seconds as integer).
+        "integer" | "int" | "datetime" | "timestamptz" | "timestamp" => Ok(FieldStorage::Integer),
         "decimal" | "float" | "number" => Ok(FieldStorage::Decimal),
         "boolean" | "bool" => Ok(FieldStorage::Boolean),
         "date" => Ok(FieldStorage::Date),
-        "json" => Ok(FieldStorage::Json),
+        "json" | "object" => Ok(FieldStorage::Json),
         "currency" => Ok(FieldStorage::Currency),
         // Record links persist as the canonical `table:id` string so equality works
         // uniformly across engines (no engine-specific JSON extraction on FK columns).
         "record" => Ok(FieldStorage::String),
         other if other.starts_with("record") => Ok(FieldStorage::String),
+        // Schema DSL / inventory may emit `enum:a,b,c` or `ext_enum:path::Type`.
+        other if other.starts_with("enum:") || other.starts_with("ext_enum:") => {
+            Ok(FieldStorage::String)
+        }
         other => Err(Error::Validation(format!(
             "unknown field type for storage layout: {other}"
         ))),
@@ -152,6 +157,26 @@ mod tests {
     fn maps_datetime_to_integer_unix() {
         assert_eq!(
             logical_type_to_storage("datetime").unwrap(),
+            FieldStorage::Integer
+        );
+    }
+
+    #[test]
+    fn maps_enum_variants_to_string() {
+        assert_eq!(
+            logical_type_to_storage("enum:free,starter,professional,enterprise").unwrap(),
+            FieldStorage::String
+        );
+        assert_eq!(
+            logical_type_to_storage("ext_enum:crate::PlanTier").unwrap(),
+            FieldStorage::String
+        );
+    }
+
+    #[test]
+    fn maps_codegen_timestamptz_to_integer() {
+        assert_eq!(
+            logical_type_to_storage("timestamptz").unwrap(),
             FieldStorage::Integer
         );
     }

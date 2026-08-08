@@ -18,6 +18,15 @@ pub fn assert_safe_ident(s: &str) -> Result<()> {
     }
 }
 
+/// Quote a previously validated identifier for SQLite / Postgres DDL and DML.
+///
+/// Double-quotes avoid reserved-word failures (`group`, `order`, …). Callers must
+/// [`assert_safe_ident`] first so the value cannot contain quote characters.
+#[must_use]
+pub fn quote_sql_ident(s: &str) -> String {
+    format!("\"{s}\"")
+}
+
 #[cfg(test)]
 mod tests {
     use super::assert_safe_ident;

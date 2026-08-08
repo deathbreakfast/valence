@@ -132,6 +132,7 @@ pub(super) async fn run(
                         nullable: false,
                         unique: true,
                         indexed: false,
+                        default: None,
                     },
                     LayoutField {
                         name: "name".into(),
@@ -140,6 +141,7 @@ pub(super) async fn run(
                         nullable: true,
                         unique: false,
                         indexed: false,
+                        default: None,
                     },
                 ],
             };
@@ -167,6 +169,7 @@ pub(super) async fn run(
                 nullable: true,
                 unique: false,
                 indexed: false,
+                default: None,
             });
             backend
                 .sync_typed_table(&layout_v2)
@@ -201,6 +204,126 @@ pub(super) async fn run(
             let score = got.get("score").and_then(|v| v.as_i64());
             if score != Some(7) {
                 return Err(format!("expected score=7 after typed sync, got {got}"));
+            }
+        }
+        ScenarioStep::SchemaVersionSkip => {
+            if mode == RunMode::Benchmark {
+                return Ok(());
+            }
+            let valence = session.ensure_valence().map_err(|e| e.to_string())?;
+            let table = crate::CATALOG_TTL_PROBE_TABLE;
+            let meta = valence_core::schema::SchemaRegistry::global()
+                .get_schema(table)
+                .ok_or_else(|| format!("SchemaRegistry missing {table}"))?;
+            let backend = valence
+                .backend_for_table(table)
+                .map_err(|e| e.to_string())?;
+            let before = backend
+                .read_schema_version(table)
+                .await
+                .map_err(|e| e.to_string())?;
+            if let Some(stamp) = before.as_deref() {
+                if stamp != meta.version {
+                    return Err(format!(
+                        "expected stamp {} after boot sync, got {stamp}",
+                        meta.version
+                    ));
+                }
+            }
+            valence_core::storage_layout::sync_typed_table_for(valence, table)
+                .await
+                .map_err(|e| e.to_string())?;
+            let after = backend
+                .read_schema_version(table)
+                .await
+                .map_err(|e| e.to_string())?;
+            if before != after {
+                return Err(format!(
+                    "schema-version-skip: stamp changed {before:?} → {after:?}"
+                ));
+            }
+        }
+        ScenarioStep::SchemaVersionBumpAddField { table } => {
+            if mode == RunMode::Benchmark {
+                return Ok(());
+            }
+            let valence = session.ensure_valence().map_err(|e| e.to_string())?;
+            let backend = valence.active_backend().map_err(|e| e.to_string())?;
+            let layout_v1 = StorageLayout {
+                table: table.clone(),
+                fields: vec![
+                    LayoutField {
+                        name: "id".into(),
+                        storage: FieldStorage::String,
+                        primary_key: true,
+                        nullable: false,
+                        unique: true,
+                        indexed: false,
+                        default: None,
+                    },
+                    LayoutField {
+                        name: "name".into(),
+                        storage: FieldStorage::String,
+                        primary_key: false,
+                        nullable: true,
+                        unique: false,
+                        indexed: false,
+                        default: None,
+                    },
+                ],
+            };
+            backend
+                .ensure_typed_table(&layout_v1)
+                .await
+                .map_err(|e| e.to_string())?;
+            backend
+                .write_schema_version(table, "1.0.0")
+                .await
+                .map_err(|e| e.to_string())?;
+            let stamped = backend
+                .read_schema_version(table)
+                .await
+                .map_err(|e| e.to_string())?;
+            if stamped.is_some() && stamped.as_deref() != Some("1.0.0") {
+                return Err(format!("expected stamp 1.0.0, got {stamped:?}"));
+            }
+
+            let mut layout_v2 = layout_v1.clone();
+            layout_v2.fields.push(LayoutField {
+                name: "score".into(),
+                storage: FieldStorage::Integer,
+                primary_key: false,
+                nullable: true,
+                unique: false,
+                indexed: false,
+                default: None,
+            });
+            backend
+                .sync_typed_table(&layout_v2)
+                .await
+                .map_err(|e| e.to_string())?;
+            backend
+                .write_schema_version(table, "1.1.0")
+                .await
+                .map_err(|e| e.to_string())?;
+
+            if let Some(inspected) = backend
+                .inspect_typed_layout(table)
+                .await
+                .map_err(|e| e.to_string())?
+            {
+                if !inspected.fields.iter().any(|f| f.name == "score") {
+                    return Err(format!(
+                        "score field missing after version bump sync on {table}"
+                    ));
+                }
+            }
+            let after = backend
+                .read_schema_version(table)
+                .await
+                .map_err(|e| e.to_string())?;
+            if after.is_some() && after.as_deref() != Some("1.1.0") {
+                return Err(format!("expected stamp 1.1.0 after bump, got {after:?}"));
             }
         }
         other => return Err(format!("crud step mismatch: {other:?}")),

@@ -85,6 +85,8 @@ pub use on_delete::{
 pub use runner::{RunMode, ScenarioResult, ScenarioRunner, StepTiming};
 pub use scenario::{ScenarioSpec, ScenarioStep};
 
+pub use fixtures::{CATALOG_TTL_PROBE_SECONDS, CATALOG_TTL_PROBE_TABLE};
+
 pub use valence_backend_mem::{
     install_default_mem_router, InMemoryBackend, ENGINE_ID as MEM_ENGINE_ID,
 };

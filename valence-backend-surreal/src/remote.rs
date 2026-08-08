@@ -22,8 +22,7 @@ mod imp {
     use crate::record_id::{surreal_from_valence, valence_from_surreal};
     use crate::row_json::{
         ensure_schemaless_table, ensure_typed_table, json_to_surreal_content_value,
-        select_record_json, sync_typed_table,
-        thing_to_id_only,
+        select_record_json, sync_typed_table, thing_to_id_only,
     };
 
     /// Wraps a remote-capable [`Surreal<Any>`] client (WebSocket / HTTP / …).

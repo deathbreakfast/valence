@@ -8,13 +8,13 @@ use valence_core::record_id::RecordId;
 
 use valence_core::storage_layout::StorageLayout;
 
+use crate::ensure_table;
 use crate::json_merge;
 use crate::prepare_compiled;
 use crate::typed_table::{
     create_record_typed_sqlite, define_unique_index_column_sqlite, ensure_layout_for_write_sqlite,
-    get_record_typed_sqlite, map_select_row_sqlite, update_record_typed_sqlite,
+    get_record_typed_sqlite, map_select_row_sqlite, update_record_typed_sqlite, WriteEnsureCache,
 };
-use crate::ensure_table;
 
 /// Dialect-specific SQL fragments.
 #[allow(dead_code)]
@@ -143,9 +143,10 @@ pub async fn create_record_sqlite(
     pool: &sqlx::SqlitePool,
     table: &str,
     content: Value,
+    ensured: &WriteEnsureCache,
 ) -> Result<Value> {
     let layout = StorageLayout::resolve_for_write(table, &content)?;
-    create_record_typed_sqlite(pool, &layout, content).await
+    create_record_typed_sqlite(pool, &layout, content, ensured).await
 }
 
 pub async fn update_record_sqlite(
@@ -153,9 +154,10 @@ pub async fn update_record_sqlite(
     table: &str,
     id: &str,
     content: Value,
+    ensured: &WriteEnsureCache,
 ) -> Result<Value> {
     let layout = StorageLayout::resolve_for_write(table, &content)?;
-    update_record_typed_sqlite(pool, &layout, id, content).await
+    update_record_typed_sqlite(pool, &layout, id, content, ensured).await
 }
 
 pub async fn merge_record_sqlite(
@@ -163,6 +165,7 @@ pub async fn merge_record_sqlite(
     table: &str,
     id: &str,
     patch: Value,
+    ensured: &WriteEnsureCache,
 ) -> Result<Value> {
     let existing = get_record_sqlite(pool, table, id)
         .await?
@@ -172,7 +175,7 @@ pub async fn merge_record_sqlite(
     if let Some(patch_obj) = patch.as_object() {
         json_merge(&mut base, patch_obj);
     }
-    update_record_sqlite(pool, table, id, Value::Object(base)).await
+    update_record_sqlite(pool, table, id, Value::Object(base), ensured).await
 }
 
 pub async fn delete_record_sqlite(pool: &sqlx::SqlitePool, table: &str, id: &str) -> Result<()> {
@@ -274,12 +277,13 @@ pub async fn define_unique_index_sqlite(
     pool: &sqlx::SqlitePool,
     table: &str,
     field: &str,
+    ensured: &WriteEnsureCache,
 ) -> Result<()> {
     assert_safe_table(table)?;
     valence_core::safe_ident::assert_safe_ident(field)?;
     // Ensure column exists: registry layout or placeholder table + column add via sync.
     if let Ok(layout) = StorageLayout::from_registry_table(table) {
-        ensure_layout_for_write_sqlite(pool, &layout).await?;
+        ensure_layout_for_write_sqlite(pool, &layout, ensured).await?;
     } else {
         ensure_table_sqlite(pool, table).await?;
         let layout = StorageLayout {
@@ -292,6 +296,7 @@ pub async fn define_unique_index_sqlite(
                     nullable: false,
                     unique: true,
                     indexed: false,
+                    default: None,
                 },
                 valence_core::storage_layout::LayoutField {
                     name: field.to_string(),
@@ -300,10 +305,11 @@ pub async fn define_unique_index_sqlite(
                     nullable: true,
                     unique: true,
                     indexed: false,
+                    default: None,
                 },
             ],
         };
-        ensure_layout_for_write_sqlite(pool, &layout).await?;
+        ensure_layout_for_write_sqlite(pool, &layout, ensured).await?;
     }
     define_unique_index_column_sqlite(pool, table, field).await
 }
@@ -317,10 +323,11 @@ pub async fn apply_ttl_policy_sqlite(
     pool: &sqlx::SqlitePool,
     table: &str,
     _policy: &valence_core::ttl::SchemaTtlPolicy,
+    ensured: &WriteEnsureCache,
 ) -> Result<()> {
     assert_safe_table(table)?;
     if let Ok(layout) = StorageLayout::from_registry_table(table) {
-        ensure_layout_for_write_sqlite(pool, &layout).await?;
+        ensure_layout_for_write_sqlite(pool, &layout, ensured).await?;
     } else {
         ensure_table_sqlite(pool, table).await?;
         let field = valence_core::ttl::EXPIRE_AT_FIELD;
@@ -334,6 +341,7 @@ pub async fn apply_ttl_policy_sqlite(
                     nullable: false,
                     unique: true,
                     indexed: false,
+                    default: None,
                 },
                 valence_core::storage_layout::LayoutField {
                     name: field.to_string(),
@@ -342,10 +350,11 @@ pub async fn apply_ttl_policy_sqlite(
                     nullable: true,
                     unique: false,
                     indexed: true,
+                    default: None,
                 },
             ],
         };
-        ensure_layout_for_write_sqlite(pool, &layout).await?;
+        ensure_layout_for_write_sqlite(pool, &layout, ensured).await?;
     }
     let field = valence_core::ttl::EXPIRE_AT_FIELD;
     valence_core::safe_ident::assert_safe_ident(field)?;

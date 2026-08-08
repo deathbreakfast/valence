@@ -7,14 +7,14 @@ use valence_core::error::{Error, Result};
 use valence_core::record_id::RecordId;
 use valence_core::storage_layout::StorageLayout;
 
+use crate::json_merge;
 use crate::query::prepare_compiled_postgres;
 use crate::sqlite_ops::assert_safe_table;
 use crate::typed_table::{
     create_record_typed_postgres, define_unique_index_column_postgres,
     ensure_layout_for_write_postgres, get_record_typed_postgres, map_select_row_postgres,
-    update_record_typed_postgres,
+    update_record_typed_postgres, WriteEnsureCache,
 };
-use crate::json_merge;
 
 pub fn ensure_table_ddl_postgres(table: &str) -> String {
     format!("CREATE TABLE IF NOT EXISTS {table} (id TEXT PRIMARY KEY NOT NULL)")
@@ -122,9 +122,14 @@ pub async fn get_record_postgres(pool: &PgPool, table: &str, id: &str) -> Result
     get_record_typed_postgres(pool, table, id).await
 }
 
-pub async fn create_record_postgres(pool: &PgPool, table: &str, content: Value) -> Result<Value> {
+pub async fn create_record_postgres(
+    pool: &PgPool,
+    table: &str,
+    content: Value,
+    ensured: &WriteEnsureCache,
+) -> Result<Value> {
     let layout = StorageLayout::resolve_for_write(table, &content)?;
-    create_record_typed_postgres(pool, &layout, content).await
+    create_record_typed_postgres(pool, &layout, content, ensured).await
 }
 
 pub async fn update_record_postgres(
@@ -132,9 +137,10 @@ pub async fn update_record_postgres(
     table: &str,
     id: &str,
     content: Value,
+    ensured: &WriteEnsureCache,
 ) -> Result<Value> {
     let layout = StorageLayout::resolve_for_write(table, &content)?;
-    update_record_typed_postgres(pool, &layout, id, content).await
+    update_record_typed_postgres(pool, &layout, id, content, ensured).await
 }
 
 pub async fn merge_record_postgres(
@@ -142,6 +148,7 @@ pub async fn merge_record_postgres(
     table: &str,
     id: &str,
     patch: Value,
+    ensured: &WriteEnsureCache,
 ) -> Result<Value> {
     let existing = get_record_postgres(pool, table, id)
         .await?
@@ -151,7 +158,7 @@ pub async fn merge_record_postgres(
     if let Some(patch_obj) = patch.as_object() {
         json_merge(&mut base, patch_obj);
     }
-    update_record_postgres(pool, table, id, Value::Object(base)).await
+    update_record_postgres(pool, table, id, Value::Object(base), ensured).await
 }
 
 pub async fn delete_record_postgres(pool: &PgPool, table: &str, id: &str) -> Result<()> {
@@ -249,11 +256,16 @@ pub async fn get_edge_sources_postgres(
         .collect())
 }
 
-pub async fn define_unique_index_postgres(pool: &PgPool, table: &str, field: &str) -> Result<()> {
+pub async fn define_unique_index_postgres(
+    pool: &PgPool,
+    table: &str,
+    field: &str,
+    ensured: &WriteEnsureCache,
+) -> Result<()> {
     assert_safe_table(table)?;
     valence_core::safe_ident::assert_safe_ident(field)?;
     if let Ok(layout) = StorageLayout::from_registry_table(table) {
-        ensure_layout_for_write_postgres(pool, &layout).await?;
+        ensure_layout_for_write_postgres(pool, &layout, ensured).await?;
     } else {
         ensure_table_postgres(pool, table).await?;
         let layout = StorageLayout {
@@ -266,6 +278,7 @@ pub async fn define_unique_index_postgres(pool: &PgPool, table: &str, field: &st
                     nullable: false,
                     unique: true,
                     indexed: false,
+                    default: None,
                 },
                 valence_core::storage_layout::LayoutField {
                     name: field.to_string(),
@@ -274,10 +287,11 @@ pub async fn define_unique_index_postgres(pool: &PgPool, table: &str, field: &st
                     nullable: true,
                     unique: true,
                     indexed: false,
+                    default: None,
                 },
             ],
         };
-        ensure_layout_for_write_postgres(pool, &layout).await?;
+        ensure_layout_for_write_postgres(pool, &layout, ensured).await?;
     }
     define_unique_index_column_postgres(pool, table, field).await
 }
@@ -287,10 +301,11 @@ pub async fn apply_ttl_policy_postgres(
     pool: &PgPool,
     table: &str,
     _policy: &valence_core::ttl::SchemaTtlPolicy,
+    ensured: &WriteEnsureCache,
 ) -> Result<()> {
     assert_safe_table(table)?;
     if let Ok(layout) = StorageLayout::from_registry_table(table) {
-        ensure_layout_for_write_postgres(pool, &layout).await?;
+        ensure_layout_for_write_postgres(pool, &layout, ensured).await?;
     } else {
         ensure_table_postgres(pool, table).await?;
         let field = valence_core::ttl::EXPIRE_AT_FIELD;
@@ -304,6 +319,7 @@ pub async fn apply_ttl_policy_postgres(
                     nullable: false,
                     unique: true,
                     indexed: false,
+                    default: None,
                 },
                 valence_core::storage_layout::LayoutField {
                     name: field.to_string(),
@@ -312,10 +328,11 @@ pub async fn apply_ttl_policy_postgres(
                     nullable: true,
                     unique: false,
                     indexed: true,
+                    default: None,
                 },
             ],
         };
-        ensure_layout_for_write_postgres(pool, &layout).await?;
+        ensure_layout_for_write_postgres(pool, &layout, ensured).await?;
     }
     let field = valence_core::ttl::EXPIRE_AT_FIELD;
     valence_core::safe_ident::assert_safe_ident(field)?;

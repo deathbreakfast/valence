@@ -130,7 +130,10 @@ pub trait DatabaseBackend: Send + Sync + std::fmt::Debug + 'static {
     ///
     /// **Contract:** default falls back to [`Self::ensure_schemaless_table`] using `layout.table`
     /// (deprecated path). SQL / Surreal / Redis adapters override.
-    async fn ensure_typed_table(&self, layout: &crate::storage_layout::StorageLayout) -> Result<()> {
+    async fn ensure_typed_table(
+        &self,
+        layout: &crate::storage_layout::StorageLayout,
+    ) -> Result<()> {
         self.ensure_schemaless_table(&layout.table).await
     }
 
@@ -139,6 +142,22 @@ pub trait DatabaseBackend: Send + Sync + std::fmt::Debug + 'static {
     /// **Contract:** default calls [`Self::ensure_typed_table`] (create-only).
     async fn sync_typed_table(&self, layout: &crate::storage_layout::StorageLayout) -> Result<()> {
         self.ensure_typed_table(layout).await
+    }
+
+    /// Read last-applied DSL schema version stamp for `table`.
+    ///
+    /// **Contract:** default returns `Ok(None)` (unsupported / no stamp store).
+    async fn read_schema_version(&self, table: &str) -> Result<Option<String>> {
+        let _ = table;
+        Ok(None)
+    }
+
+    /// Persist last-applied DSL schema version stamp for `table`.
+    ///
+    /// **Contract:** default is a no-op success (unsupported engines).
+    async fn write_schema_version(&self, table: &str, version: &str) -> Result<()> {
+        let _ = (table, version);
+        Ok(())
     }
 
     /// Fetch one record by primary key.

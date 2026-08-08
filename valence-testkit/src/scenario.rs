@@ -197,6 +197,13 @@ pub enum ScenarioStep {
         /// Physical table name (unique per storage on shared wire stores).
         table: String,
     },
+    /// After boot sync, matching version stamps skip a second registry sync.
+    SchemaVersionSkip,
+    /// Stamp an ad-hoc table, bump layout with ADD COLUMN, restamp.
+    SchemaVersionBumpAddField {
+        /// Physical table name (unique per storage on shared wire stores).
+        table: String,
+    },
 }
 
 /// Declarative scenario specification (JSON-serializable).
@@ -681,6 +688,27 @@ impl ScenarioSpec {
             steps: vec![
                 ScenarioStep::BuildValence,
                 ScenarioStep::TypedSyncAddField {
+                    table: table.into(),
+                },
+            ],
+        }
+    }
+
+    /// Boot sync stamps registry versions; a second sync is a no-op when stamps match.
+    pub fn schema_version_skip() -> Self {
+        Self {
+            id: "schema-version-skip".into(),
+            steps: vec![ScenarioStep::BuildValence, ScenarioStep::SchemaVersionSkip],
+        }
+    }
+
+    /// Ad-hoc table: stamp → ADD COLUMN sync → restamp.
+    pub fn schema_version_bump_add_field(table: impl Into<String>) -> Self {
+        Self {
+            id: "schema-version-bump-add-field".into(),
+            steps: vec![
+                ScenarioStep::BuildValence,
+                ScenarioStep::SchemaVersionBumpAddField {
                     table: table.into(),
                 },
             ],

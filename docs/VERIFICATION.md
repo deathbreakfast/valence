@@ -9,7 +9,7 @@ Re-run after test or CI changes.
 ```bash
 # Typed storage layout + SQLite sync
 cargo test -p uf-valence-core --lib storage_layout
-cargo test -p uf-valence-backend-sqlite --test backend_contract --test typed_sync_add_field
+cargo test -p uf-valence-backend-sqlite --test backend_contract --test typed_sync_add_field --test schema_version_sync
 
 # Full workspace tests
 cargo test --workspace

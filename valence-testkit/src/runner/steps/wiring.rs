@@ -12,6 +12,13 @@ pub(super) async fn run(
     match step {
         ScenarioStep::BuildValence => {
             session.build_valence(None).map_err(|e| e.to_string())?;
+            let valence = session
+                .valence()
+                .ok_or_else(|| "BuildValence produced no Valence".to_string())?;
+            valence
+                .sync_typed_tables_from_registry()
+                .await
+                .map_err(|e| e.to_string())?;
         }
         ScenarioStep::AssertActiveBackend => {
             if mode == RunMode::Benchmark {

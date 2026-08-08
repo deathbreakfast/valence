@@ -35,7 +35,9 @@ pub(super) async fn run_step(
         | ScenarioStep::CompiledQueryEmpty { .. }
         | ScenarioStep::QueryUnionJoinSmoke
         | ScenarioStep::M2mRelateSmoke
-        | ScenarioStep::TypedSyncAddField { .. } => crud::run(session, step, mode).await,
+        | ScenarioStep::TypedSyncAddField { .. }
+        | ScenarioStep::SchemaVersionSkip
+        | ScenarioStep::SchemaVersionBumpAddField { .. } => crud::run(session, step, mode).await,
         ScenarioStep::ModelCrudSmoke
         | ScenarioStep::ModelUpdateUpsert
         | ScenarioStep::OwnershipGateSmoke
@@ -127,5 +129,7 @@ pub(super) fn step_label(step: &ScenarioStep) -> String {
         ScenarioStep::OnDeleteCascadeCrossEngine => "on_delete_cascade_cross_engine".into(),
         ScenarioStep::OnDeleteSetNullCrossEngine => "on_delete_set_null_cross_engine".into(),
         ScenarioStep::TypedSyncAddField { .. } => "typed_sync_add_field".into(),
+        ScenarioStep::SchemaVersionSkip => "schema_version_skip".into(),
+        ScenarioStep::SchemaVersionBumpAddField { .. } => "schema_version_bump_add_field".into(),
     }
 }

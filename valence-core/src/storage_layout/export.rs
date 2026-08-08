@@ -93,11 +93,7 @@ fn sqlite_create(layout: &StorageLayout) -> Result<String> {
         } else {
             " NOT NULL"
         };
-        let pk = if f.primary_key {
-            " PRIMARY KEY"
-        } else {
-            ""
-        };
+        let pk = if f.primary_key { " PRIMARY KEY" } else { "" };
         // primary key already implies NOT NULL
         let null = if f.primary_key { " NOT NULL" } else { null };
         cols.push(format!(
@@ -120,11 +116,7 @@ fn postgres_create(layout: &StorageLayout) -> Result<String> {
     let mut cols = Vec::new();
     for f in &layout.fields {
         assert_safe_ident(&f.name)?;
-        let pk = if f.primary_key {
-            " PRIMARY KEY"
-        } else {
-            ""
-        };
+        let pk = if f.primary_key { " PRIMARY KEY" } else { "" };
         let null = if f.primary_key || !f.nullable {
             " NOT NULL"
         } else {
@@ -208,6 +200,44 @@ pub fn postgres_add_column(table: &str, field: &super::LayoutField) -> Result<St
     ))
 }
 
+/// Postgres `ALTER COLUMN … DROP NOT NULL`.
+pub fn postgres_set_nullable(table: &str, field: &str) -> Result<String> {
+    assert_safe_ident(table)?;
+    assert_safe_ident(field)?;
+    Ok(format!(
+        "ALTER TABLE {table} ALTER COLUMN {field} DROP NOT NULL"
+    ))
+}
+
+/// Postgres `ALTER COLUMN … SET NOT NULL`.
+pub fn postgres_set_not_null(table: &str, field: &str) -> Result<String> {
+    assert_safe_ident(table)?;
+    assert_safe_ident(field)?;
+    Ok(format!(
+        "ALTER TABLE {table} ALTER COLUMN {field} SET NOT NULL"
+    ))
+}
+
+/// Postgres `ALTER COLUMN … SET DEFAULT …` (value already validated as safe stamp-like literal).
+pub fn postgres_set_default(table: &str, field: &str, value: &str) -> Result<String> {
+    assert_safe_ident(table)?;
+    assert_safe_ident(field)?;
+    // Quote as string literal; escape single quotes.
+    let escaped = value.replace('\'', "''");
+    Ok(format!(
+        "ALTER TABLE {table} ALTER COLUMN {field} SET DEFAULT '{escaped}'"
+    ))
+}
+
+/// Postgres `ALTER COLUMN … DROP DEFAULT`.
+pub fn postgres_drop_default(table: &str, field: &str) -> Result<String> {
+    assert_safe_ident(table)?;
+    assert_safe_ident(field)?;
+    Ok(format!(
+        "ALTER TABLE {table} ALTER COLUMN {field} DROP DEFAULT"
+    ))
+}
+
 /// Surreal additive `DEFINE FIELD`.
 pub fn surreal_add_field(table: &str, field: &super::LayoutField) -> Result<String> {
     assert_safe_ident(table)?;
@@ -236,6 +266,7 @@ mod tests {
                     nullable: false,
                     unique: true,
                     indexed: false,
+                    default: None,
                 },
                 LayoutField {
                     name: "name".into(),
@@ -244,6 +275,7 @@ mod tests {
                     nullable: true,
                     unique: false,
                     indexed: false,
+                    default: None,
                 },
             ],
         };
@@ -267,6 +299,7 @@ mod tests {
             nullable: true,
             unique: false,
             indexed: false,
+            default: None,
         };
         let clause = surreal_type_clause(&f);
         assert_eq!(clause, "option<object> FLEXIBLE");

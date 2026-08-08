@@ -118,7 +118,12 @@ impl IndradbBackend {
     }
 
     /// Read one property per field into a Valence JSON object (includes nested `id`).
-    fn read_fields(&self, table: &str, id: &str, vertex_id: Uuid) -> Result<Option<serde_json::Value>> {
+    fn read_fields(
+        &self,
+        table: &str,
+        id: &str,
+        vertex_id: Uuid,
+    ) -> Result<Option<serde_json::Value>> {
         let query = PipePropertyQuery::new(Box::new(SpecificVertexQuery::single(vertex_id).into()))
             .map_err(Self::id_err)?;
         let output = self.db.get(query).map_err(Self::db_err)?;
@@ -129,7 +134,10 @@ impl IndradbBackend {
                 for vp in vps {
                     for prop in vp.props {
                         found = true;
-                        map.insert(prop.name.as_str().to_string(), prop.value.0.as_ref().clone());
+                        map.insert(
+                            prop.name.as_str().to_string(),
+                            prop.value.0.as_ref().clone(),
+                        );
                     }
                 }
             }
@@ -139,22 +147,17 @@ impl IndradbBackend {
         }
         // Prefer the caller-supplied id; fall back to the stored bare id so table
         // scans (empty probe id) can rebuild the wire RecordId shape.
-        let stored_bare = map
-            .remove("__valence_id")
-            .and_then(|v| match v {
-                serde_json::Value::String(s) => Some(s),
-                _ => None,
-            });
+        let stored_bare = map.remove("__valence_id").and_then(|v| match v {
+            serde_json::Value::String(s) => Some(s),
+            _ => None,
+        });
         let bare = if id.is_empty() {
             stored_bare.unwrap_or_default()
         } else {
             id.to_string()
         };
         if !bare.is_empty() {
-            map.insert(
-                "id".into(),
-                serde_json::json!({"table": table, "id": bare}),
-            );
+            map.insert("id".into(), serde_json::json!({"table": table, "id": bare}));
         }
         Ok(Some(serde_json::Value::Object(map)))
     }

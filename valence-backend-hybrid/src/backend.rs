@@ -164,6 +164,14 @@ impl DatabaseBackend for HybridBackend {
         self.primary.sync_typed_table(layout).await
     }
 
+    async fn read_schema_version(&self, table: &str) -> Result<Option<String>> {
+        self.primary.read_schema_version(table).await
+    }
+
+    async fn write_schema_version(&self, table: &str, version: &str) -> Result<()> {
+        self.primary.write_schema_version(table, version).await
+    }
+
     async fn get_record(&self, table: &str, id: &str) -> Result<Option<Value>> {
         self.get_record_inner(table, id).await
     }

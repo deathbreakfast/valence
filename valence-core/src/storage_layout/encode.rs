@@ -12,10 +12,7 @@ pub fn split_record_fields(content: Value) -> (Option<String>, Map<String, Value
     };
     let id = map.remove("id").and_then(|v| match v {
         Value::String(s) => Some(s),
-        Value::Object(o) => o
-            .get("id")
-            .and_then(|x| x.as_str())
-            .map(str::to_string),
+        Value::Object(o) => o.get("id").and_then(|x| x.as_str()).map(str::to_string),
         _ => None,
     });
     (id, map)
@@ -48,12 +45,7 @@ pub fn field_names_excluding_id(layout: &StorageLayout) -> Vec<&str> {
 pub fn fields_from_content(content: &Value) -> Vec<String> {
     content
         .as_object()
-        .map(|o| {
-            o.keys()
-                .filter(|k| *k != "id")
-                .cloned()
-                .collect::<Vec<_>>()
-        })
+        .map(|o| o.keys().filter(|k| *k != "id").cloned().collect::<Vec<_>>())
         .unwrap_or_default()
 }
 
@@ -106,11 +98,7 @@ pub fn coerce_for_storage(storage: FieldStorage, value: &Value) -> Result<Value>
             Value::Number(_) => Ok(value.clone()),
             Value::String(s) => s
                 .parse::<f64>()
-                .map(|f| {
-                    Value::Number(
-                        serde_json::Number::from_f64(f).unwrap_or_else(|| 0.into()),
-                    )
-                })
+                .map(|f| Value::Number(serde_json::Number::from_f64(f).unwrap_or_else(|| 0.into())))
                 .map_err(|_| Error::Validation("expected decimal".into())),
             other => Err(Error::Validation(format!(
                 "expected decimal, got {}",
@@ -180,7 +168,8 @@ pub fn sql_bind_text(storage: FieldStorage, value: &Value) -> Result<Option<Stri
             Value::Number(n) => Ok(Some(n.to_string())),
             Value::Bool(b) => Ok(Some(b.to_string())),
             other => Ok(Some(
-                serde_json::to_string(&other).map_err(|e| Error::serialization_msg(e.to_string()))?,
+                serde_json::to_string(&other)
+                    .map_err(|e| Error::serialization_msg(e.to_string()))?,
             )),
         },
     }

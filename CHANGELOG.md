@@ -17,13 +17,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - IndraDB stores one vertex property per field (not a single `body` property).
 - Surreal schema-backed tables use `SCHEMAFULL` + `DEFINE FIELD` via
   `ensure_typed_table` / `sync_typed_table`.
+- Schema layout alters for registered models are **boot-gated** by DSL
+  `Schema.version` vs `valence_schema_meta` stamps. Hosts must call
+  `Valence::sync_typed_tables_from_registry` at startup. Bump `version` when
+  fields change; steady-state writes no longer run catalog inspect every time.
 
 ### Added
 
 - `valence_core::storage_layout` — `StorageLayout` from schema metadata, dialect
   DDL export (`to_ddl`), inspect / ensure / additive sync on `DatabaseBackend`.
 - `Valence::ensure_typed_tables_from_registry` /
-  `sync_typed_tables_from_registry`.
+  `sync_typed_tables_from_registry` (version-gated skip when stamp matches).
+- `SafeTweak` layout ops (Postgres nullability / DEFAULT); SQLite nullability
+  change refused.
+- `valence_schema_meta` stamp table + `read_schema_version` /
+  `write_schema_version` on SQL backends.
 - Generated `{Model}Schema::storage_layout()` beside `full()` / `metadata()`.
 
 ## [0.1.1] - 2026-07-19

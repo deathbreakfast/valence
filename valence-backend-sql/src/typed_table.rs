@@ -1,12 +1,17 @@
 //! Typed SQL table DDL and row encode/decode (schema-driven columns).
 
+use std::collections::{HashMap, HashSet};
+use std::sync::{Arc, Mutex};
+
 use serde_json::{Map, Value};
 use sqlx::{Column, Row};
 use valence_core::error::{Error, Result};
+use valence_core::schema::SchemaRegistry;
 use valence_core::storage_layout::{
-    additive_ops, decode_sql_cell, postgres_add_column, row_from_columns, split_record_fields,
+    decode_sql_cell, layout_diff, postgres_add_column, postgres_drop_default, postgres_set_default,
+    postgres_set_not_null, postgres_set_nullable, row_from_columns, split_record_fields,
     sql_bind_text, sqlite_add_column, validate_write_types, AdditiveOp, FieldStorage, LayoutField,
-    StorageLayout,
+    SafeTweak, StorageLayout,
 };
 use valence_core::KnownEngines;
 
@@ -14,6 +19,43 @@ use crate::sqlite_ops::assert_safe_table;
 
 /// Edge junction table (unchanged).
 pub use crate::document::{ensure_edges_table_ddl, EDGES_TABLE, ID_COLUMN};
+
+/// Per-backend cache of tables/fields already ensured for writes.
+///
+/// Skips inspect when every field in the requested layout was already ensured for that table.
+#[derive(Debug, Default, Clone)]
+pub struct WriteEnsureCache {
+    /// table → field names covered by a prior ensure.
+    inner: Arc<Mutex<HashMap<String, HashSet<String>>>>,
+}
+
+impl WriteEnsureCache {
+    /// Empty cache for a new backend connection.
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    fn covers(&self, table: &str, layout: &StorageLayout) -> bool {
+        let guard = self.inner.lock().unwrap_or_else(|e| e.into_inner());
+        let Some(known) = guard.get(table) else {
+            return false;
+        };
+        layout.fields.iter().all(|f| known.contains(&f.name))
+    }
+
+    fn record(&self, layout: &StorageLayout) {
+        let mut guard = self.inner.lock().unwrap_or_else(|e| e.into_inner());
+        let entry = guard.entry(layout.table.clone()).or_default();
+        for f in &layout.fields {
+            entry.insert(f.name.clone());
+        }
+    }
+}
+
+fn registry_table(table: &str) -> bool {
+    SchemaRegistry::global().get_full_schema(table).is_some()
+}
 
 /// Create-table DDL for SQLite.
 pub fn ensure_typed_ddl_sqlite(layout: &StorageLayout) -> Result<String> {
@@ -82,7 +124,9 @@ pub async fn inspect_typed_layout_sqlite(
     }
     let mut fields = Vec::new();
     for r in rows {
-        let name: String = r.try_get("name").map_err(|e| Error::database(e.to_string()))?;
+        let name: String = r
+            .try_get("name")
+            .map_err(|e| Error::database(e.to_string()))?;
         let ctype: String = r
             .try_get::<String, _>("type")
             .unwrap_or_default()
@@ -102,6 +146,7 @@ pub async fn inspect_typed_layout_sqlite(
             nullable: notnull == 0 && pk == 0,
             unique: false,
             indexed: false,
+            default: None,
         });
     }
     Ok(Some(StorageLayout {
@@ -150,6 +195,7 @@ pub async fn inspect_typed_layout_postgres(
             nullable: nullable == "YES",
             unique: false,
             indexed: false,
+            default: None,
         });
     }
     Ok(Some(StorageLayout {
@@ -170,9 +216,7 @@ pub async fn sync_typed_table_sqlite(
     let live = live.unwrap();
     // Inspect does not know unique/index flags — treat live unique/indexed as false so
     // desired unique/index still emit CREATE INDEX IF NOT EXISTS.
-    let diff = additive_ops(layout, &live)?;
-    let mut added_fields = 0usize;
-    let mut added_indexes = 0usize;
+    let diff = layout_diff(layout, &live, KnownEngines::SQLITE)?;
     for op in diff.ops {
         match op {
             AdditiveOp::AddField(f) => {
@@ -181,39 +225,37 @@ pub async fn sync_typed_table_sqlite(
                     .execute(pool)
                     .await
                     .map_err(|e| Error::database(e.to_string()))?;
-                added_fields += 1;
                 if f.unique {
                     define_unique_index_column_sqlite(pool, &layout.table, &f.name).await?;
-                    added_indexes += 1;
                 } else if f.indexed {
                     define_index_column_sqlite(pool, &layout.table, &f.name).await?;
-                    added_indexes += 1;
                 }
             }
             AdditiveOp::AddUniqueIndex { field } => {
                 define_unique_index_column_sqlite(pool, &layout.table, &field).await?;
-                added_indexes += 1;
             }
             AdditiveOp::AddIndex { field } => {
                 define_index_column_sqlite(pool, &layout.table, &field).await?;
-                added_indexes += 1;
             }
         }
     }
-    let _ = (added_fields, added_indexes);
+    if !diff.tweaks.is_empty() {
+        return Err(Error::Validation(format!(
+            "sqlite sync produced {} safe tweaks (unsupported)",
+            diff.tweaks.len()
+        )));
+    }
     Ok(())
 }
 
-/// Additive sync for Postgres.
+/// Additive sync for Postgres (includes safe nullability/default tweaks).
 pub async fn sync_typed_table_postgres(pool: &sqlx::PgPool, layout: &StorageLayout) -> Result<()> {
     let live = inspect_typed_layout_postgres(pool, &layout.table).await?;
     if live.is_none() {
         return ensure_typed_table_postgres(pool, layout).await;
     }
     let live = live.unwrap();
-    let diff = additive_ops(layout, &live)?;
-    let mut added_fields = 0usize;
-    let mut added_indexes = 0usize;
+    let diff = layout_diff(layout, &live, KnownEngines::POSTGRES)?;
     for op in diff.ops {
         match op {
             AdditiveOp::AddField(f) => {
@@ -222,26 +264,40 @@ pub async fn sync_typed_table_postgres(pool: &sqlx::PgPool, layout: &StorageLayo
                     .execute(pool)
                     .await
                     .map_err(|e| Error::database(e.to_string()))?;
-                added_fields += 1;
                 if f.unique {
                     define_unique_index_column_postgres(pool, &layout.table, &f.name).await?;
-                    added_indexes += 1;
                 } else if f.indexed {
                     define_index_column_postgres(pool, &layout.table, &f.name).await?;
-                    added_indexes += 1;
                 }
             }
             AdditiveOp::AddUniqueIndex { field } => {
                 define_unique_index_column_postgres(pool, &layout.table, &field).await?;
-                added_indexes += 1;
             }
             AdditiveOp::AddIndex { field } => {
                 define_index_column_postgres(pool, &layout.table, &field).await?;
-                added_indexes += 1;
             }
         }
     }
-    let _ = (added_fields, added_indexes);
+    for tweak in diff.tweaks {
+        let ddl = match &tweak {
+            SafeTweak::SetNullable { field } => postgres_set_nullable(&layout.table, field)?,
+            SafeTweak::SetNotNull { field } => postgres_set_not_null(&layout.table, field)?,
+            SafeTweak::SetDefault { field, value } => {
+                postgres_set_default(&layout.table, field, value)?
+            }
+            SafeTweak::DropDefault { field } => postgres_drop_default(&layout.table, field)?,
+        };
+        tracing::info!(
+            target: "valence_storage",
+            table = layout.table.as_str(),
+            ?tweak,
+            "valence.storage.safe_tweak"
+        );
+        sqlx::query(&ddl)
+            .execute(pool)
+            .await
+            .map_err(|e| Error::database(e.to_string()))?;
+    }
     Ok(())
 }
 
@@ -311,59 +367,90 @@ pub async fn define_index_column_postgres(
 
 /// Ensure layout columns exist for a write (create table or add missing columns only).
 ///
+/// Schema-backed (registry) tables: at most one inspect/create per process (boot sync owns
+/// additive alters). Ad-hoc tables: same once-per-process cache, may add missing columns.
+///
 /// Unlike [`sync_typed_table_sqlite`], this does **not** refuse extra live columns —
 /// ad-hoc writes often send a field subset.
 pub async fn ensure_layout_for_write_sqlite(
     pool: &sqlx::SqlitePool,
     layout: &StorageLayout,
+    ensured: &WriteEnsureCache,
 ) -> Result<()> {
-    let live = inspect_typed_layout_sqlite(pool, &layout.table).await?;
-    if live.is_none() {
-        return ensure_typed_table_sqlite(pool, layout).await;
+    let registry = registry_table(&layout.table);
+    if ensured.covers(&layout.table, layout) {
+        return Ok(());
     }
-    let live = live.unwrap();
-    for f in &layout.fields {
-        if live.fields.iter().any(|l| l.name == f.name) {
-            continue;
+    match inspect_typed_layout_sqlite(pool, &layout.table).await? {
+        None => {
+            ensure_typed_table_sqlite(pool, layout).await?;
         }
-        let ddl = sqlite_add_column(&layout.table, f)?;
-        sqlx::query(&ddl)
-            .execute(pool)
-            .await
-            .map_err(|e| Error::database(e.to_string()))?;
-        if f.unique {
-            define_unique_index_column_sqlite(pool, &layout.table, &f.name).await?;
-        } else if f.indexed {
-            define_index_column_sqlite(pool, &layout.table, &f.name).await?;
+        Some(live) => {
+            for f in &layout.fields {
+                if live.fields.iter().any(|l| l.name == f.name) {
+                    continue;
+                }
+                if registry {
+                    return Err(Error::Validation(format!(
+                        "missing column {}.{} — bump Schema.version and run sync_typed_tables_from_registry",
+                        layout.table, f.name
+                    )));
+                }
+                let ddl = sqlite_add_column(&layout.table, f)?;
+                sqlx::query(&ddl)
+                    .execute(pool)
+                    .await
+                    .map_err(|e| Error::database(e.to_string()))?;
+                if f.unique {
+                    define_unique_index_column_sqlite(pool, &layout.table, &f.name).await?;
+                } else if f.indexed {
+                    define_index_column_sqlite(pool, &layout.table, &f.name).await?;
+                }
+            }
         }
     }
+    ensured.record(layout);
     Ok(())
 }
 
 pub async fn ensure_layout_for_write_postgres(
     pool: &sqlx::PgPool,
     layout: &StorageLayout,
+    ensured: &WriteEnsureCache,
 ) -> Result<()> {
-    let live = inspect_typed_layout_postgres(pool, &layout.table).await?;
-    if live.is_none() {
-        return ensure_typed_table_postgres(pool, layout).await;
+    let registry = registry_table(&layout.table);
+    if ensured.covers(&layout.table, layout) {
+        return Ok(());
     }
-    let live = live.unwrap();
-    for f in &layout.fields {
-        if live.fields.iter().any(|l| l.name == f.name) {
-            continue;
+    match inspect_typed_layout_postgres(pool, &layout.table).await? {
+        None => {
+            ensure_typed_table_postgres(pool, layout).await?;
         }
-        let ddl = postgres_add_column(&layout.table, f)?;
-        sqlx::query(&ddl)
-            .execute(pool)
-            .await
-            .map_err(|e| Error::database(e.to_string()))?;
-        if f.unique {
-            define_unique_index_column_postgres(pool, &layout.table, &f.name).await?;
-        } else if f.indexed {
-            define_index_column_postgres(pool, &layout.table, &f.name).await?;
+        Some(live) => {
+            for f in &layout.fields {
+                if live.fields.iter().any(|l| l.name == f.name) {
+                    continue;
+                }
+                if registry {
+                    return Err(Error::Validation(format!(
+                        "missing column {}.{} — bump Schema.version and run sync_typed_tables_from_registry",
+                        layout.table, f.name
+                    )));
+                }
+                let ddl = postgres_add_column(&layout.table, f)?;
+                sqlx::query(&ddl)
+                    .execute(pool)
+                    .await
+                    .map_err(|e| Error::database(e.to_string()))?;
+                if f.unique {
+                    define_unique_index_column_postgres(pool, &layout.table, &f.name).await?;
+                } else if f.indexed {
+                    define_index_column_postgres(pool, &layout.table, &f.name).await?;
+                }
+            }
         }
     }
+    ensured.record(layout);
     Ok(())
 }
 
@@ -392,9 +479,10 @@ pub async fn create_record_typed_sqlite(
     pool: &sqlx::SqlitePool,
     layout: &StorageLayout,
     content: Value,
+    ensured: &WriteEnsureCache,
 ) -> Result<Value> {
     validate_write_types(layout, &content)?;
-    ensure_layout_for_write_sqlite(pool, layout).await?;
+    ensure_layout_for_write_sqlite(pool, layout, ensured).await?;
     let mut content = content;
     valence_core::ttl::prepare_create_content_with_capability(
         &layout.table,
@@ -403,7 +491,7 @@ pub async fn create_record_typed_sqlite(
     )?;
     // Re-resolve layout after TTL stamp may add expire field.
     let layout = StorageLayout::resolve_for_write(&layout.table, &content)?;
-    ensure_layout_for_write_sqlite(pool, &layout).await?;
+    ensure_layout_for_write_sqlite(pool, &layout, ensured).await?;
 
     let (id_opt, fields) = split_record_fields(content);
     let id = id_opt.unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
@@ -434,9 +522,10 @@ pub async fn create_record_typed_postgres(
     pool: &sqlx::PgPool,
     layout: &StorageLayout,
     content: Value,
+    ensured: &WriteEnsureCache,
 ) -> Result<Value> {
     validate_write_types(layout, &content)?;
-    ensure_layout_for_write_postgres(pool, layout).await?;
+    ensure_layout_for_write_postgres(pool, layout, ensured).await?;
     let mut content = content;
     valence_core::ttl::prepare_create_content_with_capability(
         &layout.table,
@@ -444,7 +533,7 @@ pub async fn create_record_typed_postgres(
         &mut content,
     )?;
     let layout = StorageLayout::resolve_for_write(&layout.table, &content)?;
-    ensure_layout_for_write_postgres(pool, &layout).await?;
+    ensure_layout_for_write_postgres(pool, &layout, ensured).await?;
 
     let (id_opt, fields) = split_record_fields(content);
     let id = id_opt.unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
@@ -480,20 +569,20 @@ fn bind_sqlite<'q>(
     }
     match storage {
         FieldStorage::Integer => {
-            let v = value.as_i64().ok_or_else(|| {
-                Error::Validation(format!("expected integer, got {value}"))
-            })?;
+            let v = value
+                .as_i64()
+                .ok_or_else(|| Error::Validation(format!("expected integer, got {value}")))?;
             Ok(query.bind(v))
         }
         FieldStorage::Boolean => Ok(query.bind(value.as_bool().unwrap_or(false))),
         FieldStorage::Decimal => {
-            let v = value.as_f64().ok_or_else(|| {
-                Error::Validation(format!("expected decimal, got {value}"))
-            })?;
+            let v = value
+                .as_f64()
+                .ok_or_else(|| Error::Validation(format!("expected decimal, got {value}")))?;
             Ok(query.bind(v))
         }
         FieldStorage::Json | FieldStorage::Currency => {
-            let s = serde_json::to_string(value).map_err(|e| Error::serialization(e))?;
+            let s = serde_json::to_string(value).map_err(Error::serialization)?;
             Ok(query.bind(s))
         }
         FieldStorage::String | FieldStorage::Date => {
@@ -513,16 +602,16 @@ fn bind_postgres<'q>(
     }
     match storage {
         FieldStorage::Integer => {
-            let v = value.as_i64().ok_or_else(|| {
-                Error::Validation(format!("expected integer, got {value}"))
-            })?;
+            let v = value
+                .as_i64()
+                .ok_or_else(|| Error::Validation(format!("expected integer, got {value}")))?;
             Ok(query.bind(v))
         }
         FieldStorage::Boolean => Ok(query.bind(value.as_bool().unwrap_or(false))),
         FieldStorage::Decimal => {
-            let v = value.as_f64().ok_or_else(|| {
-                Error::Validation(format!("expected decimal, got {value}"))
-            })?;
+            let v = value
+                .as_f64()
+                .ok_or_else(|| Error::Validation(format!("expected decimal, got {value}")))?;
             Ok(query.bind(v))
         }
         FieldStorage::Json | FieldStorage::Currency => Ok(query.bind(value.clone())),
@@ -586,7 +675,11 @@ pub async fn get_record_typed_postgres(
     Ok(row.map(|r| row_from_sqlx_postgres(table, &layout, &r)))
 }
 
-fn row_from_sqlx_sqlite(table: &str, layout: &StorageLayout, row: &sqlx::sqlite::SqliteRow) -> Value {
+fn row_from_sqlx_sqlite(
+    table: &str,
+    layout: &StorageLayout,
+    row: &sqlx::sqlite::SqliteRow,
+) -> Value {
     let mut fields = Map::new();
     let mut id = String::new();
     for (i, f) in layout.fields.iter().enumerate() {
@@ -678,6 +771,7 @@ pub async fn update_record_typed_sqlite(
     layout: &StorageLayout,
     id: &str,
     content: Value,
+    ensured: &WriteEnsureCache,
 ) -> Result<Value> {
     if get_record_typed_sqlite(pool, &layout.table, id)
         .await?
@@ -685,7 +779,7 @@ pub async fn update_record_typed_sqlite(
     {
         return Err(Error::NotFound(format!("{}:{id}", layout.table)));
     }
-    ensure_layout_for_write_sqlite(pool, layout).await?;
+    ensure_layout_for_write_sqlite(pool, layout, ensured).await?;
     let (_, fields) = split_record_fields(content);
     let data: Vec<&LayoutField> = layout.fields.iter().filter(|f| f.name != "id").collect();
     if data.is_empty() {
@@ -719,6 +813,7 @@ pub async fn update_record_typed_postgres(
     layout: &StorageLayout,
     id: &str,
     content: Value,
+    ensured: &WriteEnsureCache,
 ) -> Result<Value> {
     if get_record_typed_postgres(pool, &layout.table, id)
         .await?
@@ -726,7 +821,7 @@ pub async fn update_record_typed_postgres(
     {
         return Err(Error::NotFound(format!("{}:{id}", layout.table)));
     }
-    ensure_layout_for_write_postgres(pool, layout).await?;
+    ensure_layout_for_write_postgres(pool, layout, ensured).await?;
     let (_, fields) = split_record_fields(content);
     let data: Vec<&LayoutField> = layout.fields.iter().filter(|f| f.name != "id").collect();
     if data.is_empty() {

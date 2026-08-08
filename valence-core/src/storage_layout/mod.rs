@@ -4,26 +4,38 @@
 //! fields (SQL columns, Surreal `DEFINE FIELD`, Redis Hash fields, Indra properties).
 //! Prefer typed `{Model}Schema::full()` over string registry lookups when the model
 //! is known at compile time.
+//!
+//! # Boot sync
+//!
+//! Call [`crate::Valence::sync_typed_tables_from_registry`] once at process start.
+//! When the physical stamp in `valence_schema_meta` matches [`crate::Schema::version`],
+//! inspect and DDL are skipped. On mismatch, additive sync (+ safe Postgres tweaks)
+//! runs, then the stamp is updated.
 
 mod diff;
 mod encode;
 pub mod ensure;
 mod export;
 mod sql_types;
+mod version_meta;
 
-pub use diff::{additive_ops, AdditiveOp, LayoutDiff};
+pub use diff::{additive_ops, layout_diff, AdditiveOp, LayoutDiff, SafeTweak};
+pub use encode::{
+    coerce_for_storage, decode_sql_cell, field_by_name, field_names_excluding_id,
+    fields_from_content, row_from_columns, split_record_fields, sql_bind_text,
+    validate_write_types,
+};
 pub use ensure::{
     ensure_typed_table_for, ensure_typed_tables_from_registry, sync_typed_table_for,
     sync_typed_tables_from_registry,
 };
-pub use encode::{
-    coerce_for_storage, decode_sql_cell, field_by_name, field_names_excluding_id,
-    fields_from_content, row_from_columns, split_record_fields, sql_bind_text, validate_write_types,
-};
 pub use export::{
-    postgres_add_column, sqlite_add_column, surreal_add_field, to_ddl, to_layout_json, DdlDialect,
+    postgres_add_column, postgres_drop_default, postgres_set_default, postgres_set_not_null,
+    postgres_set_nullable, sqlite_add_column, surreal_add_field, to_ddl, to_layout_json,
+    DdlDialect,
 };
 pub use sql_types::{logical_type_to_storage, FieldStorage, SqlColumnType, SurrealFieldType};
+pub use version_meta::{desired_schema_version, version_stamp_matches, SCHEMA_META_TABLE};
 
 use crate::error::{Error, Result};
 use crate::safe_ident::assert_safe_ident;
@@ -46,6 +58,8 @@ pub struct LayoutField {
     pub unique: bool,
     /// Non-unique index requested.
     pub indexed: bool,
+    /// Optional SQL DEFAULT expression / literal from schema (for safe tweaks).
+    pub default: Option<String>,
 }
 
 /// Physical layout for one table, derived from schema metadata.
@@ -80,6 +94,7 @@ impl StorageLayout {
                 nullable: f.nullable && !f.primary && f.name != "id",
                 unique: f.unique,
                 indexed: f.indexed,
+                default: f.default.clone(),
             });
         }
         if !saw_id {
@@ -92,6 +107,7 @@ impl StorageLayout {
                     nullable: false,
                     unique: true,
                     indexed: false,
+                    default: None,
                 },
             );
         }
@@ -108,6 +124,7 @@ impl StorageLayout {
                 nullable: true,
                 unique: false,
                 indexed: true,
+                default: None,
             });
         }
         Ok(Self {
@@ -161,6 +178,7 @@ impl StorageLayout {
             nullable: false,
             unique: true,
             indexed: false,
+            default: None,
         }];
         if let Some(obj) = content.as_object() {
             for key in obj.keys() {
@@ -176,6 +194,7 @@ impl StorageLayout {
                     nullable: true,
                     unique: false,
                     indexed: false,
+                    default: None,
                 });
             }
         }
@@ -201,6 +220,7 @@ impl StorageLayout {
                 nullable: true,
                 unique: false,
                 indexed: false,
+                default: None,
             });
         }
         Ok(())
@@ -213,7 +233,6 @@ impl StorageLayout {
     }
 
     /// Non-primary data fields.
-    #[must_use]
     pub fn data_fields(&self) -> impl Iterator<Item = &LayoutField> {
         self.fields.iter().filter(|f| !f.primary_key)
     }
@@ -367,6 +386,7 @@ mod tests {
                     nullable: false,
                     unique: true,
                     indexed: false,
+                    default: None,
                 },
                 LayoutField {
                     name: "a".into(),
@@ -375,6 +395,7 @@ mod tests {
                     nullable: true,
                     unique: false,
                     indexed: false,
+                    default: None,
                 },
                 LayoutField {
                     name: "b".into(),
@@ -383,6 +404,7 @@ mod tests {
                     nullable: true,
                     unique: false,
                     indexed: false,
+                    default: None,
                 },
             ],
         };
@@ -409,6 +431,7 @@ mod tests {
                 nullable: false,
                 unique: true,
                 indexed: false,
+                default: None,
             }],
         };
         let live = StorageLayout {
@@ -422,11 +445,11 @@ mod tests {
                     nullable: true,
                     unique: false,
                     indexed: false,
+                    default: None,
                 },
             ],
         };
         let err = additive_ops(&desired, &live).expect_err("destructive");
         assert!(matches!(err, Error::Validation(_)));
     }
-
 }

@@ -328,12 +328,20 @@ pub fn embedded_catalog() -> &'static [CatalogEntry] {
             ScenarioSpec::on_delete_set_null_cross_engine()
         }),
         entry("typed-sync-add-field", PathKind::Happy, |storage| {
-            let table = format!(
-                "typed_sync_{}",
-                storage.slug().replace('-', "_")
-            );
+            let table = format!("typed_sync_{}", storage.slug().replace('-', "_"));
             ScenarioSpec::typed_sync_add_field(table)
         }),
+        entry("schema-version-skip", PathKind::Happy, |_| {
+            ScenarioSpec::schema_version_skip()
+        }),
+        entry(
+            "schema-version-bump-add-field",
+            PathKind::Happy,
+            |storage| {
+                let table = format!("schema_ver_bump_{}", storage.slug().replace('-', "_"));
+                ScenarioSpec::schema_version_bump_add_field(table)
+            },
+        ),
     ];
     CATALOG
 }
@@ -399,9 +407,12 @@ fn on_delete_catalog_applies(entry_id: &str, storage: StorageAdapter) -> bool {
     true
 }
 
-/// Whether typed-sync catalog entries apply (skip acme stub — no typed layout port).
+/// Whether typed-sync / schema-version catalog entries apply (skip acme stub — no typed layout port).
 fn typed_sync_catalog_applies(entry_id: &str, storage: StorageAdapter) -> bool {
-    if entry_id != "typed-sync-add-field" {
+    if !matches!(
+        entry_id,
+        "typed-sync-add-field" | "schema-version-skip" | "schema-version-bump-add-field"
+    ) {
         return true;
     }
     !matches!(storage, StorageAdapter::AcmeStub)

@@ -18,9 +18,8 @@ use crate::query_exec::execute_compiled_query_inner;
 use crate::record_id::{surreal_from_valence, valence_from_surreal};
 use crate::row_json::{
     ensure_schemaless_table, ensure_typed_table, json_to_surreal_content_value,
-    map_looks_like_surreal_thing_only, sync_typed_table,
-    record_map_to_json_object, select_record_json, thing_only_key_from_tb_id_map, thing_to_id_only,
-    try_value_as_record_map,
+    map_looks_like_surreal_thing_only, record_map_to_json_object, select_record_json,
+    sync_typed_table, thing_only_key_from_tb_id_map, thing_to_id_only, try_value_as_record_map,
 };
 
 /// Stable engine slug for router keys (`surrealdb:logical_name`).

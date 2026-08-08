@@ -133,6 +133,7 @@ pub(super) async fn run(
                         unique: true,
                         indexed: false,
                         default: None,
+                    record_table: None,
                     },
                     LayoutField {
                         name: "name".into(),
@@ -142,6 +143,7 @@ pub(super) async fn run(
                         unique: false,
                         indexed: false,
                         default: None,
+                    record_table: None,
                     },
                 ],
             };
@@ -170,6 +172,7 @@ pub(super) async fn run(
                 unique: false,
                 indexed: false,
                 default: None,
+            record_table: None,
             });
             backend
                 .sync_typed_table(&layout_v2)
@@ -218,11 +221,25 @@ pub(super) async fn run(
             let backend = valence
                 .backend_for_table(table)
                 .map_err(|e| e.to_string())?;
+            let sql_stamp = matches!(
+                backend.engine_id(),
+                valence_core::KnownEngines::SQLITE | valence_core::KnownEngines::POSTGRES
+            );
             let before = backend
                 .read_schema_version(table)
                 .await
                 .map_err(|e| e.to_string())?;
-            if let Some(stamp) = before.as_deref() {
+            if sql_stamp {
+                let stamp = before.as_deref().ok_or_else(|| {
+                    format!("schema-version-skip: expected stamp on SQL engine after boot sync")
+                })?;
+                if stamp != meta.version {
+                    return Err(format!(
+                        "expected stamp {} after boot sync, got {stamp}",
+                        meta.version
+                    ));
+                }
+            } else if let Some(stamp) = before.as_deref() {
                 if stamp != meta.version {
                     return Err(format!(
                         "expected stamp {} after boot sync, got {stamp}",
@@ -249,6 +266,10 @@ pub(super) async fn run(
             }
             let valence = session.ensure_valence().map_err(|e| e.to_string())?;
             let backend = valence.active_backend().map_err(|e| e.to_string())?;
+            let sql_stamp = matches!(
+                backend.engine_id(),
+                valence_core::KnownEngines::SQLITE | valence_core::KnownEngines::POSTGRES
+            );
             let layout_v1 = StorageLayout {
                 table: table.clone(),
                 fields: vec![
@@ -260,6 +281,7 @@ pub(super) async fn run(
                         unique: true,
                         indexed: false,
                         default: None,
+                    record_table: None,
                     },
                     LayoutField {
                         name: "name".into(),
@@ -269,6 +291,7 @@ pub(super) async fn run(
                         unique: false,
                         indexed: false,
                         default: None,
+                    record_table: None,
                     },
                 ],
             };
@@ -284,7 +307,11 @@ pub(super) async fn run(
                 .read_schema_version(table)
                 .await
                 .map_err(|e| e.to_string())?;
-            if stamped.is_some() && stamped.as_deref() != Some("1.0.0") {
+            if sql_stamp {
+                if stamped.as_deref() != Some("1.0.0") {
+                    return Err(format!("expected stamp 1.0.0 on SQL, got {stamped:?}"));
+                }
+            } else if stamped.is_some() && stamped.as_deref() != Some("1.0.0") {
                 return Err(format!("expected stamp 1.0.0, got {stamped:?}"));
             }
 
@@ -297,6 +324,7 @@ pub(super) async fn run(
                 unique: false,
                 indexed: false,
                 default: None,
+            record_table: None,
             });
             backend
                 .sync_typed_table(&layout_v2)
@@ -307,11 +335,20 @@ pub(super) async fn run(
                 .await
                 .map_err(|e| e.to_string())?;
 
-            if let Some(inspected) = backend
+            let inspected = backend
                 .inspect_typed_layout(table)
                 .await
-                .map_err(|e| e.to_string())?
-            {
+                .map_err(|e| e.to_string())?;
+            if sql_stamp {
+                let inspected = inspected.ok_or_else(|| {
+                    format!("schema-version-bump: expected inspect layout on SQL for {table}")
+                })?;
+                if !inspected.fields.iter().any(|f| f.name == "score") {
+                    return Err(format!(
+                        "score field missing after version bump sync on {table}"
+                    ));
+                }
+            } else if let Some(inspected) = inspected {
                 if !inspected.fields.iter().any(|f| f.name == "score") {
                     return Err(format!(
                         "score field missing after version bump sync on {table}"
@@ -322,8 +359,89 @@ pub(super) async fn run(
                 .read_schema_version(table)
                 .await
                 .map_err(|e| e.to_string())?;
-            if after.is_some() && after.as_deref() != Some("1.1.0") {
+            if sql_stamp {
+                if after.as_deref() != Some("1.1.0") {
+                    return Err(format!(
+                        "expected stamp 1.1.0 on SQL after bump, got {after:?}"
+                    ));
+                }
+            } else if after.is_some() && after.as_deref() != Some("1.1.0") {
                 return Err(format!("expected stamp 1.1.0 after bump, got {after:?}"));
+            }
+        }
+        ScenarioStep::SchemaVersionSqliteNullabilityRefuse { table } => {
+            if mode == RunMode::Benchmark {
+                return Ok(());
+            }
+            let valence = session.ensure_valence().map_err(|e| e.to_string())?;
+            let backend = valence.active_backend().map_err(|e| e.to_string())?;
+            if backend.engine_id() != valence_core::KnownEngines::SQLITE {
+                return Ok(());
+            }
+            let live = StorageLayout {
+                table: table.clone(),
+                fields: vec![
+                    LayoutField {
+                        name: "id".into(),
+                        storage: FieldStorage::String,
+                        primary_key: true,
+                        nullable: false,
+                        unique: true,
+                        indexed: false,
+                        default: None,
+                    record_table: None,
+                    },
+                    LayoutField {
+                        name: "name".into(),
+                        storage: FieldStorage::String,
+                        primary_key: false,
+                        nullable: false,
+                        unique: false,
+                        indexed: false,
+                        default: None,
+                    record_table: None,
+                    },
+                ],
+            };
+            backend
+                .ensure_typed_table(&live)
+                .await
+                .map_err(|e| e.to_string())?;
+            let desired = StorageLayout {
+                table: table.clone(),
+                fields: vec![
+                    LayoutField {
+                        name: "id".into(),
+                        storage: FieldStorage::String,
+                        primary_key: true,
+                        nullable: false,
+                        unique: true,
+                        indexed: false,
+                        default: None,
+                    record_table: None,
+                    },
+                    LayoutField {
+                        name: "name".into(),
+                        storage: FieldStorage::String,
+                        primary_key: false,
+                        nullable: true,
+                        unique: false,
+                        indexed: false,
+                        default: None,
+                    record_table: None,
+                    },
+                ],
+            };
+            match backend.sync_typed_table(&desired).await {
+                Ok(()) => {
+                    return Err("expected Validation refusing SQLite nullability change".into());
+                }
+                Err(e) => {
+                    let msg = e.to_string();
+                    if !msg.to_ascii_lowercase().contains("nullability") {
+                        return Err(format!("expected nullability Validation, got: {msg}"));
+                    }
+                }
             }
         }
         other => return Err(format!("crud step mismatch: {other:?}")),

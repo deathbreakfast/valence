@@ -139,6 +139,9 @@ fn postgres_create(layout: &StorageLayout) -> Result<String> {
 }
 
 /// Surreal `TYPE` clause: nullable → `option<T>`; object/json → trailing `FLEXIBLE`.
+///
+/// Record links stay `string` (canonical `table:id`) so cross-backend hops do not require
+/// the target row to exist in the same Surreal database.
 fn surreal_type_clause(field: &super::LayoutField) -> String {
     let base = field.storage.surreal_ddl();
     let ty = if field.nullable {
@@ -267,6 +270,7 @@ mod tests {
                     unique: true,
                     indexed: false,
                     default: None,
+                record_table: None,
                 },
                 LayoutField {
                     name: "name".into(),
@@ -276,6 +280,7 @@ mod tests {
                     unique: false,
                     indexed: false,
                     default: None,
+                record_table: None,
                 },
             ],
         };
@@ -300,8 +305,26 @@ mod tests {
             unique: false,
             indexed: false,
             default: None,
+        record_table: None,
         };
         let clause = surreal_type_clause(&f);
         assert_eq!(clause, "option<object> FLEXIBLE");
+    }
+
+    #[test]
+    fn surreal_record_link_stays_string_type() {
+        let f = LayoutField {
+            name: "project".into(),
+            storage: FieldStorage::String,
+            primary_key: false,
+            nullable: false,
+            unique: false,
+            indexed: false,
+            default: None,
+            record_table: Some("hop_pair_project".into()),
+        };
+        // Cross-backend Valence keeps record links as strings even when record_table is set.
+        let clause = surreal_type_clause(&f);
+        assert_eq!(clause, "string");
     }
 }

@@ -33,8 +33,8 @@ Living coverage map for Valence. Status legend:
 | Update / upsert | Y (contract + model) | P | merge bm-v8; upsert via model contract |
 | Hard delete | P (contract) | P | N |
 | Unique index | Y (contract) | Y (duplicate) | N |
-| Typed ensure / additive sync | Y (`typed-sync-add-field` + `schema_version_sync`) | Y (destructive refuse; SQLite nullability refuse) | N |
-| Boot version stamp skip/bump | Y (`schema-version-skip` / `schema-version-bump-add-field` + `schema_version_sync`) | Y (stamp mismatch → sync) | write path once-per-process cache |
+| Typed ensure / additive sync | Y (`typed-sync-add-field` + `schema_version_sync`) | Y (`schema-version-sqlite-nullability-refuse` + unit refuse) | N |
+| Boot version stamp skip/bump | Y (`schema-version-skip` / `schema-version-bump-add-field` + `schema_version_sync`) | Y (stamp mismatch → sync; registry missing-col Validation) | write path per-backend field cache (no every-write catalog inspect once covered) |
 | Graph edges | Y | N | N |
 
 ### Model / ORM

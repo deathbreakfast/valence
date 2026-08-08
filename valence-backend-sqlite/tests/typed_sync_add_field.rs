@@ -20,6 +20,7 @@ async fn sqlite_sync_adds_column() {
                 unique: true,
                 indexed: false,
                 default: None,
+            record_table: None,
             },
             LayoutField {
                 name: "name".into(),
@@ -29,6 +30,7 @@ async fn sqlite_sync_adds_column() {
                 unique: false,
                 indexed: false,
                 default: None,
+            record_table: None,
             },
         ],
     };
@@ -54,6 +56,7 @@ async fn sqlite_sync_adds_column() {
         unique: false,
         indexed: false,
         default: None,
+    record_table: None,
     });
     backend.sync_typed_table(&layout_v2).await.expect("sync");
 

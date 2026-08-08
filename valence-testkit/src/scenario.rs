@@ -204,6 +204,8 @@ pub enum ScenarioStep {
         /// Physical table name (unique per storage on shared wire stores).
         table: String,
     },
+    /// SQLite refuses nullability change on additive sync (Validation).
+    SchemaVersionSqliteNullabilityRefuse { table: String },
 }
 
 /// Declarative scenario specification (JSON-serializable).
@@ -709,6 +711,19 @@ impl ScenarioSpec {
             steps: vec![
                 ScenarioStep::BuildValence,
                 ScenarioStep::SchemaVersionBumpAddField {
+                    table: table.into(),
+                },
+            ],
+        }
+    }
+
+    /// SQLite sad: live NOT NULL → desired nullable → Validation.
+    pub fn schema_version_sqlite_nullability_refuse(table: impl Into<String>) -> Self {
+        Self {
+            id: "schema-version-sqlite-nullability-refuse".into(),
+            steps: vec![
+                ScenarioStep::BuildValence,
+                ScenarioStep::SchemaVersionSqliteNullabilityRefuse {
                     table: table.into(),
                 },
             ],

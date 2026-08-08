@@ -10,6 +10,8 @@ Re-run after test or CI changes.
 # Typed storage layout + SQLite sync
 cargo test -p uf-valence-core --lib storage_layout
 cargo test -p uf-valence-backend-sqlite --test backend_contract --test typed_sync_add_field --test schema_version_sync
+# Postgres safe tweaks (skips without DATABASE_URL)
+cargo test -p uf-valence-backend-postgres --test safe_tweak_sync
 
 # Full workspace tests
 cargo test --workspace

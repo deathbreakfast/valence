@@ -37,7 +37,10 @@ pub(super) async fn run_step(
         | ScenarioStep::M2mRelateSmoke
         | ScenarioStep::TypedSyncAddField { .. }
         | ScenarioStep::SchemaVersionSkip
-        | ScenarioStep::SchemaVersionBumpAddField { .. } => crud::run(session, step, mode).await,
+        | ScenarioStep::SchemaVersionBumpAddField { .. }
+        | ScenarioStep::SchemaVersionSqliteNullabilityRefuse { .. } => {
+            crud::run(session, step, mode).await
+        }
         ScenarioStep::ModelCrudSmoke
         | ScenarioStep::ModelUpdateUpsert
         | ScenarioStep::OwnershipGateSmoke
@@ -131,5 +134,8 @@ pub(super) fn step_label(step: &ScenarioStep) -> String {
         ScenarioStep::TypedSyncAddField { .. } => "typed_sync_add_field".into(),
         ScenarioStep::SchemaVersionSkip => "schema_version_skip".into(),
         ScenarioStep::SchemaVersionBumpAddField { .. } => "schema_version_bump_add_field".into(),
+        ScenarioStep::SchemaVersionSqliteNullabilityRefuse { .. } => {
+            "schema_version_sqlite_nullability_refuse".into()
+        }
     }
 }

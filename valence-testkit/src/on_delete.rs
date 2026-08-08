@@ -532,10 +532,17 @@ async fn build_hop_valence(
 }
 
 async fn sync_hop_typed_tables(valence: &Valence) -> Result<(), String> {
-    valence
-        .sync_typed_tables_from_registry()
-        .await
-        .map_err(|e| e.to_string())
+    for table in [
+        "od_xe_ca_parent",
+        "od_xe_ca_child",
+        "od_xe_sn_parent",
+        "od_xe_sn_child",
+    ] {
+        valence_core::storage_layout::sync_typed_table_for(valence, table)
+            .await
+            .map_err(|e| e.to_string())?;
+    }
+    Ok(())
 }
 
 /// Cross-engine CascadeDelete (parent primary, child secondary).

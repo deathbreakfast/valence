@@ -297,6 +297,7 @@ pub async fn define_unique_index_sqlite(
                     unique: true,
                     indexed: false,
                     default: None,
+                record_table: None,
                 },
                 valence_core::storage_layout::LayoutField {
                     name: field.to_string(),
@@ -306,6 +307,7 @@ pub async fn define_unique_index_sqlite(
                     unique: true,
                     indexed: false,
                     default: None,
+                record_table: None,
                 },
             ],
         };
@@ -342,6 +344,7 @@ pub async fn apply_ttl_policy_sqlite(
                     unique: true,
                     indexed: false,
                     default: None,
+                record_table: None,
                 },
                 valence_core::storage_layout::LayoutField {
                     name: field.to_string(),
@@ -351,6 +354,7 @@ pub async fn apply_ttl_policy_sqlite(
                     unique: false,
                     indexed: true,
                     default: None,
+                record_table: None,
                 },
             ],
         };

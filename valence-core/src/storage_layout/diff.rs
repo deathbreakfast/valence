@@ -187,6 +187,7 @@ mod tests {
             unique: name == "id",
             indexed: false,
             default: None,
+        record_table: None,
         }
     }
 

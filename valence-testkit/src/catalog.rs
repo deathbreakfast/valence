@@ -342,6 +342,10 @@ pub fn embedded_catalog() -> &'static [CatalogEntry] {
                 ScenarioSpec::schema_version_bump_add_field(table)
             },
         ),
+        entry_sad("schema-version-sqlite-nullability-refuse", |storage| {
+            let table = format!("schema_ver_null_{}", storage.slug().replace('-', "_"));
+            ScenarioSpec::schema_version_sqlite_nullability_refuse(table)
+        }),
     ];
     CATALOG
 }
@@ -411,11 +415,20 @@ fn on_delete_catalog_applies(entry_id: &str, storage: StorageAdapter) -> bool {
 fn typed_sync_catalog_applies(entry_id: &str, storage: StorageAdapter) -> bool {
     if !matches!(
         entry_id,
-        "typed-sync-add-field" | "schema-version-skip" | "schema-version-bump-add-field"
+        "typed-sync-add-field"
+            | "schema-version-skip"
+            | "schema-version-bump-add-field"
+            | "schema-version-sqlite-nullability-refuse"
     ) {
         return true;
     }
-    !matches!(storage, StorageAdapter::AcmeStub)
+    if matches!(storage, StorageAdapter::AcmeStub) {
+        return false;
+    }
+    if entry_id == "schema-version-sqlite-nullability-refuse" {
+        return matches!(storage, StorageAdapter::Sqlite);
+    }
+    true
 }
 
 /// Storage adapters participating in default PR CI matrix.

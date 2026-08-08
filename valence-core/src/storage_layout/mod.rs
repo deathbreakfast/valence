@@ -60,6 +60,8 @@ pub struct LayoutField {
     pub indexed: bool,
     /// Optional SQL DEFAULT expression / literal from schema (for safe tweaks).
     pub default: Option<String>,
+    /// Target table when `field_type` is `record<table>` (Surreal `TYPE record<table>`).
+    pub record_table: Option<String>,
 }
 
 /// Physical layout for one table, derived from schema metadata.
@@ -87,6 +89,8 @@ impl StorageLayout {
             if f.name == "id" {
                 saw_id = true;
             }
+            let record_table = record_table_from_field_type(&f.field_type)
+                .or_else(|| f.fk.as_ref().map(|fk| fk.ref_table.clone()));
             fields.push(LayoutField {
                 name: f.name.clone(),
                 storage,
@@ -95,6 +99,7 @@ impl StorageLayout {
                 unique: f.unique,
                 indexed: f.indexed,
                 default: f.default.clone(),
+                record_table,
             });
         }
         if !saw_id {
@@ -108,6 +113,7 @@ impl StorageLayout {
                     unique: true,
                     indexed: false,
                     default: None,
+                    record_table: None,
                 },
             );
         }
@@ -125,6 +131,7 @@ impl StorageLayout {
                 unique: false,
                 indexed: true,
                 default: None,
+                record_table: None,
             });
         }
         Ok(Self {
@@ -179,6 +186,7 @@ impl StorageLayout {
             unique: true,
             indexed: false,
             default: None,
+            record_table: None,
         }];
         if let Some(obj) = content.as_object() {
             for key in obj.keys() {
@@ -195,6 +203,7 @@ impl StorageLayout {
                     unique: false,
                     indexed: false,
                     default: None,
+                    record_table: None,
                 });
             }
         }
@@ -221,6 +230,7 @@ impl StorageLayout {
                 unique: false,
                 indexed: false,
                 default: None,
+                record_table: None,
             });
         }
         Ok(())
@@ -264,6 +274,18 @@ fn storage_from_json_value(v: &serde_json::Value) -> FieldStorage {
         serde_json::Value::String(_) => FieldStorage::String,
         _ => FieldStorage::Json,
     }
+}
+
+/// Parse `record<table>` / `record<table>:role` style type strings.
+fn record_table_from_field_type(field_type: &str) -> Option<String> {
+    let t = field_type.trim();
+    let rest = t.strip_prefix("record<")?;
+    let end = rest.find('>')?;
+    let table = rest[..end].trim();
+    if table.is_empty() || !table.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
+        return None;
+    }
+    Some(table.to_string())
 }
 
 #[cfg(test)]
@@ -387,6 +409,7 @@ mod tests {
                     unique: true,
                     indexed: false,
                     default: None,
+                record_table: None,
                 },
                 LayoutField {
                     name: "a".into(),
@@ -396,6 +419,7 @@ mod tests {
                     unique: false,
                     indexed: false,
                     default: None,
+                record_table: None,
                 },
                 LayoutField {
                     name: "b".into(),
@@ -405,6 +429,7 @@ mod tests {
                     unique: false,
                     indexed: false,
                     default: None,
+                record_table: None,
                 },
             ],
         };
@@ -432,6 +457,7 @@ mod tests {
                 unique: true,
                 indexed: false,
                 default: None,
+            record_table: None,
             }],
         };
         let live = StorageLayout {
@@ -446,6 +472,7 @@ mod tests {
                     unique: false,
                     indexed: false,
                     default: None,
+                record_table: None,
                 },
             ],
         };

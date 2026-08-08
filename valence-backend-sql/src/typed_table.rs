@@ -147,6 +147,7 @@ pub async fn inspect_typed_layout_sqlite(
             unique: false,
             indexed: false,
             default: None,
+        record_table: None,
         });
     }
     Ok(Some(StorageLayout {
@@ -196,6 +197,7 @@ pub async fn inspect_typed_layout_postgres(
             unique: false,
             indexed: false,
             default: None,
+        record_table: None,
         });
     }
     Ok(Some(StorageLayout {

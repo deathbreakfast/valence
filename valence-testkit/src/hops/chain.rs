@@ -105,13 +105,23 @@ async fn build_chain_valence(
     router.register(router_key("n2", HOP_B), b);
     router.register(router_key("n3", HOP_C), c);
     router.register(router_key("n4", HOP_D), d);
-    Valence::builder()
+    let valence = Valence::builder()
         .database_router(Arc::new(router))
         .default_backend_key(router_key("n1", HOP_A))
         .with_actor(Actor::System {
             operation: "hop_chain".to_string(),
         })
-        .build()
+        .build()?;
+    // Scope to chain tables only — shared wire DBs may hold orphans from other harnesses.
+    for table in [
+        "hop_chain_org",
+        "hop_chain_project",
+        "hop_chain_task",
+        "hop_chain_note",
+    ] {
+        valence_core::storage_layout::sync_typed_table_for(&valence, table).await?;
+    }
+    Ok(valence)
 }
 
 fn task_title_subquery(title: &str) -> QueryCore {

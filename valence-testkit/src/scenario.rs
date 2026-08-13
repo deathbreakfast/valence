@@ -192,6 +192,20 @@ pub enum ScenarioStep {
     OnDeleteCascadeCrossEngine,
     /// Cross-engine SetNull on secondary engine.
     OnDeleteSetNullCrossEngine,
+    /// Ensure typed layout, add a field via additive sync, read/write the new column.
+    TypedSyncAddField {
+        /// Physical table name (unique per storage on shared wire stores).
+        table: String,
+    },
+    /// After boot sync, matching version stamps skip a second registry sync.
+    SchemaVersionSkip,
+    /// Stamp an ad-hoc table, bump layout with ADD COLUMN, restamp.
+    SchemaVersionBumpAddField {
+        /// Physical table name (unique per storage on shared wire stores).
+        table: String,
+    },
+    /// SQLite refuses nullability change on additive sync (Validation).
+    SchemaVersionSqliteNullabilityRefuse { table: String },
 }
 
 /// Declarative scenario specification (JSON-serializable).
@@ -665,6 +679,53 @@ impl ScenarioSpec {
             steps: vec![
                 ScenarioStep::BuildValence,
                 ScenarioStep::OnDeleteSetNullCrossEngine,
+            ],
+        }
+    }
+
+    /// Ensure → create → additive sync (new field) → inspect (when supported) → update/get.
+    pub fn typed_sync_add_field(table: impl Into<String>) -> Self {
+        Self {
+            id: "typed-sync-add-field".into(),
+            steps: vec![
+                ScenarioStep::BuildValence,
+                ScenarioStep::TypedSyncAddField {
+                    table: table.into(),
+                },
+            ],
+        }
+    }
+
+    /// Boot sync stamps registry versions; a second sync is a no-op when stamps match.
+    pub fn schema_version_skip() -> Self {
+        Self {
+            id: "schema-version-skip".into(),
+            steps: vec![ScenarioStep::BuildValence, ScenarioStep::SchemaVersionSkip],
+        }
+    }
+
+    /// Ad-hoc table: stamp → ADD COLUMN sync → restamp.
+    pub fn schema_version_bump_add_field(table: impl Into<String>) -> Self {
+        Self {
+            id: "schema-version-bump-add-field".into(),
+            steps: vec![
+                ScenarioStep::BuildValence,
+                ScenarioStep::SchemaVersionBumpAddField {
+                    table: table.into(),
+                },
+            ],
+        }
+    }
+
+    /// SQLite sad: live NOT NULL → desired nullable → Validation.
+    pub fn schema_version_sqlite_nullability_refuse(table: impl Into<String>) -> Self {
+        Self {
+            id: "schema-version-sqlite-nullability-refuse".into(),
+            steps: vec![
+                ScenarioStep::BuildValence,
+                ScenarioStep::SchemaVersionSqliteNullabilityRefuse {
+                    table: table.into(),
+                },
             ],
         }
     }

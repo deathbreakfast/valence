@@ -226,6 +226,21 @@ mod tests {
     }
 
     #[test]
+    fn filters_bare_column_equality_param() {
+        let compiled = CompiledQuery::new(
+            "SELECT * FROM project WHERE name = $param_0".into(),
+            vec![("param_0".into(), serde_json::json!("alpha"))],
+        );
+        let rows = vec![
+            serde_json::json!({"id": {"table": "project", "id": "1"}, "name": "alpha"}),
+            serde_json::json!({"id": {"table": "project", "id": "2"}, "name": "beta"}),
+        ];
+        let out = apply_equality_where(rows, &compiled);
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0]["name"], "alpha");
+    }
+
+    #[test]
     fn filters_record_or_clause_against_object_fk() {
         let compiled = CompiledQuery::new(
             "SELECT id, body FROM task WHERE (json_extract(body, '$.project') = $param_0 OR json_extract(body, '$.project') = $param_1 OR json_extract(body, '$.project.id') = $param_1)".into(),

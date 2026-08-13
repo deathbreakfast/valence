@@ -1,7 +1,7 @@
-//! Redis wire [`DatabaseBackend`] using JSON documents in Redis STRING keys.
+//! Redis wire [`DatabaseBackend`] using Hash fields per schema field.
 
 use redis::aio::ConnectionManager;
-use redis::{AsyncCommands, SetExpiry, SetOptions};
+use redis::AsyncCommands;
 use serde_json::{Map, Value};
 
 use valence_core::ttl::SchemaTtlPolicy;
@@ -19,7 +19,7 @@ pub const ENGINE_ID: &str = KnownEngines::REDIS;
 /// Schema evaluator const for `database:` routing.
 pub const PRIMARY: DatabaseFromEngine = Database::from_engine("primary", ENGINE_ID);
 
-/// Redis-backed [`DatabaseBackend`] storing JSON documents per table/id key.
+/// Redis-backed [`DatabaseBackend`] storing one Hash per record (field → JSON cell).
 ///
 /// # Examples
 ///
@@ -297,20 +297,30 @@ impl DatabaseBackend for RedisBackend {
         Self::assert_safe_table(table)?;
         let key = self.keys.doc(table, id);
         let mut conn = self.conn.clone();
-        let raw: Option<String> = conn.get(&key).await.map_err(Self::map_err)?;
-        if raw.is_none() {
+        let map: std::collections::HashMap<String, String> =
+            conn.hgetall(&key).await.map_err(Self::map_err)?;
+        if map.is_empty() {
+            // Legacy STRING blob (pre-typed Hash) — ignore; wipe/recreate for migration.
             crate::ttl::srem_orphan_id(&mut conn, &self.keys, table, id).await?;
             return Ok(None);
         }
-        Ok(raw.map(|text| {
-            let body: Value =
-                serde_json::from_str(&text).unwrap_or_else(|_| Value::Object(Map::new()));
-            row_from_body(table, id, body)
-        }))
+        let mut body = Map::new();
+        for (k, v) in map {
+            if k == "__valence_empty" {
+                continue;
+            }
+            let parsed: Value = serde_json::from_str(&v).unwrap_or(Value::String(v));
+            body.insert(k, parsed);
+        }
+        Ok(Some(row_from_body(table, id, Value::Object(body))))
     }
 
     async fn create_record(&self, table: &str, content: Value) -> Result<Value> {
         Self::assert_safe_table(table)?;
+        if let Ok(layout) = valence_core::storage_layout::StorageLayout::from_registry_table(table)
+        {
+            valence_core::storage_layout::validate_write_types(&layout, &content)?;
+        }
         let mut content = content;
         valence_core::ttl::prepare_create_content(table, self, &mut content)?;
         let id = storage_id(&content).unwrap_or_else(uuid_simple);
@@ -323,14 +333,16 @@ impl DatabaseBackend for RedisBackend {
         }
         self.claim_unique_fields(table, &id, &record, None).await?;
         let body = strip_id_field(&record);
-        let body_text = serde_json::to_string(&body).map_err(Error::from)?;
         let doc_key = self.keys.doc(table, &id);
         let ids_key = self.keys.table_ids(table);
         let mut conn = self.conn.clone();
-        let _: () = conn
-            .set(&doc_key, &body_text)
+        // Replace any prior key type, then write Hash fields.
+        let _: () = redis::cmd("DEL")
+            .arg(&doc_key)
+            .query_async(&mut conn)
             .await
             .map_err(Self::map_err)?;
+        write_hash_fields(&mut conn, &doc_key, &body).await?;
         let _: () = conn.sadd(&ids_key, &id).await.map_err(Self::map_err)?;
         self.apply_create_ttl(table, &id, &record).await?;
         Ok(record)
@@ -349,18 +361,28 @@ impl DatabaseBackend for RedisBackend {
             obj.insert("id".into(), record_id_json(table, id));
         }
         let body = strip_id_field(&record);
-        let body_text = serde_json::to_string(&body).map_err(Error::from)?;
         let doc_key = self.keys.doc(table, id);
         let mut conn = self.conn.clone();
-        // KEEPTTL: plain SET clears EXPIRE and would refresh create-only TTL.
-        let _: () = conn
-            .set_options(
-                &doc_key,
-                &body_text,
-                SetOptions::default().with_expiration(SetExpiry::KEEPTTL),
-            )
+        // Preserve TTL: read PTTL, rewrite hash, restore expire.
+        let pttl: i64 = redis::cmd("PTTL")
+            .arg(&doc_key)
+            .query_async(&mut conn)
+            .await
+            .unwrap_or(-1);
+        let _: () = redis::cmd("DEL")
+            .arg(&doc_key)
+            .query_async(&mut conn)
             .await
             .map_err(Self::map_err)?;
+        write_hash_fields(&mut conn, &doc_key, &body).await?;
+        if pttl > 0 {
+            let _: () = redis::cmd("PEXPIRE")
+                .arg(&doc_key)
+                .arg(pttl)
+                .query_async(&mut conn)
+                .await
+                .map_err(Self::map_err)?;
+        }
         Ok(record)
     }
 
@@ -379,18 +401,28 @@ impl DatabaseBackend for RedisBackend {
         self.claim_unique_fields(table, id, &merged, Some(id))
             .await?;
         let body = strip_id_field(&merged);
-        let body_text = serde_json::to_string(&body).map_err(Error::from)?;
         let doc_key = self.keys.doc(table, id);
         let ids_key = self.keys.table_ids(table);
         let mut conn = self.conn.clone();
-        let _: () = conn
-            .set_options(
-                &doc_key,
-                &body_text,
-                SetOptions::default().with_expiration(SetExpiry::KEEPTTL),
-            )
+        let pttl: i64 = redis::cmd("PTTL")
+            .arg(&doc_key)
+            .query_async(&mut conn)
+            .await
+            .unwrap_or(-1);
+        let _: () = redis::cmd("DEL")
+            .arg(&doc_key)
+            .query_async(&mut conn)
             .await
             .map_err(Self::map_err)?;
+        write_hash_fields(&mut conn, &doc_key, &body).await?;
+        if pttl > 0 {
+            let _: () = redis::cmd("PEXPIRE")
+                .arg(&doc_key)
+                .arg(pttl)
+                .query_async(&mut conn)
+                .await
+                .map_err(Self::map_err)?;
+        }
         let _: () = conn.sadd(&ids_key, id).await.map_err(Self::map_err)?;
         Ok(merged)
     }
@@ -495,6 +527,35 @@ fn strip_id_field(record: &Value) -> Map<String, Value> {
         .into_iter()
         .filter(|(k, _)| k != "id")
         .collect()
+}
+
+async fn write_hash_fields(
+    conn: &mut ConnectionManager,
+    doc_key: &str,
+    body: &Map<String, Value>,
+) -> Result<()> {
+    if body.is_empty() {
+        // Ensure key exists as empty hash marker field.
+        let _: () = redis::cmd("HSET")
+            .arg(doc_key)
+            .arg("__valence_empty")
+            .arg("1")
+            .query_async(conn)
+            .await
+            .map_err(|e| Error::database(e.to_string()))?;
+        return Ok(());
+    }
+    let mut cmd = redis::cmd("HSET");
+    cmd.arg(doc_key);
+    for (k, v) in body {
+        let s = serde_json::to_string(v).map_err(Error::from)?;
+        cmd.arg(k).arg(s);
+    }
+    let _: () = cmd
+        .query_async(conn)
+        .await
+        .map_err(|e| Error::database(e.to_string()))?;
+    Ok(())
 }
 
 fn record_id_json(table: &str, id: &str) -> Value {

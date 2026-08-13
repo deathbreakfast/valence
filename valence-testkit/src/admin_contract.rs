@@ -98,8 +98,10 @@ pub async fn run_admin_contract(backend: Arc<dyn DatabaseBackend>) -> Result<()>
     // Wire stores are shared across adapters (postgres + hybrid use one database);
     // clear any leftover seed row so back-to-back contract runs stay isolated.
     let _ = backend.delete_record("smoke", "s1").await;
+    // Registry Smoke schema is id-only; do not invent extra columns on shared wire DBs
+    // (boot sync refuses orphan live fields as destructive Future work).
     backend
-        .create_record("smoke", serde_json::json!({"id": "s1", "label": "sample"}))
+        .create_record("smoke", serde_json::json!({"id": "s1"}))
         .await?;
     // A prior contract run leaves the ownership row in `pending_deletion`, which
     // makes queue_delete_entity a no-op; reset it so the delete dispatch fires.
@@ -108,7 +110,10 @@ pub async fn run_admin_contract(backend: Arc<dyn DatabaseBackend>) -> Result<()>
     let row = QueryCore::get_record_json("smoke", "s1", &v)
         .await?
         .expect("seeded row");
-    assert_eq!(row.get("label").and_then(|v| v.as_str()), Some("sample"));
+    assert!(
+        row.get("id").is_some(),
+        "seeded smoke row missing id key: {row}"
+    );
 
     let ids = QueryCore::latest_ids("smoke", 5, &v).await?;
     assert_eq!(ids.len(), 1);

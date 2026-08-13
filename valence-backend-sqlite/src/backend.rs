@@ -5,9 +5,11 @@ use std::str::FromStr;
 
 use valence_backend_sql::{
     apply_ttl_policy_sqlite, create_record_sqlite, define_unique_index_sqlite,
-    delete_record_sqlite, ensure_table_sqlite, execute_select_sqlite, get_edge_sources_sqlite,
-    get_edge_targets_sqlite, get_record_sqlite, merge_record_sqlite, relate_edge_sqlite,
-    sql_capabilities, ttl_deferred, unrelate_edge_sqlite, update_record_sqlite,
+    delete_record_sqlite, ensure_table_sqlite, ensure_typed_table_sqlite, execute_select_sqlite,
+    get_edge_sources_sqlite, get_edge_targets_sqlite, get_record_sqlite,
+    inspect_typed_layout_sqlite, merge_record_sqlite, read_schema_version_sqlite,
+    relate_edge_sqlite, sql_capabilities, sync_typed_table_sqlite, ttl_deferred,
+    unrelate_edge_sqlite, update_record_sqlite, write_schema_version_sqlite, WriteEnsureCache,
 };
 use valence_core::backend::DatabaseBackend;
 use valence_core::compiled_query::CompiledQuery;
@@ -22,7 +24,7 @@ pub const ENGINE_ID: &str = KnownEngines::SQLITE;
 /// Schema evaluator const for `database:` routing.
 pub const PRIMARY: DatabaseFromEngine = Database::from_engine("primary", ENGINE_ID);
 
-/// SQLite-backed [`DatabaseBackend`] using JSON document rows.
+/// SQLite-backed [`DatabaseBackend`] using typed columns from schema layout.
 ///
 /// # Examples
 ///
@@ -61,6 +63,7 @@ pub const PRIMARY: DatabaseFromEngine = Database::from_engine("primary", ENGINE_
 #[derive(Debug, Clone)]
 pub struct SqliteBackend {
     pool: SqlitePool,
+    layout_ensured: WriteEnsureCache,
 }
 
 impl SqliteBackend {
@@ -98,7 +101,10 @@ impl SqliteBackend {
             .await
             .map_err(|e| Error::database(e.to_string()))?;
         valence_backend_sql::ensure_edges_sqlite(&pool).await?;
-        Ok(Self { pool })
+        Ok(Self {
+            pool,
+            layout_ensured: WriteEnsureCache::new(),
+        })
     }
 
     /// Borrow the underlying pool.
@@ -128,6 +134,35 @@ impl DatabaseBackend for SqliteBackend {
         ensure_table_sqlite(&self.pool, table).await
     }
 
+    async fn inspect_typed_layout(
+        &self,
+        table: &str,
+    ) -> Result<Option<valence_core::storage_layout::StorageLayout>> {
+        inspect_typed_layout_sqlite(&self.pool, table).await
+    }
+
+    async fn ensure_typed_table(
+        &self,
+        layout: &valence_core::storage_layout::StorageLayout,
+    ) -> Result<()> {
+        ensure_typed_table_sqlite(&self.pool, layout).await
+    }
+
+    async fn sync_typed_table(
+        &self,
+        layout: &valence_core::storage_layout::StorageLayout,
+    ) -> Result<()> {
+        sync_typed_table_sqlite(&self.pool, layout).await
+    }
+
+    async fn read_schema_version(&self, table: &str) -> Result<Option<String>> {
+        read_schema_version_sqlite(&self.pool, table).await
+    }
+
+    async fn write_schema_version(&self, table: &str, version: &str) -> Result<()> {
+        write_schema_version_sqlite(&self.pool, table, version).await
+    }
+
     async fn get_record(&self, table: &str, id: &str) -> Result<Option<serde_json::Value>> {
         get_record_sqlite(&self.pool, table, id).await
     }
@@ -137,7 +172,7 @@ impl DatabaseBackend for SqliteBackend {
         table: &str,
         content: serde_json::Value,
     ) -> Result<serde_json::Value> {
-        create_record_sqlite(&self.pool, table, content).await
+        create_record_sqlite(&self.pool, table, content, &self.layout_ensured).await
     }
 
     async fn update_record(
@@ -146,7 +181,7 @@ impl DatabaseBackend for SqliteBackend {
         id: &str,
         content: serde_json::Value,
     ) -> Result<serde_json::Value> {
-        update_record_sqlite(&self.pool, table, id, content).await
+        update_record_sqlite(&self.pool, table, id, content, &self.layout_ensured).await
     }
 
     async fn merge_record(
@@ -155,7 +190,7 @@ impl DatabaseBackend for SqliteBackend {
         id: &str,
         patch: serde_json::Value,
     ) -> Result<serde_json::Value> {
-        merge_record_sqlite(&self.pool, table, id, patch).await
+        merge_record_sqlite(&self.pool, table, id, patch, &self.layout_ensured).await
     }
 
     async fn upsert_record(
@@ -196,7 +231,7 @@ impl DatabaseBackend for SqliteBackend {
     }
 
     async fn define_unique_index(&self, table: &str, field: &str) -> Result<()> {
-        define_unique_index_sqlite(&self.pool, table, field).await
+        define_unique_index_sqlite(&self.pool, table, field, &self.layout_ensured).await
     }
 
     fn ttl_capability(&self) -> valence_core::ttl::BackendTtlCapability {
@@ -204,6 +239,6 @@ impl DatabaseBackend for SqliteBackend {
     }
 
     async fn apply_ttl_policy(&self, table: &str, policy: &SchemaTtlPolicy) -> Result<()> {
-        apply_ttl_policy_sqlite(&self.pool, table, policy).await
+        apply_ttl_policy_sqlite(&self.pool, table, policy, &self.layout_ensured).await
     }
 }

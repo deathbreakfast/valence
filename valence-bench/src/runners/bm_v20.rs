@@ -18,6 +18,13 @@ pub async fn run(ctx: &RunContext) -> Result<BenchReport> {
     let valence = session.ensure_valence()?;
     let backend = valence.active_backend()?;
 
+    // Isolate from prior adapters on a shared store (hybrid reuses the postgres primary):
+    // clear the fixed ids so seeding does not collide on the primary key.
+    let _ = backend.delete_record("bm_v20", "hot").await;
+    for i in 0..ctx.plan.default_ops.max(1) {
+        let _ = backend.delete_record("bm_v20", &format!("u{i}")).await;
+    }
+
     backend
         .create_record("bm_v20", serde_json::json!({"id": "hot", "n": 0}))
         .await?;

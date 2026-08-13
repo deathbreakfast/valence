@@ -11,8 +11,12 @@ mod merge;
 mod postgres_ops;
 mod query;
 #[allow(missing_docs, clippy::missing_errors_doc)]
+mod schema_meta;
+#[allow(missing_docs, clippy::missing_errors_doc)]
 // internal ops; errors are Error::Database/Validation
 mod sqlite_ops;
+#[allow(missing_docs, clippy::missing_errors_doc)]
+mod typed_table;
 
 pub use document::{ensure_table, row_from_body, upsert_body_fields, EDGES_TABLE, ID_COLUMN};
 pub use edges::{ensure_edges_table, get_edge_targets, relate_edge, unrelate_edge};
@@ -25,7 +29,11 @@ pub use postgres_ops::{
 };
 pub use query::{
     decode_select_rows, extract_ids, first_count, prepare_compiled, prepare_compiled_postgres,
-    row_to_json,
+    rewrite_value_id_unique_probe_for_document_sql, row_to_json,
+};
+pub use schema_meta::{
+    read_schema_version_postgres, read_schema_version_sqlite, write_schema_version_postgres,
+    write_schema_version_sqlite,
 };
 pub use sqlite_ops::{
     apply_ttl_policy_sqlite, assert_safe_table, create_record_sqlite, define_unique_index_sqlite,
@@ -33,4 +41,9 @@ pub use sqlite_ops::{
     get_edge_sources_sqlite, get_edge_targets_sqlite, get_record_sqlite, merge_record_sqlite,
     relate_edge_sqlite, sql_capabilities, storage_id, ttl_deferred, unrelate_edge_sqlite,
     update_record_sqlite,
+};
+pub use typed_table::{
+    ensure_typed_table_postgres, ensure_typed_table_sqlite, inspect_typed_layout_postgres,
+    inspect_typed_layout_sqlite, sync_typed_table_postgres, sync_typed_table_sqlite,
+    WriteEnsureCache,
 };

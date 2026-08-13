@@ -74,6 +74,32 @@ impl DatabaseBackend for InstrumentedBackend {
         self.inner.ensure_schemaless_table(table).await
     }
 
+    async fn inspect_typed_layout(
+        &self,
+        table: &str,
+    ) -> Result<Option<crate::storage_layout::StorageLayout>> {
+        self.inner.inspect_typed_layout(table).await
+    }
+
+    async fn ensure_typed_table(
+        &self,
+        layout: &crate::storage_layout::StorageLayout,
+    ) -> Result<()> {
+        self.inner.ensure_typed_table(layout).await
+    }
+
+    async fn sync_typed_table(&self, layout: &crate::storage_layout::StorageLayout) -> Result<()> {
+        self.inner.sync_typed_table(layout).await
+    }
+
+    async fn read_schema_version(&self, table: &str) -> Result<Option<String>> {
+        self.inner.read_schema_version(table).await
+    }
+
+    async fn write_schema_version(&self, table: &str, version: &str) -> Result<()> {
+        self.inner.write_schema_version(table, version).await
+    }
+
     async fn define_unique_index(&self, table: &str, field: &str) -> Result<()> {
         self.inner.define_unique_index(table, field).await
     }

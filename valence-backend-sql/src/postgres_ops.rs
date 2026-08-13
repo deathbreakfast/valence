@@ -1,21 +1,23 @@
 //! Postgres-specific SQL document operations.
 
-use serde_json::{Map, Value};
+use serde_json::Value;
 use sqlx::postgres::PgPool;
-use sqlx::Row;
+use sqlx::{Column, Row};
 use valence_core::error::{Error, Result};
 use valence_core::record_id::RecordId;
+use valence_core::storage_layout::StorageLayout;
 
+use crate::json_merge;
 use crate::query::prepare_compiled_postgres;
-use crate::sqlite_ops::{assert_safe_table, expand_body_rows, storage_id};
-use crate::{json_merge, row_from_body, upsert_body_fields};
+use crate::sqlite_ops::assert_safe_table;
+use crate::typed_table::{
+    create_record_typed_postgres, define_unique_index_column_postgres,
+    ensure_layout_for_write_postgres, get_record_typed_postgres, map_select_row_postgres,
+    update_record_typed_postgres, WriteEnsureCache,
+};
 
 pub fn ensure_table_ddl_postgres(table: &str) -> String {
-    format!(
-        "CREATE TABLE IF NOT EXISTS {table} (\
-         id TEXT PRIMARY KEY NOT NULL, \
-         body JSONB NOT NULL DEFAULT '{{}}'::jsonb)"
-    )
+    format!("CREATE TABLE IF NOT EXISTS {table} (id TEXT PRIMARY KEY NOT NULL)")
 }
 
 pub async fn ensure_edges_postgres(pool: &PgPool) -> Result<()> {
@@ -80,21 +82,12 @@ pub async fn execute_select_postgres(
         Err(e) => return Err(Error::database(e.to_string())),
     };
 
-    if sql.contains("COUNT(") {
+    if sql.to_ascii_uppercase().contains("COUNT(") {
         let count = rows
             .first()
             .and_then(|r| r.try_get::<i64, _>(0).ok())
             .unwrap_or(0);
         return Ok(vec![Value::Number(count.into())]);
-    }
-
-    if sql.contains("SELECT id") && !sql.contains("body") {
-        // Return object rows so callers can deserialize as `IdOnlyRecord` / model types.
-        return Ok(rows
-            .iter()
-            .filter_map(|r| r.try_get::<String, _>(0).ok())
-            .map(|id| serde_json::json!({ "id": id }))
-            .collect());
     }
 
     let table = compiled
@@ -104,52 +97,39 @@ pub async fn execute_select_postgres(
         .and_then(|s| s.split_whitespace().next())
         .unwrap_or(default_table);
 
-    let pairs: Vec<(String, String)> = rows
+    let upper = sql.to_ascii_uppercase();
+    if upper.contains("SELECT ID")
+        && !upper.contains("SELECT *")
+        && rows
+            .first()
+            .map(|r| r.columns().len() == 1)
+            .unwrap_or(false)
+    {
+        return Ok(rows
+            .iter()
+            .filter_map(|r| r.try_get::<String, _>(0).ok())
+            .map(|id| serde_json::json!({ "id": id }))
+            .collect());
+    }
+
+    Ok(rows
         .iter()
-        .map(|r| {
-            let id: String = r.try_get(0).unwrap_or_default();
-            let body: Value = r.try_get(1).unwrap_or_else(|_| Value::Object(Map::new()));
-            (id, body.to_string())
-        })
-        .collect();
-    expand_body_rows(table, pairs)
+        .map(|r| map_select_row_postgres(table, r))
+        .collect())
 }
 
 pub async fn get_record_postgres(pool: &PgPool, table: &str, id: &str) -> Result<Option<Value>> {
-    ensure_table_postgres(pool, table).await?;
-    let q = format!("SELECT id, body FROM {table} WHERE id = $1");
-    let row = sqlx::query(&q)
-        .bind(id)
-        .fetch_optional(pool)
-        .await
-        .map_err(|e| Error::database(e.to_string()))?;
-    Ok(row.map(|r| {
-        let id: String = r.get(0);
-        let body: Value = r.get(1);
-        row_from_body(table, &id, body)
-    }))
+    get_record_typed_postgres(pool, table, id).await
 }
 
-pub async fn create_record_postgres(pool: &PgPool, table: &str, content: Value) -> Result<Value> {
-    ensure_table_postgres(pool, table).await?;
-    let mut content = content;
-    valence_core::ttl::prepare_create_content_with_capability(
-        table,
-        valence_core::ttl::BackendTtlCapability::Deferred,
-        &mut content,
-    )?;
-    let id = storage_id(&content).unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
-    let mut body = upsert_body_fields(content);
-    body.remove("id");
-    let body_val = Value::Object(body);
-    let q = format!("INSERT INTO {table} (id, body) VALUES ($1, $2)");
-    sqlx::query(&q)
-        .bind(&id)
-        .bind(&body_val)
-        .execute(pool)
-        .await
-        .map_err(|e| Error::database(e.to_string()))?;
-    Ok(row_from_body(table, &id, body_val))
+pub async fn create_record_postgres(
+    pool: &PgPool,
+    table: &str,
+    content: Value,
+    ensured: &WriteEnsureCache,
+) -> Result<Value> {
+    let layout = StorageLayout::resolve_for_write(table, &content)?;
+    create_record_typed_postgres(pool, &layout, content, ensured).await
 }
 
 pub async fn update_record_postgres(
@@ -157,21 +137,10 @@ pub async fn update_record_postgres(
     table: &str,
     id: &str,
     content: Value,
+    ensured: &WriteEnsureCache,
 ) -> Result<Value> {
-    if get_record_postgres(pool, table, id).await?.is_none() {
-        return Err(Error::NotFound(format!("{table}:{id}")));
-    }
-    let mut body = upsert_body_fields(content);
-    body.remove("id");
-    let body_val = Value::Object(body);
-    let q = format!("UPDATE {table} SET body = $1 WHERE id = $2");
-    sqlx::query(&q)
-        .bind(&body_val)
-        .bind(id)
-        .execute(pool)
-        .await
-        .map_err(|e| Error::database(e.to_string()))?;
-    Ok(row_from_body(table, id, body_val))
+    let layout = StorageLayout::resolve_for_write(table, &content)?;
+    update_record_typed_postgres(pool, &layout, id, content, ensured).await
 }
 
 pub async fn merge_record_postgres(
@@ -179,6 +148,7 @@ pub async fn merge_record_postgres(
     table: &str,
     id: &str,
     patch: Value,
+    ensured: &WriteEnsureCache,
 ) -> Result<Value> {
     let existing = get_record_postgres(pool, table, id)
         .await?
@@ -188,7 +158,7 @@ pub async fn merge_record_postgres(
     if let Some(patch_obj) = patch.as_object() {
         json_merge(&mut base, patch_obj);
     }
-    update_record_postgres(pool, table, id, Value::Object(base)).await
+    update_record_postgres(pool, table, id, Value::Object(base), ensured).await
 }
 
 pub async fn delete_record_postgres(pool: &PgPool, table: &str, id: &str) -> Result<()> {
@@ -286,17 +256,46 @@ pub async fn get_edge_sources_postgres(
         .collect())
 }
 
-pub async fn define_unique_index_postgres(pool: &PgPool, table: &str, field: &str) -> Result<()> {
+pub async fn define_unique_index_postgres(
+    pool: &PgPool,
+    table: &str,
+    field: &str,
+    ensured: &WriteEnsureCache,
+) -> Result<()> {
     assert_safe_table(table)?;
     valence_core::safe_ident::assert_safe_ident(field)?;
-    ensure_table_postgres(pool, table).await?;
-    let idx = format!("valence_unique_{table}_{field}");
-    let q = format!("CREATE UNIQUE INDEX IF NOT EXISTS {idx} ON {table} ((body->>'{field}'))");
-    sqlx::query(&q)
-        .execute(pool)
-        .await
-        .map_err(|e| Error::database(e.to_string()))?;
-    Ok(())
+    if let Ok(layout) = StorageLayout::from_registry_table(table) {
+        ensure_layout_for_write_postgres(pool, &layout, ensured).await?;
+    } else {
+        ensure_table_postgres(pool, table).await?;
+        let layout = StorageLayout {
+            table: table.to_string(),
+            fields: vec![
+                valence_core::storage_layout::LayoutField {
+                    name: "id".into(),
+                    storage: valence_core::storage_layout::FieldStorage::String,
+                    primary_key: true,
+                    nullable: false,
+                    unique: true,
+                    indexed: false,
+                    default: None,
+                    record_table: None,
+                },
+                valence_core::storage_layout::LayoutField {
+                    name: field.to_string(),
+                    storage: valence_core::storage_layout::FieldStorage::String,
+                    primary_key: false,
+                    nullable: true,
+                    unique: true,
+                    indexed: false,
+                    default: None,
+                    record_table: None,
+                },
+            ],
+        };
+        ensure_layout_for_write_postgres(pool, &layout, ensured).await?;
+    }
+    define_unique_index_column_postgres(pool, table, field).await
 }
 
 /// Idempotent non-unique index on `__valence_expire_at` for platform TTL sweep discovery.
@@ -304,13 +303,45 @@ pub async fn apply_ttl_policy_postgres(
     pool: &PgPool,
     table: &str,
     _policy: &valence_core::ttl::SchemaTtlPolicy,
+    ensured: &WriteEnsureCache,
 ) -> Result<()> {
     assert_safe_table(table)?;
+    if let Ok(layout) = StorageLayout::from_registry_table(table) {
+        ensure_layout_for_write_postgres(pool, &layout, ensured).await?;
+    } else {
+        ensure_table_postgres(pool, table).await?;
+        let field = valence_core::ttl::EXPIRE_AT_FIELD;
+        let layout = StorageLayout {
+            table: table.to_string(),
+            fields: vec![
+                valence_core::storage_layout::LayoutField {
+                    name: "id".into(),
+                    storage: valence_core::storage_layout::FieldStorage::String,
+                    primary_key: true,
+                    nullable: false,
+                    unique: true,
+                    indexed: false,
+                    default: None,
+                    record_table: None,
+                },
+                valence_core::storage_layout::LayoutField {
+                    name: field.to_string(),
+                    storage: valence_core::storage_layout::FieldStorage::String,
+                    primary_key: false,
+                    nullable: true,
+                    unique: false,
+                    indexed: true,
+                    default: None,
+                    record_table: None,
+                },
+            ],
+        };
+        ensure_layout_for_write_postgres(pool, &layout, ensured).await?;
+    }
     let field = valence_core::ttl::EXPIRE_AT_FIELD;
     valence_core::safe_ident::assert_safe_ident(field)?;
-    ensure_table_postgres(pool, table).await?;
     let idx = format!("valence_ttl_expire_at_{table}");
-    let q = format!("CREATE INDEX IF NOT EXISTS {idx} ON {table} ((body->>'{field}'))");
+    let q = format!("CREATE INDEX IF NOT EXISTS {idx} ON {table} ({field})");
     sqlx::query(&q)
         .execute(pool)
         .await

@@ -211,6 +211,24 @@ impl Valence {
         crate::ttl::ensure_ttl_for_table(self, table).await
     }
 
+    /// Create typed physical tables for every schema in [`crate::SchemaRegistry`].
+    ///
+    /// # Errors
+    ///
+    /// See [`crate::storage_layout::ensure_typed_tables_from_registry`].
+    pub async fn ensure_typed_tables_from_registry(&self) -> Result<()> {
+        crate::storage_layout::ensure_typed_tables_from_registry(self).await
+    }
+
+    /// Additive-sync typed tables for every schema in [`crate::SchemaRegistry`].
+    ///
+    /// # Errors
+    ///
+    /// See [`crate::storage_layout::sync_typed_tables_from_registry`].
+    pub async fn sync_typed_tables_from_registry(&self) -> Result<()> {
+        crate::storage_layout::sync_typed_tables_from_registry(self).await
+    }
+
     pub fn is_system(&self) -> bool {
         self.actor.is_system()
     }

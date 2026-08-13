@@ -117,6 +117,21 @@ pub fn ensure_read_only(query: &str) -> Result<()> {
     }
 }
 
+/// Rewrite Surreal-shaped `SELECT VALUE id FROM …` probes to plain SQL `SELECT id`.
+///
+/// Typed SQL stores fields as real columns, so `WHERE {field} = $value` is valid as-is.
+pub fn rewrite_value_id_unique_probe_for_document_sql(sql: &str) -> String {
+    const PREFIX_LEN: usize = "SELECT VALUE id FROM ".len();
+    let trimmed = sql.trim();
+    if trimmed.len() < PREFIX_LEN
+        || !trimmed[..PREFIX_LEN].eq_ignore_ascii_case("SELECT VALUE id FROM ")
+    {
+        return sql.to_string();
+    }
+    let rest = trimmed[PREFIX_LEN..].trim_start();
+    format!("SELECT id FROM {rest}")
+}
+
 /// Normalize compiled query for SQLite execution (`?` placeholders).
 ///
 /// # Errors
@@ -124,8 +139,9 @@ pub fn ensure_read_only(query: &str) -> Result<()> {
 /// Returns [`Error::Internal`] when the compiled query is not read-only.
 pub fn prepare_compiled(compiled: &CompiledQuery) -> Result<(String, Vec<Value>)> {
     ensure_read_only(&compiled.query_string)?;
+    let rewritten = rewrite_value_id_unique_probe_for_document_sql(&compiled.query_string);
     Ok(sql_with_positional_placeholders(
-        &compiled.query_string,
+        &rewritten,
         &compiled.params,
     ))
 }
@@ -181,7 +197,8 @@ pub fn rewrite_json_extract_for_postgres(sql: &str) -> String {
 /// Returns [`Error::Internal`] when the compiled query is not read-only.
 pub fn prepare_compiled_postgres(compiled: &CompiledQuery) -> Result<(String, Vec<Value>)> {
     ensure_read_only(&compiled.query_string)?;
-    let rewritten = rewrite_json_extract_for_postgres(&compiled.query_string);
+    let for_sql = rewrite_value_id_unique_probe_for_document_sql(&compiled.query_string);
+    let rewritten = rewrite_json_extract_for_postgres(&for_sql);
     Ok(sql_with_postgres_placeholders(&rewritten, &compiled.params))
 }
 
@@ -268,5 +285,41 @@ mod tests {
         );
         assert!(sql.contains("body->>'name'") || sql.contains("(body->>'name')"));
         assert_eq!(values, vec![json!("alpha")]);
+    }
+
+    #[test]
+    fn rewrite_unique_probe_value_id_keeps_typed_column_predicate() {
+        let in_sql = "SELECT VALUE id FROM account_email WHERE address = $value LIMIT 2";
+        let out = rewrite_value_id_unique_probe_for_document_sql(in_sql);
+        assert_eq!(
+            out,
+            "SELECT id FROM account_email WHERE address = $value LIMIT 2"
+        );
+    }
+
+    #[test]
+    fn prepare_compiled_rewrites_unique_probe() {
+        let compiled = CompiledQuery {
+            query_string: "SELECT VALUE id FROM account_email WHERE address = $value LIMIT 2"
+                .into(),
+            params: vec![("value".into(), json!("a@example.com"))],
+        };
+        let (sql, values) = prepare_compiled(&compiled).expect("prepare");
+        assert!(
+            !sql.to_ascii_uppercase().contains("SELECT VALUE"),
+            "VALUE id projection must be rewritten for typed SQL: {sql}"
+        );
+        assert!(
+            sql.contains("address = ?"),
+            "typed column predicate must survive rewrite: {sql}"
+        );
+        assert!(!sql.contains("json_extract(body"));
+        assert_eq!(values, vec![json!("a@example.com")]);
+    }
+
+    #[test]
+    fn rewrite_leaves_non_probe_queries_alone() {
+        let q = "SELECT id FROM account_email WHERE address = $value";
+        assert_eq!(rewrite_value_id_unique_probe_for_document_sql(q), q);
     }
 }

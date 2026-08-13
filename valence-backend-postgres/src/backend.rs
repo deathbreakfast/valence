@@ -4,10 +4,12 @@ use sqlx::postgres::PgPool;
 
 use valence_backend_sql::{
     apply_ttl_policy_postgres, create_record_postgres, define_unique_index_postgres,
-    delete_record_postgres, ensure_edges_postgres, ensure_table_postgres, execute_select_postgres,
-    get_edge_sources_postgres, get_edge_targets_postgres, get_record_postgres,
-    merge_record_postgres, relate_edge_postgres, sql_capabilities, ttl_deferred,
-    unrelate_edge_postgres, update_record_postgres,
+    delete_record_postgres, ensure_edges_postgres, ensure_table_postgres,
+    ensure_typed_table_postgres, execute_select_postgres, get_edge_sources_postgres,
+    get_edge_targets_postgres, get_record_postgres, inspect_typed_layout_postgres,
+    merge_record_postgres, read_schema_version_postgres, relate_edge_postgres, sql_capabilities,
+    sync_typed_table_postgres, ttl_deferred, unrelate_edge_postgres, update_record_postgres,
+    write_schema_version_postgres, WriteEnsureCache,
 };
 use valence_core::backend::DatabaseBackend;
 use valence_core::compiled_query::CompiledQuery;
@@ -22,7 +24,7 @@ pub const ENGINE_ID: &str = KnownEngines::POSTGRES;
 /// Schema evaluator const for `database:` routing.
 pub const PRIMARY: DatabaseFromEngine = Database::from_engine("primary", ENGINE_ID);
 
-/// Postgres-backed [`DatabaseBackend`] using JSONB document rows.
+/// Postgres-backed [`DatabaseBackend`] using typed columns (JSONB cells for `Json` fields).
 ///
 /// # Examples
 ///
@@ -62,6 +64,7 @@ pub const PRIMARY: DatabaseFromEngine = Database::from_engine("primary", ENGINE_
 #[derive(Debug, Clone)]
 pub struct PostgresBackend {
     pool: PgPool,
+    layout_ensured: WriteEnsureCache,
 }
 
 impl PostgresBackend {
@@ -89,7 +92,10 @@ impl PostgresBackend {
             .await
             .map_err(|e| Error::database(e.to_string()))?;
         ensure_edges_postgres(&pool).await?;
-        Ok(Self { pool })
+        Ok(Self {
+            pool,
+            layout_ensured: WriteEnsureCache::new(),
+        })
     }
 
     /// Borrow the underlying pool.
@@ -119,6 +125,35 @@ impl DatabaseBackend for PostgresBackend {
         ensure_table_postgres(&self.pool, table).await
     }
 
+    async fn inspect_typed_layout(
+        &self,
+        table: &str,
+    ) -> Result<Option<valence_core::storage_layout::StorageLayout>> {
+        inspect_typed_layout_postgres(&self.pool, table).await
+    }
+
+    async fn ensure_typed_table(
+        &self,
+        layout: &valence_core::storage_layout::StorageLayout,
+    ) -> Result<()> {
+        ensure_typed_table_postgres(&self.pool, layout).await
+    }
+
+    async fn sync_typed_table(
+        &self,
+        layout: &valence_core::storage_layout::StorageLayout,
+    ) -> Result<()> {
+        sync_typed_table_postgres(&self.pool, layout).await
+    }
+
+    async fn read_schema_version(&self, table: &str) -> Result<Option<String>> {
+        read_schema_version_postgres(&self.pool, table).await
+    }
+
+    async fn write_schema_version(&self, table: &str, version: &str) -> Result<()> {
+        write_schema_version_postgres(&self.pool, table, version).await
+    }
+
     async fn get_record(&self, table: &str, id: &str) -> Result<Option<serde_json::Value>> {
         get_record_postgres(&self.pool, table, id).await
     }
@@ -128,7 +163,7 @@ impl DatabaseBackend for PostgresBackend {
         table: &str,
         content: serde_json::Value,
     ) -> Result<serde_json::Value> {
-        create_record_postgres(&self.pool, table, content).await
+        create_record_postgres(&self.pool, table, content, &self.layout_ensured).await
     }
 
     async fn update_record(
@@ -137,7 +172,7 @@ impl DatabaseBackend for PostgresBackend {
         id: &str,
         content: serde_json::Value,
     ) -> Result<serde_json::Value> {
-        update_record_postgres(&self.pool, table, id, content).await
+        update_record_postgres(&self.pool, table, id, content, &self.layout_ensured).await
     }
 
     async fn merge_record(
@@ -146,7 +181,7 @@ impl DatabaseBackend for PostgresBackend {
         id: &str,
         patch: serde_json::Value,
     ) -> Result<serde_json::Value> {
-        merge_record_postgres(&self.pool, table, id, patch).await
+        merge_record_postgres(&self.pool, table, id, patch, &self.layout_ensured).await
     }
 
     async fn upsert_record(
@@ -187,7 +222,7 @@ impl DatabaseBackend for PostgresBackend {
     }
 
     async fn define_unique_index(&self, table: &str, field: &str) -> Result<()> {
-        define_unique_index_postgres(&self.pool, table, field).await
+        define_unique_index_postgres(&self.pool, table, field, &self.layout_ensured).await
     }
 
     fn ttl_capability(&self) -> valence_core::ttl::BackendTtlCapability {
@@ -195,6 +230,6 @@ impl DatabaseBackend for PostgresBackend {
     }
 
     async fn apply_ttl_policy(&self, table: &str, policy: &SchemaTtlPolicy) -> Result<()> {
-        apply_ttl_policy_postgres(&self.pool, table, policy).await
+        apply_ttl_policy_postgres(&self.pool, table, policy, &self.layout_ensured).await
     }
 }

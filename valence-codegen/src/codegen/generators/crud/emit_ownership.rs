@@ -163,8 +163,10 @@ fn unique_constraint_helpers_tokens(unique_field_names: &[LitStr]) -> TokenStrea
                 .ensure_unique_field_index(<Self as valence::Model>::table_name(), field_name)
                 .await?;
             let compiled = valence::__internal::CompiledQuery {
+                // Prefer plain SQL `SELECT id` (typed columns). Surreal compilers still
+                // accept this shape; document-era VALUE rewrite remains as a thin shim.
                 query_string: format!(
-                    "SELECT VALUE id FROM {} WHERE {} = $value LIMIT 2",
+                    "SELECT id FROM {} WHERE {} = $value LIMIT 2",
                     <Self as valence::Model>::table_name(),
                     field_name,
                 ),

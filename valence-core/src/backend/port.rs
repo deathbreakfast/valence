@@ -126,7 +126,7 @@ pub trait DatabaseBackend: Send + Sync + std::fmt::Debug + 'static {
         Ok(None)
     }
 
-    /// Create a typed table/collection from [`StorageLayout`] when missing.
+    /// Create a typed table/collection from [`crate::storage_layout::StorageLayout`] when missing.
     ///
     /// **Contract:** default falls back to [`Self::ensure_schemaless_table`] using `layout.table`
     /// (deprecated path). SQL / Surreal / Redis adapters override.

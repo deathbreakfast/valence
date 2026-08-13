@@ -110,7 +110,7 @@ pub async fn ensure_typed_table_postgres(
     Ok(())
 }
 
-/// Inspect live SQLite columns → [`StorageLayout`] (storage kinds inferred coarsely).
+/// Inspect live SQLite columns → [`valence_core::storage_layout::StorageLayout`] (storage kinds inferred coarsely).
 pub async fn inspect_typed_layout_sqlite(
     pool: &sqlx::SqlitePool,
     table: &str,

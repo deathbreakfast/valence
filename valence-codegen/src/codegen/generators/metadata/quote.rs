@@ -127,6 +127,15 @@ pub(super) fn quote_schema_metadata_method(p: &SchemaMetadataPieces) -> TokenStr
                 });
                 m
             }
+
+            /// Physical storage layout derived from [`Self::full`] (typed columns / fields).
+            ///
+            /// # Errors
+            ///
+            /// Returns [`valence::Error::Validation`] for unsafe identifiers or unknown types.
+            pub fn storage_layout() -> valence::Result<valence::StorageLayout> {
+                valence::StorageLayout::from_schema(Self::full())
+            }
         }
 
         impl valence::SchemaMetadata for #struct_name {

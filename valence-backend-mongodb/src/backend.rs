@@ -325,6 +325,10 @@ impl DatabaseBackend for MongoBackend {
 
     async fn create_record(&self, table: &str, content: Value) -> Result<Value> {
         Self::assert_safe_table(table)?;
+        if let Ok(layout) = valence_core::storage_layout::StorageLayout::from_registry_table(table)
+        {
+            valence_core::storage_layout::validate_write_types(&layout, &content)?;
+        }
         let mut content = content;
         valence_core::ttl::prepare_create_content(table, self, &mut content)?;
         self.check_unique_fields(table, &content, None).await?;

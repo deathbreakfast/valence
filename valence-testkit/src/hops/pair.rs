@@ -43,11 +43,17 @@ pub async fn run_hop_pair_contract(pair: HopPair, wire: Option<&WireBackendOptio
     let secondary = backend_for_storage(pair.secondary, wire).await?;
 
     // Nested EXISTS SQL for Project→Task runs on the Project (primary) engine and
-    // may reference hop_pair_task even when Task rows live on secondary. Ensure both
-    // tables exist on both backends before seeding / nested WHERE.
+    // may reference hop_pair_task even when Task rows live on secondary. Sync both
+    // typed layouts on both backends (additive) before seeding / nested WHERE —
+    // CREATE IF NOT EXISTS alone leaves incomplete tables from older schemaless ensures.
     for backend in [&primary, &secondary] {
-        DatabaseBackend::ensure_schemaless_table(backend.as_ref(), "hop_pair_project").await?;
-        DatabaseBackend::ensure_schemaless_table(backend.as_ref(), "hop_pair_task").await?;
+        for table in ["hop_pair_project", "hop_pair_task"] {
+            if let Ok(layout) =
+                valence_core::storage_layout::StorageLayout::from_registry_table(table)
+            {
+                DatabaseBackend::sync_typed_table(backend.as_ref(), &layout).await?;
+            }
+        }
     }
 
     let mut router = DatabaseRouter::new();
@@ -62,6 +68,12 @@ pub async fn run_hop_pair_contract(pair: HopPair, wire: Option<&WireBackendOptio
             operation: "hop_pair".to_string(),
         })
         .build()?;
+
+    // Stamp only hop-pair tables — full-registry sync would refuse orphan columns left
+    // on shared wire DBs by other harnesses (e.g. admin smoke extras).
+    for table in ["hop_pair_project", "hop_pair_task"] {
+        valence_core::storage_layout::sync_typed_table_for(&valence, table).await?;
+    }
 
     seed_and_assert_hops(&valence, pair).await
 }

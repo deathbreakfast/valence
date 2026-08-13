@@ -7,6 +7,12 @@ Re-run after test or CI changes.
 ### Tests
 
 ```bash
+# Typed storage layout + SQLite sync
+cargo test -p uf-valence-core --lib storage_layout
+cargo test -p uf-valence-backend-sqlite --test backend_contract --test typed_sync_add_field --test schema_version_sync
+# Postgres safe tweaks (skips without DATABASE_URL)
+cargo test -p uf-valence-backend-postgres --test safe_tweak_sync
+
 # Full workspace tests
 cargo test --workspace
 
@@ -23,6 +29,12 @@ cargo test -p uf-valence-core --test dag_privacy --test delete_side_effects --te
 # Matrix E2E (includes on-delete-* catalog; wire soft-skip)
 cargo test -p valence-e2e
 cargo test -p valence-e2e --test cross_backend_hops on_delete_hop
+
+# Full AWS campaign (operator shell with cloud env loaded — see uf-live-cloud-lab)
+# cd ../../uf-live-cloud-lab/valence
+# ./scripts/aws-e2e-bench.sh --dry-run
+# ./infra/aws/campaign/provision.sh && … deploy-and-run e2e/bench …
+# After typed-storage upgrade: wipe still drops Postgres schema / Mongo DB / Redis.
 
 # Codegen / model runtime subset
 cargo test -p valence-e2e --test admin_runtime_catalog

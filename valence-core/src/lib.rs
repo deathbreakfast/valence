@@ -16,6 +16,8 @@
 //! - [`Model`] — generated CRUD surface
 //! - [`ttl`] — schema TTL policy, [`prepare_create_content`], ensure via
 //!   [`Valence::ensure_ttl_for_all`] / [`Valence::ensure_ttl_for_table`]
+//! - [`storage_layout`] — schema → physical fields; DDL export; ensure/sync typed tables via
+//!   [`Valence::ensure_typed_tables_from_registry`] / [`Valence::sync_typed_tables_from_registry`]
 //!
 //! ## Examples
 //!
@@ -85,6 +87,7 @@ pub mod schema;
 pub mod schema_api;
 pub mod schema_types;
 pub mod side_effect;
+pub mod storage_layout;
 pub mod trait_registry;
 pub mod trait_schema;
 pub mod ttl;
@@ -191,6 +194,10 @@ pub use schema_api::{
 };
 pub use schema_types::{FieldType, JsonAsSerdeError, Role, Validator};
 pub use side_effect::{FieldChange, Mutation, MutationKind, SideEffect};
+pub use storage_layout::{
+    AdditiveOp, FieldStorage, LayoutDiff, LayoutField, SqlColumnType, StorageLayout,
+    SurrealFieldType,
+};
 pub use trait_registry::TraitRegistry;
 pub use trait_schema::{
     TraitDefinition, TraitDefinitionInit, TraitFieldDef, TraitImplementor, TraitPolicies,

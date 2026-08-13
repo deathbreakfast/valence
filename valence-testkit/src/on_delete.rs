@@ -15,8 +15,8 @@ use valence_core::router_key::router_key;
 use valence_core::runtime::Valence;
 use valence_core::schema::{SchemaMetadata, SchemaRegistry};
 use valence_core::schema_api::{
-    Schema, SchemaConnection, SchemaMeta, SchemaPolicies, SchemaPolicyRule, SchemaPolicyRules,
-    SchemaPrivacy,
+    Schema, SchemaConnection, SchemaField, SchemaMeta, SchemaPolicies, SchemaPolicyRule,
+    SchemaPolicyRules, SchemaPrivacy,
 };
 use valence_core::trait_registry::TraitRegistry;
 use valence_core::DatabaseBackend;
@@ -40,9 +40,38 @@ fn public_delete_schema(
     evaluator: &'static dyn DatabaseEvaluator,
     connections: Vec<SchemaConnection>,
 ) -> &'static SchemaMetadata {
+    public_delete_schema_with_fields(name, databases, evaluator, connections, vec![])
+}
+
+fn parent_id_field() -> SchemaField {
+    SchemaField {
+        name: "parent_id".into(),
+        field_type: "string".into(),
+        primary: false,
+        nullable: true,
+        indexed: false,
+        unique: false,
+        default: None,
+        fk: None,
+        validations: Vec::new(),
+        policies: None,
+        encrypted: false,
+        enum_variants: Vec::new(),
+        enum_type: None,
+        model_path: None,
+    }
+}
+
+fn public_delete_schema_with_fields(
+    name: &str,
+    databases: Vec<String>,
+    evaluator: &'static dyn DatabaseEvaluator,
+    connections: Vec<SchemaConnection>,
+    fields: Vec<SchemaField>,
+) -> &'static SchemaMetadata {
     let schema = leak_schema(Schema {
         name: name.to_string(),
-        version: "0.1.0".into(),
+        version: "0.1.1".into(),
         databases,
         database_evaluator: evaluator,
         privacy: SchemaPrivacy {
@@ -60,7 +89,7 @@ fn public_delete_schema(
             }),
             ..SchemaPolicies::default()
         }),
-        fields: vec![],
+        fields,
         edges: Vec::new(),
         connections,
         side_effects: Vec::new(),
@@ -502,6 +531,20 @@ async fn build_hop_valence(
         .map_err(|e| e.to_string())
 }
 
+async fn sync_hop_typed_tables(valence: &Valence) -> Result<(), String> {
+    for table in [
+        "od_xe_ca_parent",
+        "od_xe_ca_child",
+        "od_xe_sn_parent",
+        "od_xe_sn_child",
+    ] {
+        valence_core::storage_layout::sync_typed_table_for(valence, table)
+            .await
+            .map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
 /// Cross-engine CascadeDelete (parent primary, child secondary).
 pub async fn run_on_delete_cascade_cross_engine(
     pair: HopPair,
@@ -518,6 +561,7 @@ pub async fn run_on_delete_cascade_cross_engine(
 
     // Route via global registry: register leaked schemas once per process.
     ensure_cross_engine_schemas_registered();
+    sync_hop_typed_tables(&valence).await?;
 
     let tag = unique_suffix();
     let pid = format!("xp_{tag}");
@@ -527,14 +571,6 @@ pub async fn run_on_delete_cascade_cross_engine(
         .map_err(|e| e.to_string())?;
     let child_be = valence
         .backend_for_table("od_xe_ca_child")
-        .map_err(|e| e.to_string())?;
-    parent_be
-        .ensure_schemaless_table("od_xe_ca_parent")
-        .await
-        .map_err(|e| e.to_string())?;
-    child_be
-        .ensure_schemaless_table("od_xe_ca_child")
-        .await
         .map_err(|e| e.to_string())?;
     parent_be
         .create_record("od_xe_ca_parent", json!({"id": pid}))
@@ -591,6 +627,7 @@ pub async fn run_on_delete_set_null_cross_engine(
         Err(e) => return Err(e),
     };
     ensure_cross_engine_schemas_registered();
+    sync_hop_typed_tables(&valence).await?;
 
     let tag = unique_suffix();
     let pid = format!("sp_{tag}");
@@ -600,14 +637,6 @@ pub async fn run_on_delete_set_null_cross_engine(
         .map_err(|e| e.to_string())?;
     let child_be = valence
         .backend_for_table("od_xe_sn_child")
-        .map_err(|e| e.to_string())?;
-    parent_be
-        .ensure_schemaless_table("od_xe_sn_parent")
-        .await
-        .map_err(|e| e.to_string())?;
-    child_be
-        .ensure_schemaless_table("od_xe_sn_child")
-        .await
         .map_err(|e| e.to_string())?;
     parent_be
         .create_record("od_xe_sn_parent", json!({"id": pid}))
@@ -673,11 +702,12 @@ valence_core::inventory::submit! {
 
 valence_core::inventory::submit! {
     valence_core::schema::SchemaMetadataInit(|| {
-        public_delete_schema(
+        public_delete_schema_with_fields(
             "od_xe_ca_child",
             vec![OD_CHILD_DB.name().to_string()],
             &OD_CHILD_DB,
             vec![],
+            vec![parent_id_field()],
         )
     })
 }
@@ -701,11 +731,12 @@ valence_core::inventory::submit! {
 
 valence_core::inventory::submit! {
     valence_core::schema::SchemaMetadataInit(|| {
-        public_delete_schema(
+        public_delete_schema_with_fields(
             "od_xe_sn_child",
             vec![OD_CHILD_DB.name().to_string()],
             &OD_CHILD_DB,
             vec![],
+            vec![parent_id_field()],
         )
     })
 }

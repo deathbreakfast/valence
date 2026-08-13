@@ -90,6 +90,15 @@ pub fn extract_id_from_select_value(v: &serde_json::Value) -> Result<String> {
         serde_json::Value::String(s) => extract_id_from_record_display(s),
         serde_json::Value::Number(n) => Ok(n.to_string()),
         serde_json::Value::Bool(b) => Ok(b.to_string()),
+        // SQLite `SELECT id` rows are `{"id": "…"}` (see valence-backend-sql).
+        serde_json::Value::Object(map) if map.len() == 1 => {
+            if let Some(id) = map.get("id") {
+                return extract_id_from_select_value(id);
+            }
+            Err(Error::Internal(format!(
+                "unexpected id value in query row: {v}"
+            )))
+        }
         _ => Err(Error::Internal(format!(
             "unexpected id value in query row: {v}"
         ))),

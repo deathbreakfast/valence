@@ -121,9 +121,8 @@ pub fn count_where_thing_eq(
     if is_sql_family(engine_id) {
         let q = format!(
             "SELECT COUNT(*) AS count FROM {from_table} \
-             WHERE json_extract(body, '$.{fk_field}') = $bare_id \
-                OR json_extract(body, '$.{fk_field}.id') = $bare_id \
-                OR json_extract(body, '$.{fk_field}') = $parent_rid"
+             WHERE {fk_field} = $bare_id \
+                OR {fk_field} = $parent_rid"
         );
         let parent_rid = format!("{target_table}:{bare_target_id}");
         return Ok(CompiledQuery::new(
@@ -176,9 +175,8 @@ pub fn select_child_ids_hasmany(
     if is_sql_family(engine_id) {
         let q = format!(
             "SELECT id FROM {child_table} \
-             WHERE json_extract(body, '$.{reverse_field}') = $parent_rid \
-                OR json_extract(body, '$.{reverse_field}.id') = $bare_id \
-                OR json_extract(body, '$.{reverse_field}') = $bare_id"
+             WHERE {reverse_field} = $parent_rid \
+                OR {reverse_field} = $bare_id"
         );
         let parent_rid = format!("{parent_table}:{bare_parent_id}");
         return Ok(CompiledQuery::new(
@@ -229,9 +227,8 @@ pub fn select_hasone_cascade_children(
     if is_sql_family(engine_id) {
         let q = format!(
             "SELECT id FROM {other} \
-             WHERE json_extract(body, '$.{from_field}') = $parent_rid \
-                OR json_extract(body, '$.{from_field}.id') = $bare_id \
-                OR json_extract(body, '$.{from_field}') = $bare_id"
+             WHERE {from_field} = $parent_rid \
+                OR {from_field} = $bare_id"
         );
         let parent_rid = format!("{parent_table}:{bare_parent_id}");
         return Ok(CompiledQuery::new(
@@ -305,7 +302,7 @@ pub fn count_ownership_rows_for_schema(
         let mut owner_ors = Vec::with_capacity(owner_ids.len());
         for (i, owner_id) in owner_ids.iter().enumerate() {
             let key = format!("owner_id_{i}");
-            owner_ors.push(format!("json_extract(body, '$.owner_id') = ${key}"));
+            owner_ors.push(format!("owner_id = ${key}"));
             params.push((key, Value::String(owner_id.clone())));
         }
         let owner_clause = match owner_ors.as_slice() {
@@ -315,10 +312,10 @@ pub fn count_ownership_rows_for_schema(
         };
         let q = format!(
             "SELECT COUNT(*) AS n FROM valence_data_ownership \
-             WHERE json_extract(body, '$.valence_model') = $model \
+             WHERE valence_model = $model \
                AND {owner_clause} \
-               AND json_extract(body, '$.owner_type') = $owner_type \
-               AND json_extract(body, '$.status') = $status"
+               AND owner_type = $owner_type \
+               AND status = $status"
         );
         return Ok(CompiledQuery::new(q, params));
     }
@@ -362,13 +359,13 @@ pub fn count_active_deletion_runs_for_requester(
         let mut status_ors = Vec::with_capacity(ACTIVE_DELETION_STATUSES.len());
         for (i, status) in ACTIVE_DELETION_STATUSES.iter().enumerate() {
             let key = format!("status_{i}");
-            status_ors.push(format!("json_extract(body, '$.status') = ${key}"));
+            status_ors.push(format!("status = ${key}"));
             params.push((key, Value::String((*status).to_string())));
         }
         let status_clause = status_ors.join(" OR ");
         let q = format!(
             "SELECT COUNT(*) AS n FROM valence_deletion_run \
-             WHERE json_extract(body, '$.requested_by') = $requested_by \
+             WHERE requested_by = $requested_by \
                AND ({status_clause})"
         );
         return Ok(CompiledQuery::new(q, params));
@@ -387,7 +384,7 @@ mod tests {
     use crate::known_engines::KnownEngines;
 
     #[test]
-    fn ownership_count_sql_uses_count_star_and_json_extract() {
+    fn ownership_count_sql_uses_count_star_and_typed_columns() {
         let cq = count_ownership_rows_for_schema(
             KnownEngines::SQLITE,
             "task",
@@ -402,7 +399,8 @@ mod tests {
             "{}",
             cq.query_string
         );
-        assert!(cq.query_string.contains("json_extract(body, '$.owner_id')"));
+        assert!(cq.query_string.contains("owner_id ="));
+        assert!(!cq.query_string.contains("json_extract(body"));
         assert_eq!(cq.params.len(), 5);
     }
 
@@ -436,6 +434,7 @@ mod tests {
             cq.query_string
         );
         assert!(!cq.query_string.contains("IN ["), "{}", cq.query_string);
-        assert!(cq.query_string.contains("json_extract(body, '$.status')"));
+        assert!(cq.query_string.contains("status ="));
+        assert!(!cq.query_string.contains("json_extract(body"));
     }
 }

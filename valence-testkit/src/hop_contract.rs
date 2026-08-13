@@ -26,6 +26,10 @@ pub async fn run_cross_backend_hop_contract(layout: CrossBackendLayout) -> Resul
             operation: "hop_contract".to_string(),
         })
         .build()?;
+    // Cross-backend host tables only (avoid full-registry sync on shared wire stores).
+    for table in ["xb_project", "xb_task"] {
+        valence_core::storage_layout::sync_typed_table_for(&valence, table).await?;
+    }
 
     match layout {
         CrossBackendLayout::MemSqlite => run_mem_sqlite_hops(&valence).await?,

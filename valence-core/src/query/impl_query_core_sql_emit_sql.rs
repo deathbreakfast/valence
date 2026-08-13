@@ -74,7 +74,7 @@ impl QueryCore {
                     param_counter,
                 ),
             ),
-            WhereClause::Hop(hop) => Self::hop_clause_sql_dialect(hop, param_counter),
+            WhereClause::Hop(hop) => Self::hop_clause_sql_dialect(hop, table, param_counter),
         }
     }
 
@@ -220,9 +220,7 @@ impl QueryCore {
                     ),
                 ];
                 (
-                    format!(
-                        "({col} = ${rid_key} OR {col} = ${bare_key} OR json_extract(body, '$.{field}.id') = ${bare_key})"
-                    ),
+                    format!("({col} = ${rid_key} OR {col} = ${bare_key})"),
                     params,
                 )
             }

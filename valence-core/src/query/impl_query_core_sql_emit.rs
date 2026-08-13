@@ -17,7 +17,8 @@ impl QueryCore {
         let mut where_parts = Vec::new();
 
         if let Some(ref hop) = self.hop_source {
-            let (sql, hop_params) = Self::hop_source_where_sql_dialect(hop, &mut param_counter)?;
+            let (sql, hop_params) =
+                Self::hop_source_where_sql_dialect(hop, self.table.trim(), &mut param_counter)?;
             params.extend(hop_params);
             where_parts.push(sql);
         }

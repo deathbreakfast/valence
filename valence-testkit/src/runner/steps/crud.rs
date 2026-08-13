@@ -231,7 +231,7 @@ pub(super) async fn run(
                 .map_err(|e| e.to_string())?;
             if sql_stamp {
                 let stamp = before.as_deref().ok_or_else(|| {
-                    format!("schema-version-skip: expected stamp on SQL engine after boot sync")
+                    "schema-version-skip: expected stamp on SQL engine after boot sync".to_string()
                 })?;
                 if stamp != meta.version {
                     return Err(format!(

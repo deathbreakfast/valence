@@ -125,7 +125,7 @@ fn postgres_create(layout: &StorageLayout) -> Result<String> {
         let null = if f.primary_key { " NOT NULL" } else { null };
         cols.push(format!(
             "{} {}{}{}",
-            f.name,
+            crate::safe_ident::quote_sql_ident(&f.name),
             f.storage.postgres_ddl(),
             pk,
             if f.primary_key { "" } else { null }
@@ -133,7 +133,7 @@ fn postgres_create(layout: &StorageLayout) -> Result<String> {
     }
     Ok(format!(
         "CREATE TABLE IF NOT EXISTS {} ({})",
-        layout.table,
+        crate::safe_ident::quote_sql_ident(&layout.table),
         cols.join(", ")
     ))
 }
@@ -198,8 +198,9 @@ pub fn postgres_add_column(table: &str, field: &super::LayoutField) -> Result<St
     // Additive sync: new NOT NULL columns need a default for existing rows — use NULLABLE add.
     let _ = null;
     Ok(format!(
-        "ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {} {}",
-        field.name,
+        "ALTER TABLE {} ADD COLUMN IF NOT EXISTS {} {}",
+        crate::safe_ident::quote_sql_ident(table),
+        crate::safe_ident::quote_sql_ident(&field.name),
         field.storage.postgres_ddl()
     ))
 }
@@ -209,7 +210,9 @@ pub fn postgres_set_nullable(table: &str, field: &str) -> Result<String> {
     assert_safe_ident(table)?;
     assert_safe_ident(field)?;
     Ok(format!(
-        "ALTER TABLE {table} ALTER COLUMN {field} DROP NOT NULL"
+        "ALTER TABLE {} ALTER COLUMN {} DROP NOT NULL",
+        crate::safe_ident::quote_sql_ident(table),
+        crate::safe_ident::quote_sql_ident(field)
     ))
 }
 
@@ -218,7 +221,9 @@ pub fn postgres_set_not_null(table: &str, field: &str) -> Result<String> {
     assert_safe_ident(table)?;
     assert_safe_ident(field)?;
     Ok(format!(
-        "ALTER TABLE {table} ALTER COLUMN {field} SET NOT NULL"
+        "ALTER TABLE {} ALTER COLUMN {} SET NOT NULL",
+        crate::safe_ident::quote_sql_ident(table),
+        crate::safe_ident::quote_sql_ident(field)
     ))
 }
 
@@ -229,7 +234,9 @@ pub fn postgres_set_default(table: &str, field: &str, value: &str) -> Result<Str
     // Quote as string literal; escape single quotes.
     let escaped = value.replace('\'', "''");
     Ok(format!(
-        "ALTER TABLE {table} ALTER COLUMN {field} SET DEFAULT '{escaped}'"
+        "ALTER TABLE {} ALTER COLUMN {} SET DEFAULT '{escaped}'",
+        crate::safe_ident::quote_sql_ident(table),
+        crate::safe_ident::quote_sql_ident(field)
     ))
 }
 
@@ -238,7 +245,9 @@ pub fn postgres_drop_default(table: &str, field: &str) -> Result<String> {
     assert_safe_ident(table)?;
     assert_safe_ident(field)?;
     Ok(format!(
-        "ALTER TABLE {table} ALTER COLUMN {field} DROP DEFAULT"
+        "ALTER TABLE {} ALTER COLUMN {} DROP DEFAULT",
+        crate::safe_ident::quote_sql_ident(table),
+        crate::safe_ident::quote_sql_ident(field)
     ))
 }
 
@@ -271,7 +280,7 @@ mod tests {
                     unique: true,
                     indexed: false,
                     default: None,
-                record_table: None,
+                    record_table: None,
                 },
                 LayoutField {
                     name: "name".into(),
@@ -281,7 +290,7 @@ mod tests {
                     unique: false,
                     indexed: false,
                     default: None,
-                record_table: None,
+                    record_table: None,
                 },
             ],
         };
@@ -306,7 +315,7 @@ mod tests {
             unique: false,
             indexed: false,
             default: None,
-        record_table: None,
+            record_table: None,
         };
         let clause = surreal_type_clause(&f);
         assert_eq!(clause, "option<object> FLEXIBLE");
@@ -327,5 +336,50 @@ mod tests {
         // Cross-backend Valence keeps record links as strings even when record_table is set.
         let clause = surreal_type_clause(&f);
         assert_eq!(clause, "string");
+    }
+
+    #[test]
+    fn sqlite_and_postgres_ddl_quote_reserved_table() {
+        let layout = StorageLayout {
+            table: "group".into(),
+            fields: vec![LayoutField {
+                name: "id".into(),
+                storage: FieldStorage::String,
+                primary_key: true,
+                nullable: false,
+                unique: true,
+                indexed: false,
+                default: None,
+                record_table: None,
+            }],
+        };
+        let sqlite = sqlite_create(&layout).expect("sqlite ddl");
+        assert!(
+            sqlite.contains("CREATE TABLE IF NOT EXISTS \"group\""),
+            "expected quoted group table, got {sqlite}"
+        );
+        let postgres = postgres_create(&layout).expect("postgres ddl");
+        assert!(
+            postgres.contains("CREATE TABLE IF NOT EXISTS \"group\""),
+            "expected quoted group table, got {postgres}"
+        );
+        let add = postgres_add_column(
+            "group",
+            &LayoutField {
+                name: "name".into(),
+                storage: FieldStorage::String,
+                primary_key: false,
+                nullable: true,
+                unique: false,
+                indexed: false,
+                default: None,
+                record_table: None,
+            },
+        )
+        .expect("add column");
+        assert!(
+            add.contains("ALTER TABLE \"group\" ADD COLUMN IF NOT EXISTS \"name\""),
+            "expected quoted alter, got {add}"
+        );
     }
 }

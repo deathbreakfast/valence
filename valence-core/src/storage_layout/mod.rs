@@ -384,8 +384,8 @@ mod tests {
         let val = layout.fields.iter().find(|f| f.name == "value").unwrap();
         assert_eq!(val.storage, FieldStorage::Integer);
         let ddl = layout.to_ddl(KnownEngines::SQLITE).expect("ddl");
-        assert!(ddl.contains("address TEXT"));
-        assert!(ddl.contains("value INTEGER"));
+        assert!(ddl.contains("\"address\" TEXT"));
+        assert!(ddl.contains("\"value\" INTEGER"));
         assert!(!ddl.contains("body"));
     }
 
@@ -409,7 +409,7 @@ mod tests {
                     unique: true,
                     indexed: false,
                     default: None,
-                record_table: None,
+                    record_table: None,
                 },
                 LayoutField {
                     name: "a".into(),
@@ -419,7 +419,7 @@ mod tests {
                     unique: false,
                     indexed: false,
                     default: None,
-                record_table: None,
+                    record_table: None,
                 },
                 LayoutField {
                     name: "b".into(),
@@ -429,7 +429,7 @@ mod tests {
                     unique: false,
                     indexed: false,
                     default: None,
-                record_table: None,
+                    record_table: None,
                 },
             ],
         };
@@ -457,7 +457,7 @@ mod tests {
                 unique: true,
                 indexed: false,
                 default: None,
-            record_table: None,
+                record_table: None,
             }],
         };
         let live = StorageLayout {
@@ -472,7 +472,7 @@ mod tests {
                     unique: false,
                     indexed: false,
                     default: None,
-                record_table: None,
+                    record_table: None,
                 },
             ],
         };

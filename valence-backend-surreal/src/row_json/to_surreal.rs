@@ -43,7 +43,9 @@ pub fn json_to_surreal_content_value(v: serde_json::Value) -> Value {
     }
 }
 
-fn record_wire_from_json_object(map: &serde_json::Map<String, serde_json::Value>) -> Option<String> {
+fn record_wire_from_json_object(
+    map: &serde_json::Map<String, serde_json::Value>,
+) -> Option<String> {
     if map.len() != 2 {
         return None;
     }

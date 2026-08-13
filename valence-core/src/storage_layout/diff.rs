@@ -119,7 +119,11 @@ pub fn layout_diff(
             ops.push(AdditiveOp::AddField(d.clone()));
             continue;
         }
-        let live_f = live.fields.iter().find(|l| l.name == d.name).unwrap();
+        let live_f = live
+            .fields
+            .iter()
+            .find(|l| l.name == d.name)
+            .expect("live field present after membership check");
         if d.unique && !live_f.unique {
             ops.push(AdditiveOp::AddUniqueIndex {
                 field: d.name.clone(),
@@ -187,7 +191,7 @@ mod tests {
             unique: name == "id",
             indexed: false,
             default: None,
-        record_table: None,
+            record_table: None,
         }
     }
 
@@ -263,5 +267,46 @@ mod tests {
         };
         let err = layout_diff(&desired, &live, KnownEngines::SQLITE).unwrap_err();
         assert!(err.to_string().contains("nullability"));
+    }
+
+    #[test]
+    fn refuse_incompatible_type_change() {
+        let desired = StorageLayout {
+            table: "t".into(),
+            fields: vec![
+                field("id", false),
+                LayoutField {
+                    name: "score".into(),
+                    storage: FieldStorage::Integer,
+                    primary_key: false,
+                    nullable: true,
+                    unique: false,
+                    indexed: false,
+                    default: None,
+                    record_table: None,
+                },
+            ],
+        };
+        let live = StorageLayout {
+            table: "t".into(),
+            fields: vec![
+                field("id", false),
+                LayoutField {
+                    name: "score".into(),
+                    storage: FieldStorage::String,
+                    primary_key: false,
+                    nullable: true,
+                    unique: false,
+                    indexed: false,
+                    default: None,
+                    record_table: None,
+                },
+            ],
+        };
+        let err = layout_diff(&desired, &live, KnownEngines::SQLITE).unwrap_err();
+        assert!(
+            err.to_string().contains("refuses type change"),
+            "unexpected error: {err}"
+        );
     }
 }

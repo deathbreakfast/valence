@@ -18,7 +18,7 @@ fn id_field() -> LayoutField {
         unique: true,
         indexed: false,
         default: None,
-    record_table: None,
+        record_table: None,
     }
 }
 
@@ -31,7 +31,7 @@ fn string_field(name: &str, nullable: bool) -> LayoutField {
         unique: false,
         indexed: false,
         default: None,
-    record_table: None,
+        record_table: None,
     }
 }
 
@@ -93,7 +93,7 @@ async fn sqlite_bump_adds_column_via_sync() {
         unique: false,
         indexed: false,
         default: None,
-    record_table: None,
+        record_table: None,
     });
     backend
         .sync_typed_table(&layout_v2)

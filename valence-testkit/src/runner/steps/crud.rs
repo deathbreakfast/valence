@@ -133,7 +133,7 @@ pub(super) async fn run(
                         unique: true,
                         indexed: false,
                         default: None,
-                    record_table: None,
+                        record_table: None,
                     },
                     LayoutField {
                         name: "name".into(),
@@ -143,7 +143,7 @@ pub(super) async fn run(
                         unique: false,
                         indexed: false,
                         default: None,
-                    record_table: None,
+                        record_table: None,
                     },
                 ],
             };
@@ -172,7 +172,7 @@ pub(super) async fn run(
                 unique: false,
                 indexed: false,
                 default: None,
-            record_table: None,
+                record_table: None,
             });
             backend
                 .sync_typed_table(&layout_v2)
@@ -281,7 +281,7 @@ pub(super) async fn run(
                         unique: true,
                         indexed: false,
                         default: None,
-                    record_table: None,
+                        record_table: None,
                     },
                     LayoutField {
                         name: "name".into(),
@@ -291,7 +291,7 @@ pub(super) async fn run(
                         unique: false,
                         indexed: false,
                         default: None,
-                    record_table: None,
+                        record_table: None,
                     },
                 ],
             };
@@ -324,7 +324,7 @@ pub(super) async fn run(
                 unique: false,
                 indexed: false,
                 default: None,
-            record_table: None,
+                record_table: None,
             });
             backend
                 .sync_typed_table(&layout_v2)
@@ -389,7 +389,7 @@ pub(super) async fn run(
                         unique: true,
                         indexed: false,
                         default: None,
-                    record_table: None,
+                        record_table: None,
                     },
                     LayoutField {
                         name: "name".into(),
@@ -399,7 +399,7 @@ pub(super) async fn run(
                         unique: false,
                         indexed: false,
                         default: None,
-                    record_table: None,
+                        record_table: None,
                     },
                 ],
             };
@@ -418,7 +418,7 @@ pub(super) async fn run(
                         unique: true,
                         indexed: false,
                         default: None,
-                    record_table: None,
+                        record_table: None,
                     },
                     LayoutField {
                         name: "name".into(),
@@ -428,7 +428,7 @@ pub(super) async fn run(
                         unique: false,
                         indexed: false,
                         default: None,
-                    record_table: None,
+                        record_table: None,
                     },
                 ],
             };

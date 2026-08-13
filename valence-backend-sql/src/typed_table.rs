@@ -148,7 +148,7 @@ pub async fn inspect_typed_layout_sqlite(
             unique: false,
             indexed: false,
             default: None,
-        record_table: None,
+            record_table: None,
         });
     }
     Ok(Some(StorageLayout {
@@ -198,7 +198,7 @@ pub async fn inspect_typed_layout_postgres(
             unique: false,
             indexed: false,
             default: None,
-        record_table: None,
+            record_table: None,
         });
     }
     Ok(Some(StorageLayout {
@@ -212,11 +212,9 @@ pub async fn sync_typed_table_sqlite(
     pool: &sqlx::SqlitePool,
     layout: &StorageLayout,
 ) -> Result<()> {
-    let live = inspect_typed_layout_sqlite(pool, &layout.table).await?;
-    if live.is_none() {
+    let Some(live) = inspect_typed_layout_sqlite(pool, &layout.table).await? else {
         return ensure_typed_table_sqlite(pool, layout).await;
-    }
-    let live = live.unwrap();
+    };
     // Inspect does not know unique/index flags — treat live unique/indexed as false so
     // desired unique/index still emit CREATE INDEX IF NOT EXISTS.
     let diff = layout_diff(layout, &live, KnownEngines::SQLITE)?;
@@ -253,11 +251,9 @@ pub async fn sync_typed_table_sqlite(
 
 /// Additive sync for Postgres (includes safe nullability/default tweaks).
 pub async fn sync_typed_table_postgres(pool: &sqlx::PgPool, layout: &StorageLayout) -> Result<()> {
-    let live = inspect_typed_layout_postgres(pool, &layout.table).await?;
-    if live.is_none() {
+    let Some(live) = inspect_typed_layout_postgres(pool, &layout.table).await? else {
         return ensure_typed_table_postgres(pool, layout).await;
-    }
-    let live = live.unwrap();
+    };
     let diff = layout_diff(layout, &live, KnownEngines::POSTGRES)?;
     for op in diff.ops {
         match op {
@@ -352,7 +348,11 @@ pub async fn define_unique_index_column_postgres(
     assert_safe_table(table)?;
     valence_core::safe_ident::assert_safe_ident(field)?;
     let idx = format!("valence_unique_{table}_{field}");
-    let q = format!("CREATE UNIQUE INDEX IF NOT EXISTS {idx} ON {table} ({field})");
+    let q = format!(
+        "CREATE UNIQUE INDEX IF NOT EXISTS {idx} ON {} ({})",
+        quote_sql_ident(table),
+        quote_sql_ident(field)
+    );
     sqlx::query(&q)
         .execute(pool)
         .await
@@ -368,7 +368,11 @@ pub async fn define_index_column_postgres(
     assert_safe_table(table)?;
     valence_core::safe_ident::assert_safe_ident(field)?;
     let idx = format!("valence_idx_{table}_{field}");
-    let q = format!("CREATE INDEX IF NOT EXISTS {idx} ON {table} ({field})");
+    let q = format!(
+        "CREATE INDEX IF NOT EXISTS {idx} ON {} ({})",
+        quote_sql_ident(table),
+        quote_sql_ident(field)
+    );
     sqlx::query(&q)
         .execute(pool)
         .await

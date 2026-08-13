@@ -24,7 +24,7 @@ fn id_field() -> LayoutField {
         unique: true,
         indexed: false,
         default: None,
-    record_table: None,
+        record_table: None,
     }
 }
 
@@ -64,7 +64,7 @@ async fn postgres_safe_tweak_set_nullable_and_default() {
                 unique: false,
                 indexed: false,
                 default: None,
-            record_table: None,
+                record_table: None,
             },
         ],
     };
@@ -89,7 +89,7 @@ async fn postgres_safe_tweak_set_nullable_and_default() {
                 unique: false,
                 indexed: false,
                 default: Some("anon".into()),
-            record_table: None,
+                record_table: None,
             },
         ],
     };

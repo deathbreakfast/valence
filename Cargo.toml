@@ -34,7 +34,7 @@ members = [
 exclude = []
 
 [workspace.package]
-version = "0.1.3"
+version = "0.1.4"
 edition = "2021"
 license = "MIT"
 description = "Schema-driven ORM for Rust"
@@ -42,21 +42,21 @@ repository = "https://github.com/unified-field-dev/valence"
 homepage = "https://github.com/unified-field-dev/valence"
 
 [workspace.dependencies]
-valence-core = { path = "valence-core", package = "uf-valence-core", version = "0.1.3" }
-valence-schema-dsl = { path = "valence-schema-dsl", package = "uf-valence-schema-dsl", version = "0.1.3" }
-valence-macros = { path = "valence-macros", package = "uf-valence-macros", version = "0.1.3" }
-valence-telemetry = { path = "valence-telemetry", package = "uf-valence-telemetry", version = "0.1.3" }
-valence-backend-mem = { path = "valence-backend-mem", package = "uf-valence-backend-mem", version = "0.1.3" }
-valence-backend-sql = { path = "valence-backend-sql", package = "uf-valence-backend-sql", version = "0.1.3" }
-valence-backend-sqlite = { path = "valence-backend-sqlite", package = "uf-valence-backend-sqlite", version = "0.1.3" }
-valence-backend-postgres = { path = "valence-backend-postgres", package = "uf-valence-backend-postgres", version = "0.1.3" }
-valence-backend-mongodb = { path = "valence-backend-mongodb", package = "uf-valence-backend-mongodb", version = "0.1.3" }
-valence-backend-indradb = { path = "valence-backend-indradb", package = "uf-valence-backend-indradb", version = "0.1.3" }
-valence-backend-hybrid = { path = "valence-backend-hybrid", package = "uf-valence-backend-hybrid", version = "0.1.3" }
-valence-backend-redis = { path = "valence-backend-redis", package = "uf-valence-backend-redis", version = "0.1.3" }
-valence-backend-surreal = { path = "valence-backend-surreal", package = "uf-valence-backend-surreal", version = "0.1.3", default-features = false }
-valence-codegen = { path = "valence-codegen", package = "uf-valence-codegen", version = "0.1.3" }
-valence = { path = "valence", package = "uf-valence", version = "0.1.3", default-features = false }
+valence-core = { path = "valence-core", package = "uf-valence-core", version = "0.1.4" }
+valence-schema-dsl = { path = "valence-schema-dsl", package = "uf-valence-schema-dsl", version = "0.1.4" }
+valence-macros = { path = "valence-macros", package = "uf-valence-macros", version = "0.1.4" }
+valence-telemetry = { path = "valence-telemetry", package = "uf-valence-telemetry", version = "0.1.4" }
+valence-backend-mem = { path = "valence-backend-mem", package = "uf-valence-backend-mem", version = "0.1.4" }
+valence-backend-sql = { path = "valence-backend-sql", package = "uf-valence-backend-sql", version = "0.1.4" }
+valence-backend-sqlite = { path = "valence-backend-sqlite", package = "uf-valence-backend-sqlite", version = "0.1.4" }
+valence-backend-postgres = { path = "valence-backend-postgres", package = "uf-valence-backend-postgres", version = "0.1.4" }
+valence-backend-mongodb = { path = "valence-backend-mongodb", package = "uf-valence-backend-mongodb", version = "0.1.4" }
+valence-backend-indradb = { path = "valence-backend-indradb", package = "uf-valence-backend-indradb", version = "0.1.4" }
+valence-backend-hybrid = { path = "valence-backend-hybrid", package = "uf-valence-backend-hybrid", version = "0.1.4" }
+valence-backend-redis = { path = "valence-backend-redis", package = "uf-valence-backend-redis", version = "0.1.4" }
+valence-backend-surreal = { path = "valence-backend-surreal", package = "uf-valence-backend-surreal", version = "0.1.4", default-features = false }
+valence-codegen = { path = "valence-codegen", package = "uf-valence-codegen", version = "0.1.4" }
+valence = { path = "valence", package = "uf-valence", version = "0.1.4", default-features = false }
 surrealdb = { version = "3.1", default-features = false }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync"] }
 serde = { version = "1", features = ["derive"] }

@@ -1,4 +1,4 @@
-//! Synthetic Valence benchmark CLI (bm-v0..bm-v25 experiments).
+//! Synthetic Valence benchmark CLI (bm-v0..bm-v28 experiments).
 
 #![allow(dead_code)]
 #![allow(clippy::useless_format)]
@@ -105,7 +105,7 @@ struct RunArgs {
 
 #[derive(Parser)]
 struct MatrixArgs {
-    /// Slice name: adapter-minimal, write-sweep, query-depth, overhead.
+    /// Registered matrix slice name, including `marketing-capacity`.
     slice: String,
     #[arg(long, default_value = "mem,sqlite")]
     storage: String,
@@ -211,6 +211,7 @@ async fn run_matrix_slice(args: &MatrixArgs, wire: WireBackendOptions) -> Result
         "hop-pairs" => vec!["bm-v24"],
         "hop-chains" => vec!["bm-v25"],
         "hybrid-compare" => vec!["bm-v26"],
+        "marketing-capacity" => vec!["bm-v5", "bm-v28"],
         other => bail!("unknown matrix slice: {other}"),
     };
 
@@ -232,7 +233,7 @@ async fn run_matrix_slice(args: &MatrixArgs, wire: WireBackendOptions) -> Result
             if *exp == "bm-v11" || *exp == "bm-v12" {
                 sweep.prefill = if *exp == "bm-v12" { 1_000 } else { 10_000 };
             }
-            if *exp == "bm-v5" {
+            if *exp == "bm-v5" || *exp == "bm-v28" {
                 sweep.duration_secs = 10;
                 sweep.concurrency = 32;
             }

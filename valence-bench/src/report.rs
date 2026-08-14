@@ -45,6 +45,16 @@ pub struct WriteMetrics {
     pub error_count: usize,
 }
 
+/// Read-track throughput and latency metrics.
+#[derive(Debug, Clone, Serialize)]
+pub struct ReadMetrics {
+    pub achieved_read_ops_per_sec: f64,
+    pub error_rate: f64,
+    pub total_ops: u64,
+    pub error_count: usize,
+    pub op_ms: MetricStats,
+}
+
 /// JSON report emitted after each benchmark run.
 #[derive(Debug, Serialize)]
 pub struct BenchReport {
@@ -70,6 +80,8 @@ pub struct BenchReport {
     pub sweep: Option<SweepSnapshot>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub write: Option<WriteMetrics>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub read: Option<ReadMetrics>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub prefill_count: Option<usize>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -117,6 +129,7 @@ impl BenchReport {
             ops_per_sec: None,
             sweep: None,
             write: None,
+            read: None,
             prefill_count: None,
             error_rate: None,
             bench_clients: None,

@@ -75,6 +75,15 @@ pub fn rust_type_tokens(field: &SchemaField, model_name: &str) -> TokenStream {
     }
 }
 
+/// Whether the field’s Rust type is `Copy` (prefer move/`*` over `.clone()` in generated code).
+#[must_use]
+pub fn field_type_is_copy(field: &SchemaField) -> bool {
+    matches!(
+        field.field_type.as_str(),
+        "integer" | "float" | "boolean" | "datetime" | "currency"
+    )
+}
+
 fn sanitize_ident(s: &str) -> String {
     s.chars()
         .map(|c| if c.is_ascii_alphanumeric() { c } else { '_' })

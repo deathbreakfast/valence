@@ -88,8 +88,45 @@ async fn delete_idempotent(backend: &dyn DatabaseBackend) -> Result<()> {
 }
 
 async fn compiled_query_select(backend: &dyn DatabaseBackend) -> Result<()> {
+    // Seed an INTEGER-shaped datetime so SELECT * maps prove numeric JSON (not
+    // stringified unix seconds — the SQLite map_select_row regression).
+    let _ = backend
+        .create_record(
+            CONTRACT_TABLE,
+            serde_json::json!({
+                "id": "cq1",
+                "name": "select-probe",
+                "at": 1_700_000_000_i64
+            }),
+        )
+        .await?;
     let compiled = CompiledQuery::new(format!("SELECT * FROM {CONTRACT_TABLE} LIMIT 10"), vec![]);
-    let _rows = backend.execute_compiled_query(&compiled).await?;
+    let rows = backend.execute_compiled_query(&compiled).await?;
+    assert!(
+        !rows.is_empty(),
+        "compiled SELECT * should return seeded rows"
+    );
+    let row = rows
+        .iter()
+        .find(|r| {
+            r.get("id").and_then(|v| v.as_str()) == Some("cq1")
+                || r.get("id")
+                    .and_then(|v| v.get("id"))
+                    .and_then(|v| v.as_str())
+                    == Some("cq1")
+        })
+        .or_else(|| rows.first())
+        .expect("row");
+    if let Some(at) = row.get("at") {
+        assert!(
+            at.is_i64() || at.as_u64().is_some(),
+            "datetime unix seconds must be JSON number, got {at:?}"
+        );
+        assert_eq!(
+            at.as_i64().or_else(|| at.as_u64().map(|u| u as i64)),
+            Some(1_700_000_000)
+        );
+    }
     Ok(())
 }
 

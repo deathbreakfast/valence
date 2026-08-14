@@ -3,9 +3,12 @@
 use valence_core::ownership::{OwnershipGateStatus, OwnershipService};
 use valence_core::read_cache::{invalidate, read_cache_enabled};
 use valence_core::record_id::RecordId;
-use valence_core::{Model, SortDirection, StringPredicate};
+use valence_core::{
+    Currency, CurrencyCode, DateTimePredicate, Model, SortDirection, StringPredicate,
+};
 
-use product_model_host::Project;
+use chrono::{TimeZone, Utc};
+use product_model_host::{ProbePayload, Project, TypedProbe};
 
 use crate::bootstrap::BootstrapSession;
 use crate::runner::RunMode;
@@ -33,6 +36,9 @@ pub(super) async fn run(
         ScenarioStep::GraphEdgeSmoke => graph_edge(session, mode).await?,
         ScenarioStep::QueryFilterEq => query_filter_eq(session, mode).await?,
         ScenarioStep::QueryFilterMiss => query_filter_miss(session, mode).await?,
+        ScenarioStep::TypedFieldRoundtrip => typed_field_roundtrip(session, mode).await?,
+        ScenarioStep::QueryFilterDatetime => query_filter_datetime(session, mode).await?,
+        ScenarioStep::QueryFilterDatetimeMiss => query_filter_datetime_miss(session, mode).await?,
         ScenarioStep::QueryOrderBy => query_order_by(session, mode).await?,
         ScenarioStep::QueryPagination => query_pagination(session, mode).await?,
         ScenarioStep::QueryOffsetEmpty => query_offset_empty(session, mode).await?,
@@ -166,6 +172,144 @@ async fn query_filter_miss(session: &mut BootstrapSession, mode: RunMode) -> Res
         .map_err(|e| e.to_string())?;
     if mode == RunMode::Correctness && !rows.is_empty() {
         return Err(format!("expected empty filter miss, got {}", rows.len()));
+    }
+    Ok(())
+}
+
+const TYPED_AT_SECS: i64 = 1_700_000_000;
+
+fn seed_typed_probe(label: &str) -> Result<(TypedProbe, chrono::DateTime<Utc>), String> {
+    let at = Utc
+        .timestamp_opt(TYPED_AT_SECS, 0)
+        .single()
+        .ok_or("invalid typed probe timestamp")?;
+    let probe = TypedProbe::new(
+        label.to_string(),
+        at,
+        Currency::new(CurrencyCode::Usd, 12345),
+        ProbePayload {
+            n: 7,
+            label: "ok".into(),
+        },
+    )
+    .map_err(|e| e.to_string())?;
+    Ok((probe, at))
+}
+
+async fn typed_field_roundtrip(
+    session: &mut BootstrapSession,
+    mode: RunMode,
+) -> Result<(), String> {
+    std::env::set_var("VALENCE_OWNERSHIP_UNIFIED_FETCH", "0");
+    let tag = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_nanos());
+    let label = format!("typed-rt-{tag}");
+    let (probe, at) = seed_typed_probe(&label)?;
+    let valence = session.ensure_valence().map_err(|e| e.to_string())?;
+    let created = TypedProbe::create(probe, valence)
+        .await
+        .map_err(|e| e.to_string())?;
+    let id = created
+        .id()
+        .ok_or("missing typed_probe id")?
+        .id()
+        .to_string();
+    let fetched = TypedProbe::get(&id, valence)
+        .await
+        .map_err(|e| e.to_string())?
+        .ok_or("typed_probe get returned none")?;
+    if mode == RunMode::Correctness {
+        if fetched.at().timestamp() != at.timestamp() {
+            return Err(format!(
+                "datetime mismatch: got {} want {}",
+                fetched.at().timestamp(),
+                at.timestamp()
+            ));
+        }
+        if fetched.price().amount_minor() != 12345 {
+            return Err(format!(
+                "currency mismatch: got {}",
+                fetched.price().amount_minor()
+            ));
+        }
+        if fetched.payload().n != 7 || fetched.payload().label != "ok" {
+            return Err(format!("json_as mismatch: {:?}", fetched.payload()));
+        }
+        if fetched.label() != &label {
+            return Err(format!("label mismatch: {}", fetched.label()));
+        }
+    }
+    Ok(())
+}
+
+async fn query_filter_datetime(
+    session: &mut BootstrapSession,
+    mode: RunMode,
+) -> Result<(), String> {
+    std::env::set_var("VALENCE_OWNERSHIP_UNIFIED_FETCH", "0");
+    let tag = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_nanos());
+    let label = format!("typed-dt-{tag}");
+    let (probe, at) = seed_typed_probe(&label)?;
+    let valence = session.ensure_valence().map_err(|e| e.to_string())?;
+    let created = TypedProbe::create(probe, valence)
+        .await
+        .map_err(|e| e.to_string())?;
+    let id = created
+        .id()
+        .ok_or("missing typed_probe id")?
+        .id()
+        .to_string();
+    let rows = TypedProbe::query(valence)
+        .where_at(DateTimePredicate::Equals(at))
+        .await
+        .map_err(|e| e.to_string())?;
+    if mode == RunMode::Correctness {
+        let hit = rows
+            .iter()
+            .find(|r| r.id().is_some_and(|rid| rid.id() == id));
+        if hit.is_none() {
+            return Err(format!(
+                "expected datetime Equals hit for {id}, got {} rows",
+                rows.len()
+            ));
+        }
+        if hit.expect("hit").at().timestamp() != TYPED_AT_SECS {
+            return Err("datetime Equals hit had wrong timestamp".into());
+        }
+    }
+    Ok(())
+}
+
+async fn query_filter_datetime_miss(
+    session: &mut BootstrapSession,
+    mode: RunMode,
+) -> Result<(), String> {
+    std::env::set_var("VALENCE_OWNERSHIP_UNIFIED_FETCH", "0");
+    let tag = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_nanos());
+    let label = format!("typed-dt-miss-{tag}");
+    let (probe, _) = seed_typed_probe(&label)?;
+    let valence = session.ensure_valence().map_err(|e| e.to_string())?;
+    TypedProbe::create(probe, valence)
+        .await
+        .map_err(|e| e.to_string())?;
+    let far_future = Utc
+        .timestamp_opt(3_000_000_000, 0)
+        .single()
+        .ok_or("invalid far-future timestamp")?;
+    let rows = TypedProbe::query(valence)
+        .where_at(DateTimePredicate::After(far_future))
+        .await
+        .map_err(|e| e.to_string())?;
+    if mode == RunMode::Correctness && !rows.is_empty() {
+        return Err(format!(
+            "expected empty datetime After miss, got {}",
+            rows.len()
+        ));
     }
     Ok(())
 }

@@ -3,7 +3,7 @@
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
 
-use crate::codegen::generators::rust_types::rust_type_tokens;
+use crate::codegen::generators::rust_types::{field_type_is_copy, rust_type_tokens};
 use crate::codegen::schema::SchemaContext;
 use crate::codegen::utils::to_pascal_case;
 
@@ -27,6 +27,7 @@ pub fn generate_side_effects(
 
         let field_name = format_ident!("{}", field.name);
         let is_required = !field.nullable;
+        let is_copy = field_type_is_copy(field);
 
         let field_type = rust_type_tokens(field, &model_name);
 
@@ -36,10 +37,21 @@ pub fn generate_side_effects(
                 pub #field_name: valence::FieldChange<#field_type>
             });
 
+            let before_expr = if is_copy {
+                quote! { before.map(|b| *b.#field_name()) }
+            } else {
+                quote! { before.map(|b| b.#field_name().clone()) }
+            };
+            let after_expr = if is_copy {
+                quote! { after.map(|a| *a.#field_name()) }
+            } else {
+                quote! { after.map(|a| a.#field_name().clone()) }
+            };
+
             field_change_computes.push(quote! {
                 #field_name: valence::FieldChange::new(
-                    before.map(|b| b.#field_name().clone()),
-                    after.map(|a| a.#field_name().clone()),
+                    #before_expr,
+                    #after_expr,
                 )
             });
         } else {
@@ -48,10 +60,21 @@ pub fn generate_side_effects(
                 pub #field_name: valence::FieldChange<Option<#field_type>>
             });
 
+            let before_expr = if is_copy {
+                quote! { before.map(|b| b.#field_name().copied()) }
+            } else {
+                quote! { before.map(|b| b.#field_name().cloned()) }
+            };
+            let after_expr = if is_copy {
+                quote! { after.map(|a| a.#field_name().copied()) }
+            } else {
+                quote! { after.map(|a| a.#field_name().cloned()) }
+            };
+
             field_change_computes.push(quote! {
                 #field_name: valence::FieldChange::new(
-                    before.map(|b| b.#field_name().cloned()),
-                    after.map(|a| a.#field_name().cloned()),
+                    #before_expr,
+                    #after_expr,
                 )
             });
         }

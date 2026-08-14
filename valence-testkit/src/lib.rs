@@ -66,9 +66,9 @@ pub use hops::{
 };
 pub use matrix::{
     all_storage_adapters, extended_store_available, extended_store_available_with_wire,
-    extended_store_skip_reason, extended_store_skip_reason_with_wire, topology_available,
-    topology_skip_reason, wire_backend_configured, CrossBackendLayout, MatrixSpec, StorageAdapter,
-    TelemetryAdapter, Topology,
+    extended_store_skip_reason, extended_store_skip_reason_with_wire, matrix_strict,
+    topology_available, topology_skip_reason, wire_backend_configured, CrossBackendLayout,
+    MatrixSpec, StorageAdapter, TelemetryAdapter, Topology,
 };
 #[cfg(feature = "acme-stub")]
 pub use model_contract::run_model_contract_acme_stub;

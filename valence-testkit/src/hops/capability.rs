@@ -24,26 +24,28 @@ impl HopSkip {
     }
 }
 
-/// Cross-backend nested `EXISTS` is not part of the asserted 0.1.x contract.
+/// Cross-backend nested `EXISTS` is not part of the asserted 0.1.x contract (`X` in coverage docs).
 ///
 /// Navigation (BelongsTo / HasMany) is still asserted when backends are available.
 /// Same-backend nested where is out of scope for the directed-pair matrix (pairs are
-/// always `primary ≠ secondary`).
+/// always `primary ≠ secondary`). Marked explicitly so docs must not claim `Y`.
 pub fn pair_nested_where_skip(pair: HopPair) -> Option<&'static str> {
     let _ = pair;
-    Some("cross-backend nested EXISTS not asserted until capability matrix expands (pre-1.0)")
+    Some(
+        "X: cross-backend nested EXISTS not asserted in 0.1.x (nav still validated; see E2E_BENCH_COVERAGE)",
+    )
 }
 
-/// Multi-engine depth-3 chains do not assert nested `EXISTS` in 0.1.x.
+/// Multi-engine depth-3 chains do not assert nested `EXISTS` in 0.1.x (`X`).
 pub fn triple_nested_where_skip(triple: HopTriple) -> Option<&'static str> {
     let _ = triple;
-    Some("multi-engine nested EXISTS not asserted until capability matrix expands (pre-1.0)")
+    Some("X: multi-engine nested EXISTS not asserted in 0.1.x")
 }
 
-/// Multi-engine depth-4 chains do not assert nested `EXISTS` in 0.1.x.
+/// Multi-engine depth-4 chains do not assert nested `EXISTS` in 0.1.x (`X`).
 pub fn quad_nested_where_skip(quad: HopQuad) -> Option<&'static str> {
     let _ = quad;
-    Some("multi-engine nested EXISTS not asserted until capability matrix expands (pre-1.0)")
+    Some("X: multi-engine nested EXISTS not asserted in 0.1.x")
 }
 
 /// Adapters excluded from hop layouts (stub / non-relational).

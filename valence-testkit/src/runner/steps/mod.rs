@@ -47,6 +47,9 @@ pub(super) async fn run_step(
         | ScenarioStep::GraphEdgeSmoke
         | ScenarioStep::QueryFilterEq
         | ScenarioStep::QueryFilterMiss
+        | ScenarioStep::TypedFieldRoundtrip
+        | ScenarioStep::QueryFilterDatetime
+        | ScenarioStep::QueryFilterDatetimeMiss
         | ScenarioStep::QueryOrderBy
         | ScenarioStep::QueryPagination
         | ScenarioStep::QueryOffsetEmpty
@@ -112,6 +115,9 @@ pub(super) fn step_label(step: &ScenarioStep) -> String {
         ScenarioStep::AssertBuilderEmptyFails => "assert_builder_empty_fails".into(),
         ScenarioStep::QueryFilterEq => "query_filter_eq".into(),
         ScenarioStep::QueryFilterMiss => "query_filter_miss".into(),
+        ScenarioStep::TypedFieldRoundtrip => "typed_field_roundtrip".into(),
+        ScenarioStep::QueryFilterDatetime => "query_filter_datetime".into(),
+        ScenarioStep::QueryFilterDatetimeMiss => "query_filter_datetime_miss".into(),
         ScenarioStep::QueryOrderBy => "query_order_by".into(),
         ScenarioStep::QueryPagination => "query_pagination".into(),
         ScenarioStep::QueryOffsetEmpty => "query_offset_empty".into(),

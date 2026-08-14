@@ -4,13 +4,16 @@ Living coverage map for Valence. Status legend:
 
 | Symbol | Meaning |
 |--------|---------|
-| `Y` | Covered |
+| `Y` | Covered — scenario **executed** with validating assertions |
 | `P` | Partial / smoke |
 | `N` | Missing |
+| `X` | N/A by capability (not a soft-pass) |
+| `S` | Soft-skip locally when wire env unset (not coverage) |
+| `C` | Campaign / extended CI required (`VALENCE_MATRIX_STRICT=1`) |
 | `H` | Host-owned (outside this repo) |
 | `D` | Deferred by design |
 
-**Target contract:** every single-backend feature E2E row runs on all storage adapters (mem, sqlite, surreal-mem, surreal-rocksdb, indradb, postgres, mongodb, redis; acme-stub where the port applies). Full matrix + benches execute on **AWS**. Local `./scripts/gate.sh` stays unit/clippy only.
+**Target contract:** every capability-applicable single-backend catalog row runs on all storage adapters. Soft-skip ≠ Y. Extended CI and AWS campaign set `VALENCE_MATRIX_STRICT=1` with Postgres/Redis/Mongo services. Local `./scripts/gate.sh` stays unit/clippy only.
 
 ## Feature × Happy / Sad / Bench
 
@@ -52,6 +55,8 @@ Living coverage map for Valence. Status legend:
 |---------|-------|-----|-------|
 | Empty table query | Y | N | N |
 | Filtered WHERE | Y (`query-filter-eq`) | Y (`query-filter-miss`) | **bm-v21** |
+| DateTime / Currency / JsonAs round-trip | Y (`typed-field-roundtrip`) | N (serde units cover digit-string) | N |
+| DateTimePredicate filter | Y (`query-filter-datetime`) | Y (`query-filter-datetime-miss`) | N |
 | ORDER BY | Y (`query-order-by`) | N | **bm-v23** |
 | Pagination | Y (`query-pagination`) | Y (`query-offset-empty`) | bm-v14; **bm-v23** |
 | Full scan / large-N | P | N | **bm-v22** |
@@ -64,8 +69,8 @@ Living coverage map for Valence. Status legend:
 | Feature | Happy | Sad | Bench |
 |---------|-------|-----|-------|
 | Same-backend HasOne/HasMany | P | N | bm-v15→v24 |
-| Cross-backend depth-2 | Y (Cartesian generator) | Y (missing mid-hop) | **bm-v24** |
-| Depth 3–4 nested where | Y (chain host) | Y | **bm-v25** |
+| Cross-backend depth-2 | Y nav (Cartesian) | Y (missing mid-hop) | **bm-v24** |
+| Nested EXISTS depth-2..4 | **X** (0.1.x skip) | **X** | **bm-v25** (nav/chain only) |
 | OnDelete Restrict | Y (`on-delete-restrict-blocks`) | Y | N |
 | OnDelete Cascade / SetNull / RemoveEdge | Y (`on-delete-cascade-same-backend`, `on-delete-set-null`, `on-delete-remove-edge`) | Y (Restrict) | N |
 | OnDelete cross-engine | Y (`on-delete-cascade-cross-engine`, `on-delete-set-null-cross-engine`; hop pairs soft-skip without wire) | N | N |
@@ -106,36 +111,39 @@ Living coverage map for Valence. Status legend:
 |---------|-------|-----|-------|
 | Table TTL (create-only) | Y | Y | Catalog: `ttl-native-expire` (Redis/Mongo), `ttl-deferred-stamp` (Deferred/Unsupported linger without Chronon), `ttl-deferred-sweep-delete` (Deferred adapters: expired row gone), `ttl-create-only-no-refresh`, `ttl-non-native-warn`. Platform budgeted sweeper: `valence-platform` `ttl_sweep_*` / hybrid integ. Bench: **not required**. Mongo purge timing not waited (TTL monitor). |
 | Side effects on queued/cascade physical delete | Y (platform TM-V3 cascade-child SE) | Y (Restrict → SE=0) | Platform integ; L0 catalog uses `apply_deletion_node` without Chronon SE |
-| Iters / trait mixin / encrypted | Y (`iter-scan-complete` on SQL/Surreal/mem/hybrid) | soft-skip | Soft-skip Redis/Mongo/Indra/Acme until platform keyset pushdown. Platform: `iter_scan_complete` test. Trait mixin / encrypted still N. |
+| Iters / trait mixin / encrypted | Y (`iter-scan-complete` on SQL/Surreal/mem/hybrid) | X Redis/Mongo/Indra/Acme (no keyset pushdown yet) | Platform: `iter_scan_complete` test. Trait mixin / encrypted still N. |
 
 Registered campaign scenario IDs: `ttl-native-expire`, `ttl-deferred-stamp`, `ttl-deferred-sweep-delete`, `ttl-create-only-no-refresh`, `ttl-non-native-warn`,
 `iter-scan-complete`,
+`typed-field-roundtrip`, `query-filter-datetime`, `query-filter-datetime-miss`,
 `on-delete-cascade-same-backend`, `on-delete-set-null`, `on-delete-remove-edge`, `on-delete-restrict-blocks`,
-`on-delete-cascade-cross-engine`, `on-delete-set-null-cross-engine` (AcmeStub skipped for OnDelete / TTL).
+`on-delete-cascade-cross-engine`, `on-delete-set-null-cross-engine` (AcmeStub skipped for OnDelete / TTL / typed-field).
 
 ## Storage × suite
 
 | Storage | Catalog E2E | Model | Admin | Deletion | Hop Cartesian |
 |---------|-------------|-------|-------|----------|---------------|
-| mem | Y | Y | Y | Y | Y |
-| sqlite | Y | Y | Y | Y | Y |
-| surreal-mem | Y | Y | Y | Y | Y |
-| surreal-rocksdb | Y (env) | Y (env) | P | P | Y (env) |
-| indradb | Y | Y | Y | Y | Y |
-| postgres | Y (URL) | Y (URL) | Y (URL) | Y (URL) | Y (URL) |
-| mongodb | Y (URI) | Y (URI) | Y (URI) | Y (URI) | Y (URI) |
-| redis | Y (URL) | Y (URL) | Y (URL) | Y (URL) | Y (URL) |
-| acme-stub | Y | ignored | N | N | excluded |
+| mem | Y | Y | Y | Y | Y (nav; nested EXISTS X) |
+| sqlite | Y | Y | Y | Y | Y (nav; nested EXISTS X) |
+| surreal-mem | Y | Y | Y | Y | Y (nav; nested EXISTS X) |
+| surreal-rocksdb | C (`VALENCE_BENCH_ROCKSDB=1`) | C | C | C | C |
+| indradb | Y | Y | Y | Y | Y (nav; nested EXISTS X) |
+| postgres | C (`DATABASE_URL` + STRICT) | C | C | C | C |
+| mongodb | C / S | C / S | C / S | C / S | C / S |
+| redis | C / S | C / S | C / S | C / S | C / S |
+| hybrid | C (`hybrid` + URL) | C | C | C | C |
+| acme-stub | Y (subset) | X | X | X | X |
+
+Typed-field catalog rows (`typed-field-roundtrip`, `query-filter-datetime`, `query-filter-datetime-miss`) run on every capable adapter above (AcmeStub X).
 
 ## Cross-backend hop Cartesian
 
 Engines (exclude acme-stub): mem, sqlite, surreal-mem, surreal-rocksdb, indradb, postgres, mongodb, redis.
 
-- **Depth 2:** directed pairs `E1 ≠ E2` → 56 layouts via `valence_testkit::hops::directed_pairs()`.
-- **Depth 3:** representative triples via `hop_triples_representative()`.
-- **Depth 4:** Org→Project→Task→Note chain via `examples/hop-chain-model-host`.
+- **Depth 2:** directed pairs `E1 ≠ E2` → navigation asserted; nested `where_*_has_results` is **X**.
+- **Depth 3–4:** representative chains — navigation asserted; nested EXISTS **X**.
 
-Assertions per layout: seed, loaded-model nav, nested `where_*_has_results`, missing mid-hop empty, privacy fail-closed where applicable.
+Assertions per layout: seed, loaded-model nav, missing mid-hop empty. Nested EXISTS skipped with `nested_where_unsupported`.
 
 ## Bench registry (new)
 

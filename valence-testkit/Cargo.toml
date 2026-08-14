@@ -55,6 +55,7 @@ valence-backend-sqlite = { workspace = true, optional = true }
 valence-backend-surreal = { workspace = true, optional = true, default-features = false }
 valence-core = { workspace = true, features = ["instrumentation", "compiler-sql"] }
 valence-telemetry = { workspace = true }
+chrono = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }

@@ -138,6 +138,14 @@ jobs:
         run: cargo test -p valence-e2e --test admin_runtime_catalog -- --test-threads=1
       - name: valence-e2e model runtime catalog
         run: cargo test -p valence-e2e --test model_runtime_catalog -- --test-threads=1
+      - name: valence-e2e in-process cross-backend hops
+        run: |
+          cargo test -p valence-e2e --test cross_backend_hops \
+            --features cross-backend-hops \
+            -- --test-threads=1 \
+            cross_backend_hops_mem_mem \
+            cross_backend_hops_mem_sqlite_legacy \
+            cross_backend_hop_pairs_cartesian
 
   # Non-gating smoke: continue-on-error so coverage tooling failures do not block merge.
   # Report is informational only (mem/surreal-mem tier); not a release gate.

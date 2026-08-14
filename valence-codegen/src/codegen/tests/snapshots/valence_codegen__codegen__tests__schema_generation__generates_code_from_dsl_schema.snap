@@ -1,5 +1,6 @@
 ---
 source: valence-codegen/src/codegen/tests/schema_generation.rs
+assertion_line: 32
 expression: generated
 ---
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -60,8 +61,8 @@ impl TestEntityFieldChanges {
                 after.map(|a| a.name().clone()),
             ),
             deleted_at: valence::FieldChange::new(
-                before.map(|b| b.deleted_at().cloned()),
-                after.map(|a| a.deleted_at().cloned()),
+                before.map(|b| b.deleted_at().copied()),
+                after.map(|a| a.deleted_at().copied()),
             ),
         }
     }
@@ -740,11 +741,11 @@ impl<'a> TestEntityMutable<'a> {
     }
     /// Apply changes locally without persisting to the database.
     pub fn build(mut self) -> TestEntity {
-        if let Some(val) = &self.name {
-            self.model.name = val.clone();
+        if let Some(val) = self.name.take() {
+            self.model.name = val;
         }
-        if let Some(opt) = &self.deleted_at {
-            self.model.deleted_at = opt.clone();
+        if let Some(opt) = self.deleted_at.take() {
+            self.model.deleted_at = opt;
         }
         self.model
     }

@@ -62,8 +62,8 @@ pub(super) fn collect_mutable_part_streams(schema: &SchemaContext) -> MutablePar
             });
 
             commit_updates.push(quote! {
-                if let Some(val) = &self.#field_name {
-                    self.model.#field_name = val.clone();
+                if let Some(val) = self.#field_name.take() {
+                    self.model.#field_name = val;
                 }
             });
         } else {
@@ -88,8 +88,8 @@ pub(super) fn collect_mutable_part_streams(schema: &SchemaContext) -> MutablePar
             });
 
             commit_updates.push(quote! {
-                if let Some(opt) = &self.#field_name {
-                    self.model.#field_name = opt.clone();
+                if let Some(opt) = self.#field_name.take() {
+                    self.model.#field_name = opt;
                 }
             });
         }

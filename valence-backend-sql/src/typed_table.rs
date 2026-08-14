@@ -643,6 +643,23 @@ fn bind_postgres<'q>(
     }
 }
 
+/// Prefer registry field storage kinds (Json/Currency/DateTime) over PRAGMA TEXT→String.
+fn layout_with_registry_storage(table: &str, live: StorageLayout) -> StorageLayout {
+    let Ok(reg) = StorageLayout::from_registry_table(table) else {
+        return live;
+    };
+    let mut fields = live.fields;
+    for f in &mut fields {
+        if let Some(rf) = reg.fields.iter().find(|r| r.name == f.name) {
+            f.storage = rf.storage;
+        }
+    }
+    StorageLayout {
+        table: live.table,
+        fields,
+    }
+}
+
 /// Fetch one typed row (SQLite).
 pub async fn get_record_typed_sqlite(
     pool: &sqlx::SqlitePool,
@@ -651,7 +668,7 @@ pub async fn get_record_typed_sqlite(
 ) -> Result<Option<Value>> {
     assert_safe_table(table)?;
     let layout = match inspect_typed_layout_sqlite(pool, table).await? {
-        Some(l) if !l.fields.is_empty() => l,
+        Some(l) if !l.fields.is_empty() => layout_with_registry_storage(table, l),
         _ => {
             // Table missing — try registry layout ensure then miss.
             if let Ok(layout) = StorageLayout::from_registry_table(table) {
@@ -682,7 +699,7 @@ pub async fn get_record_typed_postgres(
 ) -> Result<Option<Value>> {
     assert_safe_table(table)?;
     let layout = match inspect_typed_layout_postgres(pool, table).await? {
-        Some(l) if !l.fields.is_empty() => l,
+        Some(l) if !l.fields.is_empty() => layout_with_registry_storage(table, l),
         _ => {
             if let Ok(layout) = StorageLayout::from_registry_table(table) {
                 ensure_typed_table_postgres(pool, &layout).await?;
@@ -736,14 +753,15 @@ fn row_from_sqlx_sqlite(
                 match s.as_deref() {
                     None | Some("") => Value::Null,
                     Some("null") => Value::Null,
-                    Some(t) => serde_json::from_str(t).unwrap_or(Value::String(t.to_string())),
+                    Some(t) => decode_sqlite_text_json(t),
                 }
             }
             FieldStorage::String | FieldStorage::Date => {
+                // Keep "" as a string. Mapping empty → Null breaks required `String`
+                // fields (e.g. Neutrino audit `error_message`) on read-back.
                 let s: Option<String> = row.try_get(i).unwrap_or(None);
                 match s {
                     None => Value::Null,
-                    Some(t) if t.is_empty() => Value::Null,
                     Some(t) => Value::String(t),
                 }
             }
@@ -890,7 +908,21 @@ pub async fn update_record_typed_postgres(
 }
 
 /// Map a sqlx SQLite row with arbitrary columns into Valence JSON (SELECT *).
+///
+/// SQLite type affinity lets `try_get::<String>` succeed for INTEGER columns
+/// (e.g. unix-second datetimes). Prefer the declared column type so those stay
+/// JSON numbers — otherwise `datetime_unix` treats `"1700000000"` as RFC3339 and
+/// fails with chrono's "premature end of input".
+///
+/// When the table is registered, decode cells with [`StorageLayout`] field kinds so
+/// JSON/Currency TEXT columns become objects (not opaque strings).
 pub fn map_select_row_sqlite(table: &str, row: &sqlx::sqlite::SqliteRow) -> Value {
+    use sqlx::TypeInfo;
+
+    if let Ok(layout) = StorageLayout::from_registry_table(table) {
+        return map_select_row_sqlite_with_layout(table, &layout, row);
+    }
+
     let cols = row.columns();
     let mut fields = Map::new();
     let mut id = String::new();
@@ -900,15 +932,35 @@ pub fn map_select_row_sqlite(table: &str, row: &sqlx::sqlite::SqliteRow) -> Valu
             id = row.try_get::<String, _>(name).unwrap_or_default();
             continue;
         }
-        // Prefer string, then i64, then f64.
-        if let Ok(s) = row.try_get::<String, _>(name) {
-            if let Ok(v) = serde_json::from_str::<Value>(&s) {
-                if v.is_object() || v.is_array() {
-                    fields.insert(name.to_string(), v);
-                    continue;
+        let type_name = col.type_info().name();
+        let upper = type_name.to_ascii_uppercase();
+        if upper == "BOOLEAN" {
+            if let Ok(b) = row.try_get::<bool, _>(name) {
+                fields.insert(name.to_string(), Value::Bool(b));
+            } else if let Ok(i) = row.try_get::<i64, _>(name) {
+                fields.insert(name.to_string(), Value::Bool(i != 0));
+            }
+            continue;
+        }
+        if upper == "INTEGER" || upper == "INT" || upper == "BIGINT" {
+            // Prefer i64: sqlx can coerce any integer to bool (nonzero → true), which
+            // would destroy unix-second datetimes and other numeric cells.
+            if let Ok(i) = row.try_get::<i64, _>(name) {
+                fields.insert(name.to_string(), Value::Number(i.into()));
+            }
+            continue;
+        }
+        if upper == "REAL" || upper == "FLOAT" || upper == "DOUBLE" {
+            if let Ok(f) = row.try_get::<f64, _>(name) {
+                if let Some(n) = serde_json::Number::from_f64(f) {
+                    fields.insert(name.to_string(), Value::Number(n));
                 }
             }
-            fields.insert(name.to_string(), Value::String(s));
+            continue;
+        }
+        // TEXT / BLOB / unknown: prefer JSON object/array parse, then string.
+        if let Ok(s) = row.try_get::<String, _>(name) {
+            fields.insert(name.to_string(), decode_sqlite_text_json(&s));
         } else if let Ok(i) = row.try_get::<i64, _>(name) {
             fields.insert(name.to_string(), Value::Number(i.into()));
         } else if let Ok(f) = row.try_get::<f64, _>(name) {
@@ -917,6 +969,84 @@ pub fn map_select_row_sqlite(table: &str, row: &sqlx::sqlite::SqliteRow) -> Valu
             }
         } else if let Ok(b) = row.try_get::<bool, _>(name) {
             fields.insert(name.to_string(), Value::Bool(b));
+        }
+    }
+    if id.is_empty() {
+        return Value::Object(fields);
+    }
+    row_from_columns(table, &id, fields)
+}
+
+fn decode_sqlite_text_json(s: &str) -> Value {
+    match serde_json::from_str::<Value>(s) {
+        Ok(Value::String(inner)) => {
+            // Double-encoded JSON document stored as a JSON string cell.
+            serde_json::from_str(&inner).unwrap_or(Value::String(inner))
+        }
+        Ok(v) => v,
+        Err(_) => Value::String(s.to_string()),
+    }
+}
+
+fn map_select_row_sqlite_with_layout(
+    table: &str,
+    layout: &StorageLayout,
+    row: &sqlx::sqlite::SqliteRow,
+) -> Value {
+    let mut fields = Map::new();
+    let mut id = String::new();
+    for f in &layout.fields {
+        if f.name == "id" {
+            id = row
+                .try_get::<String, _>(f.name.as_str())
+                .unwrap_or_default();
+            continue;
+        }
+        let val = match f.storage {
+            FieldStorage::Integer => {
+                let n: Option<i64> = row.try_get(f.name.as_str()).unwrap_or(None);
+                n.map(|x| Value::Number(x.into())).unwrap_or(Value::Null)
+            }
+            FieldStorage::Boolean => {
+                let n: Option<i64> = row.try_get(f.name.as_str()).unwrap_or(None);
+                n.map(|x| Value::Bool(x != 0)).unwrap_or(Value::Null)
+            }
+            FieldStorage::Decimal => {
+                let n: Option<f64> = row.try_get(f.name.as_str()).unwrap_or(None);
+                n.and_then(serde_json::Number::from_f64)
+                    .map(Value::Number)
+                    .unwrap_or(Value::Null)
+            }
+            FieldStorage::Json | FieldStorage::Currency => {
+                let s: Option<String> = row.try_get(f.name.as_str()).unwrap_or(None);
+                match s.as_deref() {
+                    None | Some("") => Value::Null,
+                    Some("null") => Value::Null,
+                    Some(t) => decode_sqlite_text_json(t),
+                }
+            }
+            FieldStorage::String | FieldStorage::Date => {
+                // Keep "" as a string. Mapping empty → Null breaks required `String`
+                // fields (e.g. Neutrino audit `error_message`) on read-back.
+                let s: Option<String> = row.try_get(f.name.as_str()).unwrap_or(None);
+                match s {
+                    None => Value::Null,
+                    Some(t) => Value::String(t),
+                }
+            }
+        };
+        fields.insert(f.name.clone(), val);
+    }
+    // Include any unexpected SELECT columns (best-effort).
+    for col in row.columns() {
+        let name = col.name();
+        if name.eq_ignore_ascii_case("id") || fields.contains_key(name) {
+            continue;
+        }
+        if let Ok(s) = row.try_get::<String, _>(name) {
+            fields.insert(name.to_string(), decode_sqlite_text_json(&s));
+        } else if let Ok(i) = row.try_get::<i64, _>(name) {
+            fields.insert(name.to_string(), Value::Number(i.into()));
         }
     }
     if id.is_empty() {

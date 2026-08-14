@@ -142,6 +142,12 @@ pub enum ScenarioStep {
     QueryFilterEq,
     /// ORM equality filter returns empty on miss (sad path).
     QueryFilterMiss,
+    /// Typed DateTime / Currency / JsonAs create → get round-trip.
+    TypedFieldRoundtrip,
+    /// ORM DateTimePredicate::Equals returns matching rows.
+    QueryFilterDatetime,
+    /// ORM DateTimePredicate::After far-future returns empty (sad path).
+    QueryFilterDatetimeMiss,
     /// ORM order_by ascending.
     QueryOrderBy,
     /// ORM limit/offset page size.
@@ -523,6 +529,36 @@ impl ScenarioSpec {
         Self {
             id: "query-filter-miss".into(),
             steps: vec![ScenarioStep::BuildValence, ScenarioStep::QueryFilterMiss],
+        }
+    }
+
+    pub fn typed_field_roundtrip() -> Self {
+        Self {
+            id: "typed-field-roundtrip".into(),
+            steps: vec![
+                ScenarioStep::BuildValence,
+                ScenarioStep::TypedFieldRoundtrip,
+            ],
+        }
+    }
+
+    pub fn query_filter_datetime() -> Self {
+        Self {
+            id: "query-filter-datetime".into(),
+            steps: vec![
+                ScenarioStep::BuildValence,
+                ScenarioStep::QueryFilterDatetime,
+            ],
+        }
+    }
+
+    pub fn query_filter_datetime_miss() -> Self {
+        Self {
+            id: "query-filter-datetime-miss".into(),
+            steps: vec![
+                ScenarioStep::BuildValence,
+                ScenarioStep::QueryFilterDatetimeMiss,
+            ],
         }
     }
 

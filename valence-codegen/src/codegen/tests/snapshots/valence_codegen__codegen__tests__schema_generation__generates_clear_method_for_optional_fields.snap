@@ -1,5 +1,6 @@
 ---
 source: valence-codegen/src/codegen/tests/schema_generation.rs
+assertion_line: 81
 expression: generated
 ---
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -63,8 +64,8 @@ impl TestNotificationFieldChanges {
                 after.map(|a| a.message().clone()),
             ),
             read_at: valence::FieldChange::new(
-                before.map(|b| b.read_at().cloned()),
-                after.map(|a| a.read_at().cloned()),
+                before.map(|b| b.read_at().copied()),
+                after.map(|a| a.read_at().copied()),
             ),
         }
     }
@@ -747,11 +748,11 @@ impl<'a> TestNotificationMutable<'a> {
     }
     /// Apply changes locally without persisting to the database.
     pub fn build(mut self) -> TestNotification {
-        if let Some(val) = &self.message {
-            self.model.message = val.clone();
+        if let Some(val) = self.message.take() {
+            self.model.message = val;
         }
-        if let Some(opt) = &self.read_at {
-            self.model.read_at = opt.clone();
+        if let Some(opt) = self.read_at.take() {
+            self.model.read_at = opt;
         }
         self.model
     }

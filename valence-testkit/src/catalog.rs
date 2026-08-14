@@ -273,6 +273,15 @@ pub fn embedded_catalog() -> &'static [CatalogEntry] {
         entry_generated_model("query-filter-miss", PathKind::Sad, |_| {
             ScenarioSpec::query_filter_miss()
         }),
+        entry_generated_model("typed-field-roundtrip", PathKind::Happy, |_| {
+            ScenarioSpec::typed_field_roundtrip()
+        }),
+        entry_generated_model("query-filter-datetime", PathKind::Happy, |_| {
+            ScenarioSpec::query_filter_datetime()
+        }),
+        entry_generated_model("query-filter-datetime-miss", PathKind::Sad, |_| {
+            ScenarioSpec::query_filter_datetime_miss()
+        }),
         entry_generated_model("query-order-by", PathKind::Happy, |_| {
             ScenarioSpec::query_order_by()
         }),
@@ -497,6 +506,12 @@ pub async fn run_catalog_entry(entry: &CatalogEntry, storage: StorageAdapter) {
 
     let matrix = matrix_for_entry(entry, storage);
     if let Some(reason) = extended_store_skip_reason(matrix.storage) {
+        assert!(
+            !crate::matrix::matrix_strict(),
+            "VALENCE_MATRIX_STRICT: catalog entry {}/{} unavailable — {reason}",
+            entry.id,
+            matrix.storage.slug()
+        );
         eprintln!(
             "catalog entry {}/{}: {reason} — skipping",
             entry.id,
@@ -505,6 +520,12 @@ pub async fn run_catalog_entry(entry: &CatalogEntry, storage: StorageAdapter) {
         return;
     }
     if let Some(reason) = topology_skip_reason(matrix.topology) {
+        assert!(
+            !crate::matrix::matrix_strict(),
+            "VALENCE_MATRIX_STRICT: catalog entry {}/{} unavailable — {reason}",
+            entry.id,
+            matrix.topology.slug()
+        );
         eprintln!(
             "catalog entry {}/{}: {reason} — skipping",
             entry.id,
@@ -513,6 +534,12 @@ pub async fn run_catalog_entry(entry: &CatalogEntry, storage: StorageAdapter) {
         return;
     }
     if !extended_store_available(matrix.storage) || !topology_available(matrix.topology) {
+        assert!(
+            !crate::matrix::matrix_strict(),
+            "VALENCE_MATRIX_STRICT: catalog entry {}/{} unavailable",
+            entry.id,
+            matrix.storage.slug()
+        );
         return;
     }
 
@@ -580,6 +607,9 @@ pub fn catalog_for_storage(storage: StorageAdapter) -> Vec<&'static CatalogEntry
                 return false;
             }
             if !ttl_catalog_applies(entry.id, storage) {
+                return false;
+            }
+            if !iter_catalog_applies(entry.id, storage) {
                 return false;
             }
             if !on_delete_catalog_applies(entry.id, storage) {

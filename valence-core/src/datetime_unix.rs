@@ -5,8 +5,9 @@
 //! - Wire JSON: a JSON number (`i64`) of seconds since the Unix epoch (not milliseconds).
 //! - Model API: only `chrono::DateTime<chrono::Utc>` (never raw integers on the public surface).
 //!
-//! On deserialize, an RFC3339 string is accepted as a best-effort read tolerance for
-//! legacy rows. This helper only round-trips datetime fields.
+//! On deserialize, digit-only strings (SQLite INTEGER→TEXT coercion) and RFC3339
+//! strings are accepted as best-effort read tolerance. This helper only round-trips
+//! datetime fields.
 
 use chrono::{DateTime, TimeZone, Utc};
 use serde::{Deserialize, Deserializer, Serializer};
@@ -43,10 +44,29 @@ where
             .timestamp_opt(secs, 0)
             .single()
             .ok_or_else(|| serde::de::Error::custom(format!("invalid unix seconds: {secs}"))),
-        Wire::Rfc3339(s) => DateTime::parse_from_rfc3339(&s)
-            .map(|dt| dt.with_timezone(&Utc))
-            .map_err(serde::de::Error::custom),
+        Wire::Rfc3339(s) => parse_datetime_string(&s),
     }
+}
+
+/// Accept unix-second digit strings (SQLite INTEGER→TEXT coercion) or RFC3339.
+fn parse_datetime_string<E: serde::de::Error>(s: &str) -> Result<DateTime<Utc>, E> {
+    let trimmed = s.trim();
+    if !trimmed.is_empty()
+        && trimmed
+            .bytes()
+            .enumerate()
+            .all(|(i, b)| b.is_ascii_digit() || (i == 0 && b == b'-'))
+    {
+        if let Ok(secs) = trimmed.parse::<i64>() {
+            return Utc
+                .timestamp_opt(secs, 0)
+                .single()
+                .ok_or_else(|| E::custom(format!("invalid unix seconds: {secs}")));
+        }
+    }
+    DateTime::parse_from_rfc3339(trimmed)
+        .map(|dt| dt.with_timezone(&Utc))
+        .map_err(E::custom)
 }
 
 /// Serde helpers for `Option<DateTime<Utc>>`.
@@ -80,9 +100,7 @@ pub mod option {
                         serde::de::Error::custom(format!("invalid unix seconds: {secs}"))
                     })
             }
-            serde_json::Value::String(s) => DateTime::parse_from_rfc3339(&s)
-                .map(|dt| Some(dt.with_timezone(&Utc)))
-                .map_err(serde::de::Error::custom),
+            serde_json::Value::String(s) => parse_datetime_string(&s).map(Some),
             other => Err(serde::de::Error::custom(format!(
                 "expected unix seconds or RFC3339 string, got {other}"
             ))),
@@ -115,6 +133,14 @@ mod tests {
     #[test]
     fn accepts_rfc3339_on_read() {
         let v = json!({ "at": "2023-11-14T22:13:20Z" });
+        let row: Row = serde_json::from_value(v).unwrap();
+        assert_eq!(row.at.timestamp(), 1_700_000_000);
+    }
+
+    #[test]
+    fn accepts_unix_seconds_as_string() {
+        // SQLite often yields INTEGER columns via try_get::<String>.
+        let v = json!({ "at": "1700000000" });
         let row: Row = serde_json::from_value(v).unwrap();
         assert_eq!(row.at.timestamp(), 1_700_000_000);
     }

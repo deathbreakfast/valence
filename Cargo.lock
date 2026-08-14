@@ -3585,6 +3585,7 @@ name = "product-model-host"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "chrono",
  "serde",
  "serde_json",
  "tokio",
@@ -5994,6 +5995,7 @@ name = "valence-testkit"
 version = "0.1.4"
 dependencies = [
  "acme-valence-backend-stub",
+ "chrono",
  "cross-backend-model-host",
  "futures",
  "hop-chain-model-host",

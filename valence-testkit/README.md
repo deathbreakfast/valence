@@ -1,49 +1,53 @@
 # valence-testkit
 
-Matrix bootstrap, [`DatabaseBackend`](../valence-core/src/backend/port.rs) port contract, and declarative scenario catalog for `valence-e2e` and `valence-bench`. Extend matrix dimensions, catalog scenarios, and backend contract checks here; wire `run_backend_contract` in adapter integration tests before adding matrix rows. Optional dev-dependency for integration tests using the same patterns as `valence-e2e`.
+Matrix bootstrap, [`DatabaseBackend`](../valence-core/src/backend/port.rs) port contract, and declarative scenario catalog for `valence-e2e` and `valence-bench`.
+
+## Coverage contract
+
+Every capability-applicable catalog scenario must run on every `StorageAdapter`. Soft-skip without `VALENCE_MATRIX_STRICT` is for local convenience only. Under `VALENCE_MATRIX_STRICT=1`, unavailable wire adapters **panic**.
+
+Capability **X** cells (AcmeStub model runtime, Indra TTL Unsupported, Redis/Mongo iter scan, cross-backend nested EXISTS) stay documented skips — not silent passes.
 
 ## Matrix dimensions
 
-| Dimension | CI default variants |
-|-----------|---------------------|
-| **storage** | `Mem`, `SurrealMem`, `SurrealRocksdb`, `AcmeStub` |
-| **telemetry** | `Off`, `Console`, `Recording` |
-| **topology** | `Embedded` (`RemoteStub` = skip/ignore) |
+| Dimension | Always-on (PR) | Wire (extended / STRICT) |
+|-----------|----------------|--------------------------|
+| **storage** | Mem, Sqlite, IndraDb, SurrealMem, AcmeStub | Postgres, Redis, MongoDb, HybridIndraPg, SurrealRocksdb |
+| **telemetry** | Off, Console, Recording | same |
+| **topology** | Embedded | Embedded |
 
 ## Key modules
 
 | Module | Role |
 |--------|------|
-| `matrix.rs` | `MatrixSpec`, storage/telemetry/topology enums |
-| `bootstrap/session.rs` | `BootstrapSession::spawn` → router + factory + optional `RecordingSink` |
-| `backend_contract.rs` | `run_backend_contract` port suite |
-| `catalog.rs` | Shared correctness catalog (7 scenarios) |
-| `scenario.rs` / `runner.rs` | Declarative steps; `RunMode::Correctness` vs `Benchmark` |
+| `matrix.rs` | `MatrixSpec`, `matrix_strict()`, storage enums |
+| `bootstrap/session.rs` | `BootstrapSession::spawn` |
+| `backend_contract.rs` | `run_backend_contract` (asserts SELECT datetime numbers when seeded) |
+| `catalog.rs` | Full correctness catalog (includes `typed-field-roundtrip`, `query-filter-datetime*`) |
+| `scenario.rs` / `runner.rs` | Declarative steps |
 
 ## Features
 
 | Feature | Enables |
 |---------|---------|
-| `surreal-mem` (default) | Embedded Surreal mem bootstrap |
-| `surreal-rocksdb` | RocksDB matrix row (`VALENCE_BENCH_ROCKSDB=1`) |
-| `surreal-inventory` | Inventory bootstrap scenario |
-| `acme-stub` (default) | Third-party adapter matrix row |
+| `sqlite` / `mongodb` / `indradb` / `redis` (default) | Always-on or soft-skip wire rows |
+| `postgres` / `hybrid` | Opt-in wire adapters |
+| `surreal-mem` (default) | Embedded Surreal mem |
+| `surreal-rocksdb` | RocksDB (`VALENCE_BENCH_ROCKSDB=1`) |
+| `acme-stub` (default) | Stub port subset |
 
 ## Hop capability matrix (0.1.x)
 
-Cross-backend hop contracts in `hops/` assert **seed + BelongsTo/HasMany navigation** when backends are available. Nested `EXISTS` / connection predicates are **not asserted** on multi-engine layouts until the capability matrix expands — those paths log `SKIP nested_where_unsupported` with an explicit reason instead of soft-passing empty or false-positive results.
+Cross-backend hop contracts assert **seed + BelongsTo/HasMany navigation**. Nested `EXISTS` is **X** (skipped with `nested_where_unsupported`) — do not claim Y in coverage docs.
 
 | Skip label | Meaning |
 |------------|---------|
-| `backend_unavailable` | Required adapter missing in this environment (or acme-stub excluded) |
-| `nested_where_unsupported` | Nested EXISTS deliberately out of scope for this layout in 0.1.x |
-
-This crate is **not published** (`publish = false`); it is workspace-internal support for e2e/bench.
+| `backend_unavailable` | Required adapter missing (or acme-stub excluded) |
+| `nested_where_unsupported` | Nested EXISTS deliberately X for multi-engine layouts |
 
 ## Verify
 
 ```bash
-cargo test -p valence-testkit
+cargo test -p valence-testkit -- --test-threads=1
+cargo test -p uf-valence-backend-hybrid --test backend_contract -- --test-threads=1
 ```
-
-See [docs/E2E_BENCH_COVERAGE.md](../docs/E2E_BENCH_COVERAGE.md) for the full matrix.

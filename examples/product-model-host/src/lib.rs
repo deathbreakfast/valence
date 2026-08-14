@@ -8,6 +8,18 @@
     clippy::print_stdout,
     clippy::print_stderr
 )]
+
+use serde::{Deserialize, Serialize};
+
+/// JSON payload for [`TypedProbe`] `FieldType::JsonAs` coverage.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ProbePayload {
+    /// Arbitrary integer for round-trip asserts.
+    pub n: i64,
+    /// Arbitrary label for round-trip asserts.
+    pub label: String,
+}
+
 valence::include_generated_models!();
 
 #[cfg(test)]

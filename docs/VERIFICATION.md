@@ -26,9 +26,21 @@ cargo test -p uf-valence-core --test dag_privacy --test delete_side_effects --te
 # Host: requester actor + OnDelete (SetNull / RemoveEdge / cascade SE)
 # cargo test -p valence-platform --test requester_actor --test public_contracts --test deletion_on_delete
 
-# Matrix E2E (includes on-delete-* catalog; wire soft-skip)
-cargo test -p valence-e2e
-cargo test -p valence-e2e --test cross_backend_hops on_delete_hop
+# Matrix E2E (includes typed-field / on-delete-* catalog)
+# Soft-skip wire adapters unless VALENCE_MATRIX_STRICT=1
+cargo test -p valence-e2e --test matrix_catalog -- --test-threads=1
+cargo test -p valence-e2e --test cross_backend_hops --features cross-backend-hops -- --test-threads=1
+
+# Strict wire matrix (Postgres / Redis / Mongo services required)
+# export VALENCE_MATRIX_STRICT=1
+# export DATABASE_URL=postgres://valence:valence@127.0.0.1:5432/valence
+# export VALENCE_REDIS_URL=redis://127.0.0.1:6379
+# export VALENCE_MONGODB_URI=mongodb://127.0.0.1:27017
+# export VALENCE_BENCH_ROCKSDB=1
+# cargo test -p valence-e2e --features postgres,hybrid,surreal-rocksdb,cross-backend-hops -- --test-threads=1
+
+# Hybrid port contract (mem primary)
+cargo test -p uf-valence-backend-hybrid --test backend_contract -- --test-threads=1
 
 # Full AWS campaign (operator shell with cloud env loaded — see uf-live-cloud-lab)
 # cd ../../uf-live-cloud-lab/valence
@@ -42,9 +54,9 @@ cargo test -p valence-e2e --test model_runtime_catalog
 cargo test -p codegen-host -- --test-threads=1
 cargo test -p product-model-host -- --test-threads=1
 
-# Extended (RocksDB matrix)
+# Extended (RocksDB + STRICT — see .github/workflows/ci-extended.yml)
 export VALENCE_BENCH_ROCKSDB=1
-cargo test -p valence-e2e --features surreal-rocksdb -- --ignored
+cargo test -p valence-e2e --features surreal-rocksdb -- --test-threads=1
 ```
 
 ### Examples and docs

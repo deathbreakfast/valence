@@ -1,8 +1,8 @@
-//! Minimal SELECT WHERE / ORDER / LIMIT / OFFSET support for the in-memory adapter.
+//! SELECT WHERE / ORDER / LIMIT / OFFSET support for document-row adapters (mem, IndraDB).
 
 use crate::compiled_query::CompiledQuery;
 
-/// Apply simple `field = $param` equality filters from compiled SQL.
+/// Apply `field {=,>,>=,<,<=} $param` and `LIKE` filters from compiled SQL.
 pub fn apply_equality_where(
     mut rows: Vec<serde_json::Value>,
     compiled: &CompiledQuery,
@@ -29,15 +29,17 @@ pub fn apply_equality_where(
     }
 
     for (key, value) in &compiled.params {
-        let lt_needle = format!("< ${key}");
-        if let Some(lt_at) = clause.find(&lt_needle) {
-            let before = clause[..lt_at].trim_end();
-            let field = extract_field_ref(before);
-            if !field.is_empty() {
-                if let Some(threshold) = value.as_str() {
-                    rows.retain(|row| row_string_field(row, field).is_some_and(|s| s < threshold));
-                }
-            }
+        // Check longer ops first so `>=` / `<=` are not mistaken for `>` / `<`.
+        if apply_cmp_param(&mut rows, clause, key, value, ">=") {
+            continue;
+        }
+        if apply_cmp_param(&mut rows, clause, key, value, "<=") {
+            continue;
+        }
+        if apply_cmp_param(&mut rows, clause, key, value, ">") {
+            continue;
+        }
+        if apply_cmp_param(&mut rows, clause, key, value, "<") {
             continue;
         }
 
@@ -48,6 +50,7 @@ pub fn apply_equality_where(
             if !field.is_empty() {
                 rows.retain(|row| row_field_equals(row, field, value));
             }
+            continue;
         }
 
         let like_needle = format!("LIKE ${key}");
@@ -67,6 +70,83 @@ pub fn apply_equality_where(
         }
     }
     rows
+}
+
+/// Apply `field {op} $key` when present; returns true if this param was a comparison op.
+fn apply_cmp_param(
+    rows: &mut Vec<serde_json::Value>,
+    clause: &str,
+    key: &str,
+    value: &serde_json::Value,
+    op: &str,
+) -> bool {
+    let needle = format!("{op} ${key}");
+    let Some(at) = clause.find(&needle) else {
+        return false;
+    };
+    // Reject `>` matching inside `>=` (and `<` inside `<=`) when scanning shorter ops.
+    if (op == ">" || op == "<") && at > 0 && clause.as_bytes().get(at - 1) == Some(&b'=') {
+        return false;
+    }
+    let before = clause[..at].trim_end();
+    let field = extract_field_ref(before);
+    if field.is_empty() {
+        return true;
+    }
+    rows.retain(|row| row_field_cmp(row, field, value, op));
+    true
+}
+
+fn row_field_cmp(
+    row: &serde_json::Value,
+    field: &str,
+    threshold: &serde_json::Value,
+    op: &str,
+) -> bool {
+    let Some(actual) = nested_field(row, field) else {
+        return false;
+    };
+    let Some(ord) = compare_json_values(actual, threshold) else {
+        return false;
+    };
+    match op {
+        ">" => ord.is_gt(),
+        ">=" => ord.is_ge(),
+        "<" => ord.is_lt(),
+        "<=" => ord.is_le(),
+        _ => false,
+    }
+}
+
+fn compare_json_values(
+    actual: &serde_json::Value,
+    expected: &serde_json::Value,
+) -> Option<std::cmp::Ordering> {
+    if let (Some(a), Some(b)) = (json_as_i64(actual), json_as_i64(expected)) {
+        return Some(a.cmp(&b));
+    }
+    if let (Some(a), Some(b)) = (json_as_f64(actual), json_as_f64(expected)) {
+        return a.partial_cmp(&b);
+    }
+    match (actual.as_str(), expected.as_str()) {
+        (Some(a), Some(b)) => Some(a.cmp(b)),
+        _ => None,
+    }
+}
+
+fn json_as_i64(v: &serde_json::Value) -> Option<i64> {
+    if let Some(n) = v.as_i64() {
+        return Some(n);
+    }
+    if let Some(n) = v.as_u64() {
+        return i64::try_from(n).ok();
+    }
+    v.as_str().and_then(|s| s.trim().parse().ok())
+}
+
+fn json_as_f64(v: &serde_json::Value) -> Option<f64> {
+    v.as_f64()
+        .or_else(|| v.as_str().and_then(|s| s.trim().parse().ok()))
 }
 
 /// Apply ORDER BY field ASC/DESC plus LIMIT/OFFSET windowing.
@@ -256,6 +336,32 @@ mod tests {
         let out = apply_equality_where(rows, &compiled);
         assert_eq!(out.len(), 1);
         assert_eq!(out[0]["id"], "t1");
+    }
+
+    #[test]
+    fn filters_datetime_after_numeric_param() {
+        let compiled = CompiledQuery::new(
+            "SELECT id, body FROM typed_probe WHERE json_extract(body, '$.at') > $param_0".into(),
+            vec![("param_0".into(), serde_json::json!(2_000_000_000_i64))],
+        );
+        let rows = vec![
+            serde_json::json!({"id": "1", "at": 1_700_000_000_i64}),
+            serde_json::json!({"id": "2", "at": 2_100_000_000_i64}),
+        ];
+        let out = apply_equality_where(rows, &compiled);
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0]["id"], "2");
+    }
+
+    #[test]
+    fn filters_datetime_after_miss_when_all_before_threshold() {
+        let compiled = CompiledQuery::new(
+            "SELECT id, body FROM typed_probe WHERE json_extract(body, '$.at') > $param_0".into(),
+            vec![("param_0".into(), serde_json::json!(3_000_000_000_i64))],
+        );
+        let rows = vec![serde_json::json!({"id": "1", "at": 1_700_000_000_i64})];
+        let out = apply_equality_where(rows, &compiled);
+        assert!(out.is_empty());
     }
 
     #[test]

@@ -483,11 +483,14 @@ pub fn on_delete_cross_engine_secondary(primary: StorageAdapter) -> Option<Stora
     match primary {
         StorageAdapter::Mem => Some(StorageAdapter::Sqlite),
         StorageAdapter::Sqlite => Some(StorageAdapter::Mem),
-        StorageAdapter::Postgres | StorageAdapter::MongoDb | StorageAdapter::SurrealMem => {
-            Some(StorageAdapter::Sqlite)
-        }
+        StorageAdapter::Postgres
+        | StorageAdapter::MongoDb
+        | StorageAdapter::SurrealMem
+        | StorageAdapter::SurrealRocksdb
+        | StorageAdapter::IndraDb
+        | StorageAdapter::HybridIndraPg => Some(StorageAdapter::Sqlite),
         StorageAdapter::Redis => Some(StorageAdapter::Mem),
-        _ => None,
+        StorageAdapter::AcmeStub => None,
     }
 }
 

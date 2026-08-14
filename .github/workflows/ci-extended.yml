@@ -13,18 +13,57 @@ env:
   CARGO_TARGET_DIR: target-valence
   RUST_BACKTRACE: 1
   VALENCE_BENCH_ROCKSDB: "1"
+  VALENCE_MATRIX_STRICT: "1"
+  DATABASE_URL: postgres://valence:valence@127.0.0.1:5432/valence
+  VALENCE_REDIS_URL: redis://127.0.0.1:6379
+  VALENCE_MONGODB_URI: mongodb://127.0.0.1:27017
 
 jobs:
   e2e-extended:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: valence
+          POSTGRES_PASSWORD: valence
+          POSTGRES_DB: valence
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U valence -d valence"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      mongo:
+        image: mongo:7
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --eval 'db.runCommand({ ping: 1 })'"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
-      - name: valence-e2e default matrix
-        run: cargo test -p valence-e2e
-      - name: valence-e2e surreal-rocksdb matrix
-        run: cargo test -p valence-e2e --features surreal-rocksdb -- --ignored
+      - name: valence-e2e full matrix (strict wire adapters)
+        run: |
+          cargo test -p valence-e2e \
+            --features postgres,hybrid,surreal-rocksdb,cross-backend-hops \
+            -- --test-threads=1
       - name: valence-backend-surreal rocksdb persistence
         run: cargo test -p uf-valence-backend-surreal --features embedded-rocksdb --test rocksdb_persistence -- --test-threads=1
       - name: valence-backend-surreal contract (mem)
         run: cargo test -p uf-valence-backend-surreal --features embedded-mem --test backend_contract -- --test-threads=1
+      - name: hybrid port contract
+        run: cargo test -p uf-valence-backend-hybrid --test backend_contract -- --test-threads=1

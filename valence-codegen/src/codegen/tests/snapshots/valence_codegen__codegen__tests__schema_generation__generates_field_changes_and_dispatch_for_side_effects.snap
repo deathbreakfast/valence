@@ -1,5 +1,6 @@
 ---
 source: valence-codegen/src/codegen/tests/schema_generation.rs
+assertion_line: 183
 expression: generated
 ---
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -96,8 +97,8 @@ impl ScoreTrackerFieldChanges {
                 after.map(|a| a.user().clone()),
             ),
             value: valence::FieldChange::new(
-                before.map(|b| b.value().clone()),
-                after.map(|a| a.value().clone()),
+                before.map(|b| *b.value()),
+                after.map(|a| *a.value()),
             ),
         }
     }
@@ -826,11 +827,11 @@ impl<'a> ScoreTrackerMutable<'a> {
     }
     /// Apply changes locally without persisting to the database.
     pub fn build(mut self) -> ScoreTracker {
-        if let Some(val) = &self.user {
-            self.model.user = val.clone();
+        if let Some(val) = self.user.take() {
+            self.model.user = val;
         }
-        if let Some(val) = &self.value {
-            self.model.value = val.clone();
+        if let Some(val) = self.value.take() {
+            self.model.value = val;
         }
         self.model
     }

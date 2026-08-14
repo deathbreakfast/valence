@@ -58,8 +58,14 @@ fn matrix_surreal_mem_catalog() {
 #[test]
 #[cfg(feature = "surreal-rocksdb")]
 fn matrix_surreal_rocksdb_catalog() {
-    use valence_testkit::extended_store_available;
+    use valence_testkit::{extended_store_available, extended_store_skip_reason, matrix_strict};
     if !extended_store_available(StorageAdapter::SurrealRocksdb) {
+        assert!(
+            !matrix_strict(),
+            "VALENCE_MATRIX_STRICT: surreal-rocksdb unavailable — {}",
+            extended_store_skip_reason(StorageAdapter::SurrealRocksdb)
+                .unwrap_or_else(|| "unknown".into())
+        );
         eprintln!("VALENCE_BENCH_ROCKSDB not set — skipping");
         return;
     }

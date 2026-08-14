@@ -291,6 +291,15 @@ pub fn extended_store_available(storage: StorageAdapter) -> bool {
     extended_store_available_with_wire(storage, None)
 }
 
+/// When set (`1` / `true`), missing wire backends fail instead of soft-skip.
+///
+/// Extended CI and AWS campaign set this so green runs mean adapters actually executed.
+#[must_use]
+pub fn matrix_strict() -> bool {
+    std::env::var("VALENCE_MATRIX_STRICT")
+        .is_ok_and(|v| v == "1" || v.eq_ignore_ascii_case("true") || v.eq_ignore_ascii_case("yes"))
+}
+
 /// Whether this matrix row can run with optional wire builder options.
 pub fn extended_store_available_with_wire(
     storage: StorageAdapter,

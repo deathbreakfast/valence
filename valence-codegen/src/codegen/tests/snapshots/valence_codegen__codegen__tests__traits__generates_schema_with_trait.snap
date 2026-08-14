@@ -1,5 +1,6 @@
 ---
 source: valence-codegen/src/codegen/tests/traits.rs
+assertion_line: 149
 expression: generated
 ---
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -52,8 +53,8 @@ impl TestTraitAFieldChanges {
     pub fn compute(before: Option<&TestTraitA>, after: Option<&TestTraitA>) -> Self {
         Self {
             a_specific: valence::FieldChange::new(
-                before.map(|b| b.a_specific().clone()),
-                after.map(|a| a.a_specific().clone()),
+                before.map(|b| *b.a_specific()),
+                after.map(|a| *a.a_specific()),
             ),
             name: valence::FieldChange::new(
                 before.map(|b| b.name().clone()),
@@ -729,11 +730,11 @@ impl<'a> TestTraitAMutable<'a> {
     }
     /// Apply changes locally without persisting to the database.
     pub fn build(mut self) -> TestTraitA {
-        if let Some(val) = &self.a_specific {
-            self.model.a_specific = val.clone();
+        if let Some(val) = self.a_specific.take() {
+            self.model.a_specific = val;
         }
-        if let Some(val) = &self.name {
-            self.model.name = val.clone();
+        if let Some(val) = self.name.take() {
+            self.model.name = val;
         }
         self.model
     }

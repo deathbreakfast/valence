@@ -4,7 +4,7 @@ version = 4
 
 [[package]]
 name = "acme-valence-backend-stub"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "async-trait",
  "serde_json",
@@ -5636,7 +5636,7 @@ checksum = "b6f5e870be6c3b371b77fe0ee0bafb859fa4964b4404c27de1d380043c4dda20"
 
 [[package]]
 name = "uf-valence"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "surrealdb",
  "tempfile",
@@ -5656,7 +5656,7 @@ dependencies = [
 
 [[package]]
 name = "uf-valence-backend-hybrid"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "async-trait",
  "serde",
@@ -5670,7 +5670,7 @@ dependencies = [
 
 [[package]]
 name = "uf-valence-backend-indradb"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "async-trait",
  "indradb-lib",
@@ -5683,7 +5683,7 @@ dependencies = [
 
 [[package]]
 name = "uf-valence-backend-mem"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "async-trait",
  "serde_json",
@@ -5695,7 +5695,7 @@ dependencies = [
 
 [[package]]
 name = "uf-valence-backend-mongodb"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "async-trait",
  "chrono",
@@ -5710,7 +5710,7 @@ dependencies = [
 
 [[package]]
 name = "uf-valence-backend-postgres"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "async-trait",
  "serde_json",
@@ -5723,7 +5723,7 @@ dependencies = [
 
 [[package]]
 name = "uf-valence-backend-redis"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "async-trait",
  "redis",
@@ -5736,7 +5736,7 @@ dependencies = [
 
 [[package]]
 name = "uf-valence-backend-sql"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "serde",
  "serde_json",
@@ -5750,7 +5750,7 @@ dependencies = [
 
 [[package]]
 name = "uf-valence-backend-sqlite"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "async-trait",
  "serde_json",
@@ -5763,7 +5763,7 @@ dependencies = [
 
 [[package]]
 name = "uf-valence-backend-surreal"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "async-trait",
  "chrono",
@@ -5780,7 +5780,7 @@ dependencies = [
 
 [[package]]
 name = "uf-valence-codegen"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "anyhow",
  "insta",
@@ -5795,7 +5795,7 @@ dependencies = [
 
 [[package]]
 name = "uf-valence-core"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "async-trait",
  "chrono",
@@ -5814,7 +5814,7 @@ dependencies = [
 
 [[package]]
 name = "uf-valence-macros"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -5824,7 +5824,7 @@ dependencies = [
 
 [[package]]
 name = "uf-valence-schema-dsl"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -5833,7 +5833,7 @@ dependencies = [
 
 [[package]]
 name = "uf-valence-telemetry"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "serde_json",
 ]
@@ -5964,7 +5964,7 @@ dependencies = [
 
 [[package]]
 name = "valence-bench"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "anyhow",
  "clap",
@@ -5983,7 +5983,7 @@ dependencies = [
 
 [[package]]
 name = "valence-e2e"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "tokio",
  "uf-valence",
@@ -5992,7 +5992,7 @@ dependencies = [
 
 [[package]]
 name = "valence-testkit"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "acme-valence-backend-stub",
  "chrono",

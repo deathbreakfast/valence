@@ -90,8 +90,9 @@ pub fn extract_id_from_select_value(v: &serde_json::Value) -> Result<String> {
         serde_json::Value::String(s) => extract_id_from_record_display(s),
         serde_json::Value::Number(n) => Ok(n.to_string()),
         serde_json::Value::Bool(b) => Ok(b.to_string()),
-        // SQLite `SELECT id` rows are `{"id": "…"}` (see valence-backend-sql).
-        serde_json::Value::Object(map) if map.len() == 1 => {
+        // SQLite `SELECT id` rows are `{"id": "…"}`. Mem unique checks may return
+        // the full typed row (id plus other columns) or a nested RecordId object.
+        serde_json::Value::Object(map) => {
             if let Some(id) = map.get("id") {
                 return extract_id_from_select_value(id);
             }
@@ -102,5 +103,42 @@ pub fn extract_id_from_select_value(v: &serde_json::Value) -> Result<String> {
         _ => Err(Error::Internal(format!(
             "unexpected id value in query row: {v}"
         ))),
+    }
+}
+
+#[cfg(test)]
+mod extract_id_tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn string_and_wrapped_id() {
+        assert_eq!(
+            extract_id_from_select_value(&json!("mem-1")).unwrap(),
+            "mem-1"
+        );
+        assert_eq!(
+            extract_id_from_select_value(&json!({"id": "mem-1"})).unwrap(),
+            "mem-1"
+        );
+    }
+
+    #[test]
+    fn nested_record_id_object() {
+        let v = json!({"id": "mem-9", "table": "account_phone"});
+        assert_eq!(extract_id_from_select_value(&v).unwrap(), "mem-9");
+    }
+
+    #[test]
+    fn full_typed_row_with_nested_id() {
+        let v = json!({
+            "account": {"id": "acc-1", "table": "account"},
+            "created_at": 1,
+            "e164": "+15555550102",
+            "id": {"id": "mem-9", "table": "account_phone"},
+            "updated_at": 1,
+            "verified_at": null
+        });
+        assert_eq!(extract_id_from_select_value(&v).unwrap(), "mem-9");
     }
 }

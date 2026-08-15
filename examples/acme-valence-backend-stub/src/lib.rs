@@ -77,8 +77,38 @@ impl DatabaseBackend for AcmeStubBackend {
         }
     }
 
-    async fn execute_compiled_query(&self, _: &CompiledQuery) -> Result<Vec<serde_json::Value>> {
-        Ok(vec![])
+    async fn execute_compiled_query(
+        &self,
+        compiled: &CompiledQuery,
+    ) -> Result<Vec<serde_json::Value>> {
+        let q = compiled.query_string.trim();
+        let upper = q.to_ascii_uppercase();
+        let Some(from_idx) = upper.find(" FROM ") else {
+            return Ok(vec![]);
+        };
+        let table = q[from_idx + 6..]
+            .split_whitespace()
+            .next()
+            .unwrap_or("")
+            .trim()
+            .trim_end_matches(';');
+        if table.is_empty() {
+            return Ok(vec![]);
+        }
+        let prefix = format!("{table}:");
+        let store = self.store.read().await;
+        let mut rows: Vec<serde_json::Value> = store
+            .iter()
+            .filter(|(key, _)| key.starts_with(&prefix))
+            .map(|(_, value)| value.clone())
+            .collect();
+        drop(store);
+        if let Some(limit_idx) = upper.rfind(" LIMIT ") {
+            if let Ok(limit) = q[limit_idx + 7..].trim().parse::<usize>() {
+                rows.truncate(limit);
+            }
+        }
+        Ok(rows)
     }
 
     async fn get_record(&self, table: &str, id: &str) -> Result<Option<serde_json::Value>> {

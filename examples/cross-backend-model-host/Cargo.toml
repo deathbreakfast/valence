@@ -23,7 +23,7 @@ async-trait = { workspace = true }
 tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
 
 [build-dependencies]
-valence-codegen = { path = "../../valence-codegen", package = "uf-valence-codegen", version = "0.1.4" }
+valence-codegen = { path = "../../valence-codegen", package = "uf-valence-codegen", version = "0.1.5" }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }

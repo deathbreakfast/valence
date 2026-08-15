@@ -19,7 +19,7 @@ async-trait = { workspace = true }
 serde_json = { workspace = true }
 sqlx = { version = "0.8", features = ["runtime-tokio", "sqlite", "json"] }
 tokio = { workspace = true }
-valence-backend-sql = { path = "../valence-backend-sql", package = "uf-valence-backend-sql", version = "0.1.4" }
+valence-backend-sql = { path = "../valence-backend-sql", package = "uf-valence-backend-sql", version = "0.1.5" }
 valence-core = { workspace = true }
 
 [dev-dependencies]

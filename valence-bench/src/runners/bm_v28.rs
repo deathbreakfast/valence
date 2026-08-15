@@ -83,7 +83,9 @@ mod tests {
         let report = run(&context(storage)).await.expect("bm-v28 report");
         assert_eq!(report.status, "ok");
         assert!(report.ops_per_sec.is_some_and(|rate| rate > 0.0));
-        assert_eq!(report.error_rate, Some(0.0));
+        assert!(report
+            .error_rate
+            .is_some_and(|rate| rate.abs() <= f64::EPSILON));
         let read = report.read.expect("read metrics");
         assert!(read.total_ops > 0);
         assert!(read.op_ms.count > 0);

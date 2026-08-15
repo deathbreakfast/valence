@@ -16,10 +16,10 @@ serde_json = { workspace = true }
 async-trait = { workspace = true }
 
 [build-dependencies]
-valence-codegen = { path = "../../valence-codegen", package = "uf-valence-codegen", version = "0.1.4" }
+valence-codegen = { path = "../../valence-codegen", package = "uf-valence-codegen", version = "0.1.5" }
 
 [package.metadata.cargo-machete]
-ignored = ["async-trait", "serde", "serde_json"]
+ignored = ["async-trait", "serde", "serde_json", "chrono"]
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }

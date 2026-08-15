@@ -212,7 +212,7 @@ mod tests {
         assert!(result.achieved_read_ops_per_sec > 0.0);
         assert!(result.total_ops > 0);
         assert_eq!(result.error_count, 0);
-        assert_eq!(result.error_rate, 0.0);
+        assert!(result.error_rate.abs() <= f64::EPSILON);
         assert!(result.op_ms.count > 0);
         assert!(result.op_ms.p95 >= 0.0);
     }

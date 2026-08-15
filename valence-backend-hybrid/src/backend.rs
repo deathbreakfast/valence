@@ -1,5 +1,6 @@
 //! Thin [`DatabaseBackend`] dispatch for the hybrid IndraDB + SQL adapter.
 
+use std::any::Any;
 use std::sync::Arc;
 
 use serde_json::Value;
@@ -83,6 +84,18 @@ impl HybridBackend {
         &self.policy
     }
 
+    /// Drop the Indra copy of a record so the next get is a primary miss.
+    ///
+    /// The miss path re-populates the mirror. Unique-key hammers call this after
+    /// write-through create so they do not measure a hot cache hit.
+    ///
+    /// # Errors
+    ///
+    /// Propagates IndraDB delete errors.
+    pub async fn invalidate_cached_record(&self, table: &str, id: &str) -> Result<()> {
+        self.records.invalidate(&self.mirror, table, id).await
+    }
+
     /// Read-through get: mirror hit, else primary populate.
     async fn get_record_inner(&self, table: &str, id: &str) -> Result<Option<Value>> {
         if let Some(hit) = self
@@ -118,6 +131,10 @@ impl DatabaseBackend for HybridBackend {
             supports_graph_edges: true,
             telemetry_label: "hybrid",
         }
+    }
+
+    fn as_any_local(&self) -> Option<&dyn Any> {
+        Some(self as &dyn Any)
     }
 
     async fn use_namespace(&self, ns: &str, db_name: &str) -> Result<()> {

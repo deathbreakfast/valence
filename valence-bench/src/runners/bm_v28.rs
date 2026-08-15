@@ -1,4 +1,7 @@
-//! bm-v28: sustained get-by-id firehose for marketing capacity rows.
+//! bm-v28: sustained hot get-by-id firehose for marketing capacity rows.
+//!
+//! Seeds 64 records, then round-robins `get_record` on that set. Hybrid
+//! write-through already fills IndraDB, so this hose is cached point-gets.
 //!
 //! Run with:
 //!

@@ -198,3 +198,56 @@ async fn record_lru_evicts_oldest() {
         .expect("get")
         .is_some());
 }
+
+#[tokio::test]
+async fn invalidate_cached_record_then_get_reads_primary_happy() {
+    let mem = Arc::new(InMemoryBackend::new());
+    let primary: Arc<dyn DatabaseBackend> = mem.clone();
+    let hybrid = HybridBackend::builder()
+        .primary(primary)
+        .warm_edges(false)
+        .build()
+        .await
+        .expect("build");
+    hybrid
+        .create_record("counter", serde_json::json!({"id": "a", "n": 1}))
+        .await
+        .expect("create");
+    hybrid
+        .invalidate_cached_record("counter", "a")
+        .await
+        .expect("invalidate");
+    mem.update_record("counter", "a", serde_json::json!({"id": "a", "n": 99}))
+        .await
+        .expect("primary update");
+    let row = hybrid.get_record("counter", "a").await.expect("get");
+    assert_eq!(
+        row.and_then(|v| v.get("n").cloned()),
+        Some(serde_json::json!(99))
+    );
+}
+
+#[tokio::test]
+async fn unique_get_without_invalidate_keeps_stale_mirror_sad() {
+    let mem = Arc::new(InMemoryBackend::new());
+    let primary: Arc<dyn DatabaseBackend> = mem.clone();
+    let hybrid = HybridBackend::builder()
+        .primary(primary)
+        .warm_edges(false)
+        .build()
+        .await
+        .expect("build");
+    hybrid
+        .create_record("counter", serde_json::json!({"id": "a", "n": 1}))
+        .await
+        .expect("create");
+    mem.update_record("counter", "a", serde_json::json!({"id": "a", "n": 99}))
+        .await
+        .expect("primary update");
+    let row = hybrid.get_record("counter", "a").await.expect("get");
+    assert_eq!(
+        row.and_then(|v| v.get("n").cloned()),
+        Some(serde_json::json!(1)),
+        "write-through leaves Indra hot; unique gets must invalidate first"
+    );
+}

@@ -211,7 +211,7 @@ async fn run_matrix_slice(args: &MatrixArgs, wire: WireBackendOptions) -> Result
         "hop-pairs" => vec!["bm-v24"],
         "hop-chains" => vec!["bm-v25"],
         "hybrid-compare" => vec!["bm-v26"],
-        "marketing-capacity" => vec!["bm-v5", "bm-v28"],
+        "marketing-capacity" => vec!["bm-v5", "bm-v28", "bm-v20", "bm-v21"],
         other => bail!("unknown matrix slice: {other}"),
     };
 
@@ -230,7 +230,7 @@ async fn run_matrix_slice(args: &MatrixArgs, wire: WireBackendOptions) -> Result
             }
             let plan = resolve_experiment(exp, None)?;
             let mut sweep = SweepParams::default();
-            if *exp == "bm-v11" || *exp == "bm-v12" {
+            if *exp == "bm-v11" || *exp == "bm-v12" || *exp == "bm-v21" {
                 sweep.prefill = if *exp == "bm-v12" { 1_000 } else { 10_000 };
             }
             if *exp == "bm-v5" || *exp == "bm-v28" {

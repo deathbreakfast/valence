@@ -20,6 +20,8 @@ Create+get op p95 (bm-v0) spans mem **0.008 ms** to postgres **~2.8 ms**. Under 
 
 Hot get-by-id p95 (bm-v20 cache-off path): mem **0.002 ms**, redis **~0.27 ms**, postgres **~0.76 ms**. Compiled and ORM query latency grows with graph depth and filter shape. Hybrid IndraDB cache with Postgres primary improves hot get/query/hop mixes versus Postgres alone on the same hardware class.
 
+bm-v29 (`prod-mix-v1`) reports successful mixed ops/s plus p95 for create, hot get, cache-off primary get, and equality filter on one client. Isolated bm-v5 / bm-v28 / bm-v20 / bm-v21 cells each give the store to one class; the mixed hose shares those workers and locks, so mixed throughput sits below any isolated peak and cannot be recovered by adding those peaks. Run it on AWS `c6i.xlarge` `--release` (`marketing-mixed` slice). Do not quote laptop smoke as a capacity number.
+
 ## Privacy and overhead
 
 Enabling privacy evaluation on reads adds measurable latency versus a forced bypass. Treat privacy-on as the production default when quoting capacity; bypass figures are upper bounds only.

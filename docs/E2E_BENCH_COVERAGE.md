@@ -155,8 +155,10 @@ Assertions per layout: seed, loaded-model nav, missing mid-hop empty. Nested EXI
 | bm-v23 | Complex query (multi-predicate + ORDER BY + pagination) |
 | bm-v24 | Cross-backend hop depth-2 |
 | bm-v25 | Nested hop chain depth-3/4 |
+| bm-v28 | Get-by-id firehose (read ops/s + sampled p95) |
+| bm-v29 | Mixed OLTP `prod-mix-v1` (create / hot get / cold primary get / eq filter) |
 
-Slices: `adapter-minimal`, `write-sweep`, `query-depth`, `overhead`, `read-hammer`, `query-real`, `hop-pairs`, `hop-chains`.
+Slices: `adapter-minimal`, `write-sweep`, `query-depth`, `overhead`, `read-hammer`, `query-real`, `hop-pairs`, `hop-chains`, `marketing-capacity`, `marketing-mixed`.
 
 ## Quality gates
 

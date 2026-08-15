@@ -55,6 +55,29 @@ pub struct ReadMetrics {
     pub op_ms: MetricStats,
 }
 
+/// Per-class mixed-OLTP metrics (`prod-mix-v1`).
+#[derive(Debug, Clone, Serialize)]
+pub struct MixedClassMetrics {
+    pub ops: u64,
+    pub error_count: usize,
+    pub share: f64,
+    pub op_ms: MetricStats,
+}
+
+/// Aggregate mixed-OLTP metrics for bm-v29.
+#[derive(Debug, Clone, Serialize)]
+pub struct MixedWorkloadMetrics {
+    pub scenario_id: String,
+    pub achieved_mixed_ops_per_sec: f64,
+    pub error_rate: f64,
+    pub total_ops: u64,
+    pub error_count: usize,
+    pub create: MixedClassMetrics,
+    pub hot_get: MixedClassMetrics,
+    pub cold_get: MixedClassMetrics,
+    pub eq_filter: MixedClassMetrics,
+}
+
 /// JSON report emitted after each benchmark run.
 #[derive(Debug, Serialize)]
 pub struct BenchReport {
@@ -82,6 +105,8 @@ pub struct BenchReport {
     pub write: Option<WriteMetrics>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub read: Option<ReadMetrics>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mixed: Option<MixedWorkloadMetrics>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub prefill_count: Option<usize>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -130,6 +155,7 @@ impl BenchReport {
             sweep: None,
             write: None,
             read: None,
+            mixed: None,
             prefill_count: None,
             error_rate: None,
             bench_clients: None,
@@ -159,5 +185,55 @@ impl BenchReport {
             matrix.slug(),
             Self::hardware_profile()
         ))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::stats::MetricStats;
+    use valence_testkit::{MatrixSpec, StorageAdapter, TelemetryAdapter, Topology};
+
+    fn sample_class(ops: u64, share: f64) -> MixedClassMetrics {
+        MixedClassMetrics {
+            ops,
+            error_count: 0,
+            share,
+            op_ms: MetricStats::summarize(vec![0.1, 0.2, 0.3]),
+        }
+    }
+
+    #[test]
+    fn mixed_workload_metrics_serialize() {
+        let matrix = MatrixSpec {
+            storage: StorageAdapter::Sqlite,
+            telemetry: TelemetryAdapter::Off,
+            topology: Topology::Embedded,
+        };
+        let mut report = BenchReport::base("bm-v29", &matrix);
+        report.scenario_id = Some("prod-mix-v1".into());
+        report.mixed = Some(MixedWorkloadMetrics {
+            scenario_id: "prod-mix-v1".into(),
+            achieved_mixed_ops_per_sec: 123.4,
+            error_rate: 0.0,
+            total_ops: 1000,
+            error_count: 0,
+            create: sample_class(100, 0.10),
+            hot_get: sample_class(550, 0.55),
+            cold_get: sample_class(100, 0.10),
+            eq_filter: sample_class(250, 0.25),
+        });
+        let json = serde_json::to_value(&report).expect("serialize");
+        assert_eq!(json["experiment"], "bm-v29");
+        assert_eq!(json["scenario_id"], "prod-mix-v1");
+        assert_eq!(json["mixed"]["scenario_id"], "prod-mix-v1");
+        assert_eq!(json["mixed"]["total_ops"], 1000);
+        assert_eq!(json["mixed"]["create"]["ops"], 100);
+        assert_eq!(json["mixed"]["hot_get"]["ops"], 550);
+        assert_eq!(json["mixed"]["cold_get"]["ops"], 100);
+        assert_eq!(json["mixed"]["eq_filter"]["ops"], 250);
+        assert!(json["mixed"]["eq_filter"]["op_ms"]["p95"].is_number());
+        assert!(json.get("write").is_none());
+        assert!(json.get("read").is_none());
     }
 }

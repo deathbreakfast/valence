@@ -156,9 +156,10 @@ Assertions per layout: seed, loaded-model nav, missing mid-hop empty. Nested EXI
 | bm-v24 | Cross-backend hop depth-2 |
 | bm-v25 | Nested hop chain depth-3/4 |
 | bm-v28 | Get-by-id firehose (read ops/s + sampled p95) |
-| bm-v29 | Mixed OLTP `prod-mix-v1` (create / hot get / cold primary get / eq filter) |
+| bm-v29 | Mixed OLTP `prod-mix-v1` (create / hot get / cold primary get / eq filter), one client |
+| bm-v30 | Mixed OLTP `prod-mix-v1` per-client tables for N=2/4 app nodes |
 
-Slices: `adapter-minimal`, `write-sweep`, `query-depth`, `overhead`, `read-hammer`, `query-real`, `hop-pairs`, `hop-chains`, `marketing-capacity`, `marketing-mixed`.
+Slices: `adapter-minimal`, `write-sweep`, `query-depth`, `overhead`, `read-hammer`, `query-real`, `hop-pairs`, `hop-chains`, `marketing-capacity`, `marketing-mixed`, `marketing-mixed-scale`.
 
 ## Quality gates
 

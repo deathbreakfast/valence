@@ -1,4 +1,4 @@
-//! Synthetic Valence benchmark CLI (bm-v0..bm-v29 experiments).
+//! Synthetic Valence benchmark CLI (bm-v0..bm-v30 experiments).
 
 #![allow(dead_code)]
 #![allow(clippy::useless_format)]
@@ -105,7 +105,7 @@ struct RunArgs {
 
 #[derive(Parser)]
 struct MatrixArgs {
-    /// Registered matrix slice name, including `marketing-capacity` and `marketing-mixed`.
+    /// Registered matrix slice name, including `marketing-capacity`, `marketing-mixed`, and `marketing-mixed-scale`.
     slice: String,
     #[arg(long, default_value = "mem,sqlite")]
     storage: String,
@@ -213,6 +213,7 @@ async fn run_matrix_slice(args: &MatrixArgs, wire: WireBackendOptions) -> Result
         "hybrid-compare" => vec!["bm-v26"],
         "marketing-capacity" => vec!["bm-v5", "bm-v28", "bm-v20", "bm-v21"],
         "marketing-mixed" => vec!["bm-v29"],
+        "marketing-mixed-scale" => vec!["bm-v30"],
         other => bail!("unknown matrix slice: {other}"),
     };
 
@@ -238,7 +239,7 @@ async fn run_matrix_slice(args: &MatrixArgs, wire: WireBackendOptions) -> Result
                 sweep.duration_secs = 10;
                 sweep.concurrency = 32;
             }
-            if *exp == "bm-v29" {
+            if *exp == "bm-v29" || *exp == "bm-v30" {
                 sweep.prefill = 10_000;
                 sweep.duration_secs = 30;
                 sweep.concurrency = 32;
@@ -254,7 +255,7 @@ async fn run_matrix_slice(args: &MatrixArgs, wire: WireBackendOptions) -> Result
                 Ok(report) => report,
                 Err(e) => {
                     eprintln!("error {} @ {}: {e:#}", ctx.plan.id, storage.slug());
-                    if *exp == "bm-v29" {
+                    if *exp == "bm-v29" || *exp == "bm-v30" {
                         return Err(e);
                     }
                     let mut report = crate::report::BenchReport::base(&ctx.plan.id, &matrix);

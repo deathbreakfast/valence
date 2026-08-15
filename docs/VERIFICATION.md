@@ -43,6 +43,8 @@ cargo test -p valence-e2e --test cross_backend_hops --features cross-backend-hop
 cargo test -p valence-bench -- --test-threads=1
 # cargo run -p valence-bench -- run --experiment bm-v29 --storage sqlite \
 #   --duration-secs 2 --concurrency 2 --prefill 128
+# VALENCE_BENCH_CLIENT_INDEX=0 cargo run -p valence-bench -- run --experiment bm-v30 --storage sqlite \
+#   --duration-secs 2 --concurrency 2 --prefill 128
 
 # Hybrid port contract (mem primary)
 cargo test -p uf-valence-backend-hybrid --test backend_contract -- --test-threads=1

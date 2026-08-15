@@ -3,7 +3,7 @@ name = "valence-bench"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "Valence benchmark CLI (bm-v0..bm-v29)"
+description = "Valence benchmark CLI (bm-v0..bm-v30)"
 publish = false
 
 [features]

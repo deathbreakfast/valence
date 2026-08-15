@@ -64,7 +64,7 @@ pub struct MixedClassMetrics {
     pub op_ms: MetricStats,
 }
 
-/// Aggregate mixed-OLTP metrics for bm-v29.
+/// Aggregate mixed-OLTP metrics for prod-mix-v1 (bm-v29 / bm-v30).
 #[derive(Debug, Clone, Serialize)]
 pub struct MixedWorkloadMetrics {
     pub scenario_id: String,

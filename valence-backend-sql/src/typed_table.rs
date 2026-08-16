@@ -3,6 +3,8 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 
+use tokio::sync::Mutex as AsyncMutex;
+
 use serde_json::{Map, Value};
 use sqlx::{Column, Row};
 use valence_core::error::{Error, Result};
@@ -57,6 +59,10 @@ impl WriteEnsureCache {
 fn registry_table(table: &str) -> bool {
     SchemaRegistry::global().get_full_schema(table).is_some()
 }
+
+/// Serialize SQLite `CREATE` / `ALTER` so concurrent mixed-OLTP writers cannot
+/// inspect a stale layout and then decode a row by positional index.
+static SQLITE_SCHEMA_LOCK: AsyncMutex<()> = AsyncMutex::const_new(());
 
 /// Create-table DDL for SQLite.
 pub fn ensure_typed_ddl_sqlite(layout: &StorageLayout) -> Result<String> {
@@ -396,6 +402,10 @@ pub async fn ensure_layout_for_write_sqlite(
     if ensured.covers(&layout.table, layout) {
         return Ok(());
     }
+    let _schema = SQLITE_SCHEMA_LOCK.lock().await;
+    if ensured.covers(&layout.table, layout) {
+        return Ok(());
+    }
     match inspect_typed_layout_sqlite(pool, &layout.table).await? {
         None => {
             ensure_typed_table_sqlite(pool, layout).await?;
@@ -726,49 +736,7 @@ fn row_from_sqlx_sqlite(
     layout: &StorageLayout,
     row: &sqlx::sqlite::SqliteRow,
 ) -> Value {
-    let mut fields = Map::new();
-    let mut id = String::new();
-    for (i, f) in layout.fields.iter().enumerate() {
-        if f.name == "id" {
-            id = row.try_get::<String, _>(i).unwrap_or_default();
-            continue;
-        }
-        let val = match f.storage {
-            FieldStorage::Integer => {
-                let n: Option<i64> = row.try_get(i).unwrap_or(None);
-                n.map(|x| Value::Number(x.into())).unwrap_or(Value::Null)
-            }
-            FieldStorage::Boolean => {
-                let n: Option<i64> = row.try_get(i).unwrap_or(None);
-                n.map(|x| Value::Bool(x != 0)).unwrap_or(Value::Null)
-            }
-            FieldStorage::Decimal => {
-                let n: Option<f64> = row.try_get(i).unwrap_or(None);
-                n.and_then(serde_json::Number::from_f64)
-                    .map(Value::Number)
-                    .unwrap_or(Value::Null)
-            }
-            FieldStorage::Json | FieldStorage::Currency => {
-                let s: Option<String> = row.try_get(i).unwrap_or(None);
-                match s.as_deref() {
-                    None | Some("") => Value::Null,
-                    Some("null") => Value::Null,
-                    Some(t) => decode_sqlite_text_json(t),
-                }
-            }
-            FieldStorage::String | FieldStorage::Date => {
-                // Keep "" as a string. Mapping empty → Null breaks required `String`
-                // fields (e.g. Neutrino audit `error_message`) on read-back.
-                let s: Option<String> = row.try_get(i).unwrap_or(None);
-                match s {
-                    None => Value::Null,
-                    Some(t) => Value::String(t),
-                }
-            }
-        };
-        fields.insert(f.name.clone(), val);
-    }
-    row_from_columns(table, &id, fields)
+    map_select_row_sqlite_with_layout(table, layout, row)
 }
 
 fn row_from_sqlx_postgres(

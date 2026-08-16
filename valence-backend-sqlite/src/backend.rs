@@ -82,6 +82,10 @@ impl SqliteBackend {
     /// checkout sees the same store. sqlx's default pool size otherwise opens isolated
     /// private databases per connection for bare `:memory:`.
     ///
+    /// The statement cache is left empty. Mixed-OLTP can add columns while other
+    /// connections still run `SELECT *`; a cached column list then panics inside sqlx
+    /// when the live row is longer.
+    ///
     /// # Errors
     ///
     /// Returns [`Error::Database`] if connecting or ensuring the edges schema fails.
@@ -89,7 +93,8 @@ impl SqliteBackend {
         let options = SqliteConnectOptions::from_str(path)
             .or_else(|_| SqliteConnectOptions::from_str(&format!("sqlite:{path}")))
             .map_err(|e| Error::database(e.to_string()))?
-            .create_if_missing(true);
+            .create_if_missing(true)
+            .statement_cache_capacity(0);
         let memory =
             path.contains(":memory:") || path.contains("mode=memory") || path == ":memory:";
         let mut pool_opts = SqlitePoolOptions::new();

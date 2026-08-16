@@ -168,6 +168,28 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn bm_v29_mixed_sqlite_campaign_floor_happy() {
+        let ctx = RunContext {
+            matrix: matrix_from_cli("sqlite", "off", "embedded").expect("matrix"),
+            plan: resolve_experiment("bm-v29", None).expect("experiment"),
+            warmup: 0,
+            sweep: SweepParams {
+                prefill: 10_000,
+                duration_secs: 5,
+                concurrency: 32,
+                ..SweepParams::default()
+            },
+            wire: WireBackendOptions::default(),
+        };
+        let report = run(&ctx).await.expect("campaign-floor sqlite");
+        assert_eq!(report.status, "ok", "{:?}", report.error);
+        assert!(report
+            .error_rate
+            .is_some_and(|rate| rate < crate::workload::mixed::MAX_ERROR_RATE));
+        assert!(report.ops_per_sec.is_some_and(|rate| rate > 0.0));
+    }
+
+    #[tokio::test]
     async fn bm_v29_cache_off_primary_semantics() {
         let report = run(&context("sqlite")).await.expect("sqlite cache-off");
         assert_eq!(report.status, "ok");

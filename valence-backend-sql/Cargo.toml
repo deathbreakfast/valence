@@ -19,7 +19,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 sqlx = { version = "0.8", features = ["runtime-tokio", "sqlite", "postgres", "json"] }
 thiserror = { workspace = true }
-tokio = { workspace = true }
+tokio = { workspace = true, features = ["sync"] }
 tracing = { workspace = true }
 uuid = { workspace = true }
 valence-core = { workspace = true }
@@ -28,4 +28,4 @@ valence-core = { workspace = true }
 workspace = true
 
 [package.metadata.cargo-machete]
-ignored = ["serde", "thiserror", "tokio"]
+ignored = ["serde", "thiserror"]

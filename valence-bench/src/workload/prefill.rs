@@ -31,6 +31,9 @@ pub async fn prefill_table(
                         "id": id,
                         "idx": i,
                         "label": format!("row-{i}"),
+                        // Match mix create payloads so concurrent writers do not
+                        // ALTER-add `n` mid-firehose on shared wire stores.
+                        "n": i,
                     }),
                 )
                 .await?;

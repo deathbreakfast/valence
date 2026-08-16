@@ -64,6 +64,9 @@ fn registry_table(table: &str) -> bool {
 /// inspect a stale layout and then decode a row by positional index.
 static SQLITE_SCHEMA_LOCK: AsyncMutex<()> = AsyncMutex::const_new(());
 
+/// Serialize Postgres `CREATE` / `ALTER` for the same concurrent-write hazard.
+static POSTGRES_SCHEMA_LOCK: AsyncMutex<()> = AsyncMutex::const_new(());
+
 /// Create-table DDL for SQLite.
 pub fn ensure_typed_ddl_sqlite(layout: &StorageLayout) -> Result<String> {
     layout.to_ddl(KnownEngines::SQLITE)
@@ -447,6 +450,10 @@ pub async fn ensure_layout_for_write_postgres(
     if ensured.covers(&layout.table, layout) {
         return Ok(());
     }
+    let _schema = POSTGRES_SCHEMA_LOCK.lock().await;
+    if ensured.covers(&layout.table, layout) {
+        return Ok(());
+    }
     match inspect_typed_layout_postgres(pool, &layout.table).await? {
         None => {
             ensure_typed_table_postgres(pool, layout).await?;
@@ -744,40 +751,7 @@ fn row_from_sqlx_postgres(
     layout: &StorageLayout,
     row: &sqlx::postgres::PgRow,
 ) -> Value {
-    let mut fields = Map::new();
-    let mut id = String::new();
-    for (i, f) in layout.fields.iter().enumerate() {
-        if f.name == "id" {
-            id = row.try_get::<String, _>(i).unwrap_or_default();
-            continue;
-        }
-        let val = match f.storage {
-            FieldStorage::Integer => {
-                let n: Option<i64> = row.try_get(i).ok();
-                n.map(|x| Value::Number(x.into())).unwrap_or(Value::Null)
-            }
-            FieldStorage::Boolean => {
-                let n: Option<bool> = row.try_get(i).ok();
-                n.map(Value::Bool).unwrap_or(Value::Null)
-            }
-            FieldStorage::Decimal => {
-                let n: Option<f64> = row.try_get(i).ok();
-                n.and_then(serde_json::Number::from_f64)
-                    .map(Value::Number)
-                    .unwrap_or(Value::Null)
-            }
-            FieldStorage::Json | FieldStorage::Currency => {
-                let v: Option<Value> = row.try_get(i).ok();
-                v.unwrap_or(Value::Null)
-            }
-            FieldStorage::String | FieldStorage::Date => {
-                let s: Option<String> = row.try_get(i).ok();
-                s.map(Value::String).unwrap_or(Value::Null)
-            }
-        };
-        fields.insert(f.name.clone(), val);
-    }
-    row_from_columns(table, &id, fields)
+    map_select_row_postgres_with_layout(table, layout, row)
 }
 
 /// Update replaces all non-id columns from content.
@@ -1023,8 +997,70 @@ fn map_select_row_sqlite_with_layout(
     row_from_columns(table, &id, fields)
 }
 
+fn map_select_row_postgres_with_layout(
+    table: &str,
+    layout: &StorageLayout,
+    row: &sqlx::postgres::PgRow,
+) -> Value {
+    let mut fields = Map::new();
+    let mut id = String::new();
+    for f in &layout.fields {
+        if f.name == "id" {
+            id = row
+                .try_get::<String, _>(f.name.as_str())
+                .unwrap_or_default();
+            continue;
+        }
+        let val = match f.storage {
+            FieldStorage::Integer => {
+                let n: Option<i64> = row.try_get(f.name.as_str()).ok().flatten();
+                n.map(|x| Value::Number(x.into())).unwrap_or(Value::Null)
+            }
+            FieldStorage::Boolean => {
+                let n: Option<bool> = row.try_get(f.name.as_str()).ok().flatten();
+                n.map(Value::Bool).unwrap_or(Value::Null)
+            }
+            FieldStorage::Decimal => {
+                let n: Option<f64> = row.try_get(f.name.as_str()).ok().flatten();
+                n.and_then(serde_json::Number::from_f64)
+                    .map(Value::Number)
+                    .unwrap_or(Value::Null)
+            }
+            FieldStorage::Json | FieldStorage::Currency => {
+                let v: Option<Value> = row.try_get(f.name.as_str()).ok().flatten();
+                v.unwrap_or(Value::Null)
+            }
+            FieldStorage::String | FieldStorage::Date => {
+                let s: Option<String> = row.try_get(f.name.as_str()).ok().flatten();
+                s.map(Value::String).unwrap_or(Value::Null)
+            }
+        };
+        fields.insert(f.name.clone(), val);
+    }
+    for col in row.columns() {
+        let name = col.name();
+        if name.eq_ignore_ascii_case("id") || fields.contains_key(name) {
+            continue;
+        }
+        if let Ok(v) = row.try_get::<Value, _>(name) {
+            fields.insert(name.to_string(), v);
+        } else if let Ok(s) = row.try_get::<String, _>(name) {
+            fields.insert(name.to_string(), Value::String(s));
+        } else if let Ok(i) = row.try_get::<i64, _>(name) {
+            fields.insert(name.to_string(), Value::Number(i.into()));
+        }
+    }
+    if id.is_empty() {
+        return Value::Object(fields);
+    }
+    row_from_columns(table, &id, fields)
+}
+
 pub fn map_select_row_postgres(table: &str, row: &sqlx::postgres::PgRow) -> Value {
     use sqlx::Column;
+    if let Ok(layout) = StorageLayout::from_registry_table(table) {
+        return map_select_row_postgres_with_layout(table, &layout, row);
+    }
     let cols = row.columns();
     let mut fields = Map::new();
     let mut id = String::new();

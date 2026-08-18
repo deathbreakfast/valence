@@ -24,7 +24,7 @@ pub fn apply_equality_where(
     if clause.to_uppercase().contains(" OR ") {
         return rows
             .into_iter()
-            .filter(|row| or_equality_matches(row, clause, &compiled.params))
+            .filter(|row| or_clause_matches(row, clause, &compiled.params))
             .collect();
     }
 
@@ -55,14 +55,14 @@ pub fn apply_equality_where(
 
         let like_needle = format!("LIKE ${key}");
         if clause.to_uppercase().contains(&like_needle.to_uppercase()) {
-            if let Some(prefix) = value.as_str() {
-                let prefix = prefix.trim_end_matches('%').to_string();
+            if let Some(pattern) = value.as_str() {
                 if let Some(like_at) = clause.to_uppercase().find(" LIKE ") {
                     let before = clause[..like_at].trim_end();
                     let field = extract_field_ref(before);
                     if !field.is_empty() {
                         rows.retain(|row| {
-                            row_string_field(row, field).is_some_and(|s| s.starts_with(&prefix))
+                            row_string_field(row, field)
+                                .is_some_and(|s| sql_like_matches(s, pattern))
                         });
                     }
                 }
@@ -70,6 +70,21 @@ pub fn apply_equality_where(
         }
     }
     rows
+}
+
+/// Match a SQL `LIKE` pattern with `%` wildcards (`%term%`, `term%`, `%term`, exact).
+fn sql_like_matches(value: &str, pattern: &str) -> bool {
+    let starts = pattern.starts_with('%');
+    let ends = pattern.ends_with('%');
+    match (starts, ends) {
+        (true, true) => {
+            let inner = &pattern[1..pattern.len().saturating_sub(1)];
+            value.contains(inner)
+        }
+        (false, true) => value.starts_with(&pattern[..pattern.len().saturating_sub(1)]),
+        (true, false) => value.ends_with(&pattern[1..]),
+        (false, false) => value == pattern,
+    }
 }
 
 /// Apply `field {op} $key` when present; returns true if this param was a comparison op.
@@ -197,13 +212,13 @@ pub fn apply_order_limit_offset(
     rows
 }
 
-fn or_equality_matches(
+fn or_clause_matches(
     row: &serde_json::Value,
     clause: &str,
     params: &[(String, serde_json::Value)],
 ) -> bool {
     let stripped = clause.trim().trim_start_matches('(').trim_end_matches(')');
-    let normalized = stripped.replace(" or ", " OR ");
+    let normalized = stripped.replace(" or ", " OR ").replace(" like ", " LIKE ");
     for part in normalized.split(" OR ") {
         let part = part.trim();
         if let Some(eq_at) = part.find(" = $") {
@@ -215,6 +230,24 @@ fn or_equality_matches(
             if let Some((_, value)) = params.iter().find(|(k, _)| k == key) {
                 if !field.is_empty() && row_field_equals(row, field, value) {
                     return true;
+                }
+            }
+            continue;
+        }
+        if let Some(like_at) = part.to_uppercase().find(" LIKE $") {
+            let before = part[..like_at].trim_end();
+            let key = part[like_at + " LIKE $".len()..]
+                .trim()
+                .trim_end_matches(|c: char| !c.is_ascii_alphanumeric() && c != '_');
+            let field = extract_field_ref(before);
+            if let Some((_, value)) = params.iter().find(|(k, _)| k == key) {
+                if let Some(pattern) = value.as_str() {
+                    if !field.is_empty()
+                        && row_string_field(row, field)
+                            .is_some_and(|s| sql_like_matches(s, pattern))
+                    {
+                        return true;
+                    }
                 }
             }
         }
@@ -385,5 +418,39 @@ mod tests {
         let out = apply_equality_where(rows, &compiled);
         assert_eq!(out.len(), 1);
         assert_eq!(out[0]["id"], "a2");
+    }
+
+    #[test]
+    fn filters_like_contains_pattern_on_bare_column() {
+        let compiled = CompiledQuery::new(
+            "SELECT * FROM doc WHERE title LIKE $param_0".into(),
+            vec![("param_0".into(), serde_json::json!("%Beacon%"))],
+        );
+        let rows = vec![
+            serde_json::json!({"id": "1", "title": "UniqueBeaconMatch"}),
+            serde_json::json!({"id": "2", "title": "Other"}),
+        ];
+        let out = apply_equality_where(rows, &compiled);
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0]["title"], "UniqueBeaconMatch");
+    }
+
+    #[test]
+    fn filters_search_or_like_across_title_and_searchable_text() {
+        // Shape emitted by QueryCore::search + set_search_fields for SQL/mem.
+        let compiled = CompiledQuery::new(
+            "SELECT * FROM unified_field_search_document WHERE (title LIKE $param_0 OR searchable_text LIKE $param_1)".into(),
+            vec![
+                ("param_0".into(), serde_json::json!("%CapMatch%")),
+                ("param_1".into(), serde_json::json!("%CapMatch%")),
+            ],
+        );
+        let rows = vec![
+            serde_json::json!({"id": "1", "title": "CapMatch0", "searchable_text": "CapMatch0"}),
+            serde_json::json!({"id": "2", "title": "Nope", "searchable_text": "CapMatchZ"}),
+            serde_json::json!({"id": "3", "title": "Other", "searchable_text": "Other"}),
+        ];
+        let out = apply_equality_where(rows, &compiled);
+        assert_eq!(out.len(), 2);
     }
 }

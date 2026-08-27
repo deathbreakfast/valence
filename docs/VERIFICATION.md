@@ -2,6 +2,33 @@
 
 Re-run after test or CI changes.
 
+## PR CI parity (run before push / opening a PR)
+
+Matches [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) job **`quality-gates`**
+on `main`. Re-run after workflow changes.
+
+| CI step | Local command |
+|--------|----------------|
+| Gate script | `bash scripts/gate.sh` |
+| Format | `cargo fmt --all -- --check` |
+| Clippy | `cargo clippy --workspace --all-targets -- -D warnings -A missing-docs` |
+| Deny rustc warnings (isolated crates) | See ci.yml `for pkg in …` loop with `RUSTFLAGS="-D warnings"` |
+| Rustdoc | `RUSTDOCFLAGS="-D warnings" cargo doc -p uf-valence --all-features --no-deps` then `RUSTDOCFLAGS="-D warnings" cargo doc --workspace --exclude uf-valence --no-deps` |
+| Doctests | `cargo test --doc -p uf-valence-core -p uf-valence-backend-mem -p uf-valence-telemetry -p uf-valence` |
+| Test workspace | `cargo test --workspace -- --test-threads=1` |
+| Dependency hygiene | `cargo machete` |
+
+Environment (match CI):
+
+```bash
+export CARGO_TARGET_DIR=target-valence
+export CARGO_BUILD_JOBS=1
+export CARGO_INCREMENTAL=0
+```
+
+Skip extended jobs (`package-dry-run`, `examples`, `e2e`, `coverage`, `bench-smoke`,
+`codegen-runtime`, `core-skeleton`) unless you are running a maintainer campaign.
+
 ## Commands
 
 ### Tests

@@ -313,40 +313,45 @@ impl BootstrapSession {
     }
 
     async fn build_hybrid_router(&self) -> Result<(Arc<DatabaseRouter>, String)> {
-        #[cfg(not(feature = "hybrid"))]
-        {
-            return Err(valence_core::Error::Internal(
-                "enable valence-testkit/hybrid".into(),
-            ));
-        }
+        self.build_hybrid_router_inner().await
+    }
 
-        #[cfg(feature = "hybrid")]
-        {
-            use valence_backend_hybrid::HybridBackend;
-            use valence_backend_postgres::PostgresBackendBuilder;
+    #[cfg(feature = "hybrid")]
+    async fn build_hybrid_router_inner(&self) -> Result<(Arc<DatabaseRouter>, String)> {
+        use valence_backend_hybrid::HybridBackend;
+        use valence_backend_postgres::PostgresBackendBuilder;
 
-            let builder = self
-                .wire_options
-                .as_ref()
-                .and_then(|o| o.postgres.clone())
-                .unwrap_or_else(PostgresBackendBuilder::new);
-            let primary = Arc::new(
-                builder
-                    .from_env_defaults()
-                    .build()
-                    .await
-                    .map_err(|e| valence_core::Error::Internal(e.to_string()))?,
-            );
-            let hybrid = HybridBackend::builder()
-                .primary(primary)
-                .warm_edges(true)
+        let builder = self
+            .wire_options
+            .as_ref()
+            .and_then(|o| o.postgres.clone())
+            .unwrap_or_else(PostgresBackendBuilder::new);
+        let primary = Arc::new(
+            builder
+                .from_env_defaults()
                 .build()
                 .await
-                .map_err(|e| valence_core::Error::Internal(e.to_string()))?;
-            let backend: Arc<dyn DatabaseBackend> = Arc::new(hybrid);
-            let backend = maybe_wrap_backend(backend, self.matrix.telemetry);
-            Ok(self.finish_shared_backend_router(backend, "default"))
-        }
+                .map_err(|e| valence_core::Error::Internal(e.to_string()))?,
+        );
+        let hybrid = HybridBackend::builder()
+            .primary(primary)
+            .warm_edges(true)
+            .build()
+            .await
+            .map_err(|e| valence_core::Error::Internal(e.to_string()))?;
+        let backend: Arc<dyn DatabaseBackend> = Arc::new(hybrid);
+        let backend = maybe_wrap_backend(backend, self.matrix.telemetry);
+        Ok(self.finish_shared_backend_router(backend, "default"))
+    }
+
+    #[cfg(not(feature = "hybrid"))]
+    fn build_hybrid_router_inner(
+        &self,
+    ) -> std::future::Ready<Result<(Arc<DatabaseRouter>, String)>> {
+        let _ = self;
+        std::future::ready(Err(valence_core::Error::Internal(
+            "enable valence-testkit/hybrid".into(),
+        )))
     }
 
     async fn build_redis_router(&self) -> Result<(Arc<DatabaseRouter>, String)> {

@@ -212,6 +212,7 @@ pub fn validate_mix(
 ///
 /// Returns `true` when the backend was a hybrid adapter. Missing hybrid support
 /// or a non-hybrid backend returns `false` (fail closed, no panic).
+#[allow(clippy::unused_async)] // hybrid cfg enables await; default workspace build does not.
 pub async fn drop_hybrid_unique_mirrors(
     backend: &Arc<dyn DatabaseBackend>,
     table: &str,
@@ -238,6 +239,7 @@ pub async fn drop_hybrid_unique_mirrors(
     }
 }
 
+#[allow(clippy::unused_async)] // hybrid cfg enables await; default workspace build does not.
 async fn invalidate_hybrid_one(
     backend: &Arc<dyn DatabaseBackend>,
     table: &str,

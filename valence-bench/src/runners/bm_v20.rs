@@ -86,6 +86,7 @@ fn skipped(ctx: &RunContext) -> Result<BenchReport> {
     Ok(report)
 }
 
+#[allow(clippy::unused_async)] // hybrid cfg enables await; default workspace build does not.
 async fn drop_hybrid_unique_mirrors(
     backend: &Arc<dyn DatabaseBackend>,
     table: &str,

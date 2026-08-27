@@ -212,55 +212,75 @@ pub fn validate_mix(
 ///
 /// Returns `true` when the backend was a hybrid adapter. Missing hybrid support
 /// or a non-hybrid backend returns `false` (fail closed, no panic).
-#[allow(clippy::unused_async)] // hybrid cfg enables await; default workspace build does not.
 pub async fn drop_hybrid_unique_mirrors(
     backend: &Arc<dyn DatabaseBackend>,
     table: &str,
     ids: &[String],
 ) -> Result<bool> {
-    #[cfg(feature = "hybrid")]
-    {
-        use valence_backend_hybrid::HybridBackend;
-        let Some(hybrid) = backend
-            .as_any_local()
-            .and_then(|any| any.downcast_ref::<HybridBackend>())
-        else {
-            return Ok(false);
-        };
-        for id in ids {
-            hybrid.invalidate_cached_record(table, id).await?;
-        }
-        Ok(true)
-    }
-    #[cfg(not(feature = "hybrid"))]
-    {
-        let _ = (backend, table, ids);
-        Ok(false)
-    }
+    drop_hybrid_unique_mirrors_inner(backend, table, ids).await
 }
 
-#[allow(clippy::unused_async)] // hybrid cfg enables await; default workspace build does not.
+#[cfg(feature = "hybrid")]
+async fn drop_hybrid_unique_mirrors_inner(
+    backend: &Arc<dyn DatabaseBackend>,
+    table: &str,
+    ids: &[String],
+) -> Result<bool> {
+    use valence_backend_hybrid::HybridBackend;
+    let Some(hybrid) = backend
+        .as_any_local()
+        .and_then(|any| any.downcast_ref::<HybridBackend>())
+    else {
+        return Ok(false);
+    };
+    for id in ids {
+        hybrid.invalidate_cached_record(table, id).await?;
+    }
+    Ok(true)
+}
+
+#[cfg(not(feature = "hybrid"))]
+fn drop_hybrid_unique_mirrors_inner(
+    backend: &Arc<dyn DatabaseBackend>,
+    table: &str,
+    ids: &[String],
+) -> std::future::Ready<Result<bool>> {
+    let _ = (backend, table, ids);
+    std::future::ready(Ok(false))
+}
+
 async fn invalidate_hybrid_one(
     backend: &Arc<dyn DatabaseBackend>,
     table: &str,
     id: &str,
 ) -> Result<()> {
-    #[cfg(feature = "hybrid")]
+    invalidate_hybrid_one_inner(backend, table, id).await
+}
+
+#[cfg(feature = "hybrid")]
+async fn invalidate_hybrid_one_inner(
+    backend: &Arc<dyn DatabaseBackend>,
+    table: &str,
+    id: &str,
+) -> Result<()> {
+    use valence_backend_hybrid::HybridBackend;
+    if let Some(hybrid) = backend
+        .as_any_local()
+        .and_then(|any| any.downcast_ref::<HybridBackend>())
     {
-        use valence_backend_hybrid::HybridBackend;
-        if let Some(hybrid) = backend
-            .as_any_local()
-            .and_then(|any| any.downcast_ref::<HybridBackend>())
-        {
-            hybrid.invalidate_cached_record(table, id).await?;
-        }
-        Ok(())
+        hybrid.invalidate_cached_record(table, id).await?;
     }
-    #[cfg(not(feature = "hybrid"))]
-    {
-        let _ = (backend, table, id);
-        Ok(())
-    }
+    Ok(())
+}
+
+#[cfg(not(feature = "hybrid"))]
+fn invalidate_hybrid_one_inner(
+    backend: &Arc<dyn DatabaseBackend>,
+    table: &str,
+    id: &str,
+) -> std::future::Ready<Result<()>> {
+    let _ = (backend, table, id);
+    std::future::ready(Ok(()))
 }
 
 fn equality_filter(engine_id: &str, table: &str, label: &str) -> Result<CompiledQuery> {

@@ -4,15 +4,14 @@
 //! Hybrid write-through also fills IndraDB, so unique ids are dropped from the
 //! mirror before that loop; otherwise unique p95 is another hot Indra hit.
 
-use std::sync::Arc;
 use std::time::Instant;
 
 use anyhow::Result;
-use valence_core::DatabaseBackend;
 
 use crate::report::BenchReport;
 use crate::runners::RunContext;
 use crate::stats::MetricStats;
+use crate::workload::mixed::drop_hybrid_unique_mirrors;
 
 pub async fn run(ctx: &RunContext) -> Result<BenchReport> {
     if !crate::runners::store_available(ctx) {
@@ -84,33 +83,6 @@ fn skipped(ctx: &RunContext) -> Result<BenchReport> {
     report.status = "skipped";
     report.pass_notes = crate::runners::store_skip_reason(ctx);
     Ok(report)
-}
-
-#[allow(clippy::unused_async)] // hybrid cfg enables await; default workspace build does not.
-async fn drop_hybrid_unique_mirrors(
-    backend: &Arc<dyn DatabaseBackend>,
-    table: &str,
-    ids: &[String],
-) -> Result<bool> {
-    #[cfg(feature = "hybrid")]
-    {
-        use valence_backend_hybrid::HybridBackend;
-        let Some(hybrid) = backend
-            .as_any_local()
-            .and_then(|any| any.downcast_ref::<HybridBackend>())
-        else {
-            return Ok(false);
-        };
-        for id in ids {
-            hybrid.invalidate_cached_record(table, id).await?;
-        }
-        Ok(true)
-    }
-    #[cfg(not(feature = "hybrid"))]
-    {
-        let _ = (backend, table, ids);
-        Ok(false)
-    }
 }
 
 #[cfg(test)]

@@ -1,7 +1,8 @@
 //! SQLite storage engine.
 
-use sqlx::sqlite::{SqliteConnectOptions, SqlitePool, SqlitePoolOptions};
+use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePool, SqlitePoolOptions};
 use std::str::FromStr;
+use std::time::Duration;
 
 use valence_backend_sql::{
     apply_ttl_policy_sqlite, create_record_sqlite, define_unique_index_sqlite,
@@ -82,6 +83,10 @@ impl SqliteBackend {
     /// checkout sees the same store. sqlx's default pool size otherwise opens isolated
     /// private databases per connection for bare `:memory:`.
     ///
+    /// File-backed URLs use WAL and a 5s busy timeout so concurrent schema growth and
+    /// writers wait instead of failing immediately with `SQLITE_BUSY`. In-memory URLs
+    /// keep the default journal; WAL is not valid for `:memory:`.
+    ///
     /// The statement cache is left empty. Mixed-OLTP can add columns while other
     /// connections still run `SELECT *`; a cached column list then panics inside sqlx
     /// when the live row is longer.
@@ -90,13 +95,17 @@ impl SqliteBackend {
     ///
     /// Returns [`Error::Database`] if connecting or ensuring the edges schema fails.
     pub async fn connect(path: &str) -> Result<Self> {
-        let options = SqliteConnectOptions::from_str(path)
+        let memory =
+            path.contains(":memory:") || path.contains("mode=memory") || path == ":memory:";
+        let mut options = SqliteConnectOptions::from_str(path)
             .or_else(|_| SqliteConnectOptions::from_str(&format!("sqlite:{path}")))
             .map_err(|e| Error::database(e.to_string()))?
             .create_if_missing(true)
-            .statement_cache_capacity(0);
-        let memory =
-            path.contains(":memory:") || path.contains("mode=memory") || path == ":memory:";
+            .statement_cache_capacity(0)
+            .busy_timeout(Duration::from_secs(5));
+        if !memory {
+            options = options.journal_mode(SqliteJournalMode::Wal);
+        }
         let mut pool_opts = SqlitePoolOptions::new();
         if memory {
             pool_opts = pool_opts.max_connections(1);

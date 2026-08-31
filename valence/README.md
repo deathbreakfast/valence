@@ -27,7 +27,7 @@ Overview and quickstart: [../README.md](../README.md).
 Enable backends explicitly when minimizing dependencies:
 
 ```toml
-uf-valence = { git = "https://github.com/deathbreakfast/valence", package = "uf-valence", default-features = false, features = ["mem"] }
+uf-valence = { git = "https://github.com/unified-field-dev/valence", package = "uf-valence", default-features = false, features = ["mem"] }
 ```
 
 ## How to run examples

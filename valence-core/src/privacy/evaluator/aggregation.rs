@@ -138,6 +138,17 @@ impl PrivacyEvaluator {
         raw_data: &serde_json::Value,
         v: &Valence,
     ) -> Result<()> {
+        let mut ctx = super::defer_to_edge::DeferCtx::default();
+        Self::check_entity_access_with_ctx(schema, op, raw_data, v, &mut ctx).await
+    }
+
+    pub(super) async fn check_entity_access_with_ctx(
+        schema: &SchemaMetadata,
+        op: PrivacyOperation,
+        raw_data: &serde_json::Value,
+        v: &Valence,
+        ctx: &mut super::defer_to_edge::DeferCtx,
+    ) -> Result<()> {
         // Bench/test seam only — never enable in production hosts.
         if crate::privacy::privacy_bypass_active() {
             return Ok(());
@@ -204,6 +215,19 @@ impl PrivacyEvaluator {
 
         if Self::eval_rules_any_match(&allow, op, raw_data, v, table, "allow").await? {
             return Ok(());
+        }
+
+        if let Some(ref edge) = Self::resolve_defer_to_edge(schema, op) {
+            return Self::evaluate_defer_to_edge(
+                schema,
+                op,
+                raw_data,
+                v,
+                edge,
+                ctx,
+                telemetry_label,
+            )
+            .await;
         }
 
         if always_allow.is_empty()

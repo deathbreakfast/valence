@@ -32,6 +32,6 @@ pub use types::{PrivacyOperation, PrivacyPolicies, PrivacyPolicy, PrivacyRule};
 
 mod evaluator;
 
-pub use evaluator::PrivacyEvaluator;
+pub use evaluator::{parent_op_for_defer, PrivacyEvaluator, DEFER_TO_EDGE_MAX_DEPTH};
 
 pub mod policies;

@@ -30,10 +30,17 @@ pub(super) fn generate_policies_code(policies: Option<&ParsedPolicies>) -> Token
 }
 
 fn has_any_policy(policies: &ParsedPolicies) -> bool {
-    policies.read.is_some()
-        || policies.create.is_some()
-        || policies.update.is_some()
-        || policies.delete.is_some()
+    fn rules_active(r: &ParsedPolicyRules) -> bool {
+        !r.always_allow.is_empty()
+            || !r.allow.is_empty()
+            || !r.block.is_empty()
+            || !r.always_block.is_empty()
+            || r.defer_to_edge.is_some()
+    }
+    policies.read.as_ref().is_some_and(rules_active)
+        || policies.create.as_ref().is_some_and(rules_active)
+        || policies.update.as_ref().is_some_and(rules_active)
+        || policies.delete.as_ref().is_some_and(rules_active)
 }
 
 fn policy_rules_tokens(rules: Option<&ParsedPolicyRules>) -> TokenStream {
@@ -45,6 +52,11 @@ fn policy_rules_tokens(rules: Option<&ParsedPolicyRules>) -> TokenStream {
     let allow = policy_rule_vec_tokens(&rules.allow);
     let block = policy_rule_vec_tokens(&rules.block);
     let always_block = policy_rule_vec_tokens(&rules.always_block);
+    let defer_to_edge = if let Some(edge) = &rules.defer_to_edge {
+        quote! { Some(#edge.to_string()) }
+    } else {
+        quote! { None }
+    };
 
     quote! {
         Some(valence::SchemaPolicyRules {
@@ -52,6 +64,7 @@ fn policy_rules_tokens(rules: Option<&ParsedPolicyRules>) -> TokenStream {
             allow: #allow,
             block: #block,
             always_block: #always_block,
+            defer_to_edge: #defer_to_edge,
         })
     }
 }

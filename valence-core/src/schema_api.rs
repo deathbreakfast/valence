@@ -27,6 +27,10 @@ pub struct SchemaPolicyRules {
     pub block: Vec<SchemaPolicyRule>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub always_block: Vec<SchemaPolicyRule>,
+    /// When set on a **read** policy, entity read may inherit the named edge parent's Read
+    /// after rule buckets do not allow (defer-to-edge evaluation in PrivacyEvaluator).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub defer_to_edge: Option<String>,
 }
 
 /// Full entity-level policy declaration for the schema.

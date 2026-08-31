@@ -171,6 +171,11 @@ fn trait_policy_rules_tokens(
     let a_block = once_lock_leaked_rules_vec(&a_static, &a_let, &rules.allow);
     let b_block = once_lock_leaked_rules_vec(&b_static, &b_let, &rules.block);
     let ab_block = once_lock_leaked_rules_vec(&ab_static, &ab_let, &rules.always_block);
+    let defer_to_edge = if let Some(edge) = &rules.defer_to_edge {
+        quote! { Some(#edge) }
+    } else {
+        quote! { None }
+    };
 
     quote! {
         #aa_block
@@ -184,6 +189,7 @@ fn trait_policy_rules_tokens(
                 allow: #a_let.as_slice(),
                 block: #b_let.as_slice(),
                 always_block: #ab_let.as_slice(),
+                defer_to_edge: #defer_to_edge,
             }
         }));
     }

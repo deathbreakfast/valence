@@ -111,6 +111,7 @@ fn rules_names_only(rules: &ParsedPolicyRules) -> valence_core::SchemaPolicyRule
         allow: rule_names(&rules.allow),
         block: rule_names(&rules.block),
         always_block: rule_names(&rules.always_block),
+        defer_to_edge: rules.defer_to_edge.clone(),
     }
 }
 

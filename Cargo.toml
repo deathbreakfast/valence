@@ -29,6 +29,7 @@ members = [
     "examples/hop-pair-model-host",
     "examples/hop-chain-model-host",
     "examples/privacy-actor-ports",
+    "examples/privacy-defer-to-edge",
     "examples/remote-multi-backend-host",
 ]
 exclude = []

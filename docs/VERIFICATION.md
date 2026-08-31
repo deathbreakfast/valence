@@ -128,4 +128,13 @@ Download `coverage-lcov` from GitHub Actions run artifacts for the CI report.
 
 **Baseline (2026-07-08):** ~55% line coverage on the scoped workspace slice above (`mem,surreal-mem` features, excluding `valence-e2e` / `valence-bench`).
 
+## PERFORMANCE / EXPERIMENTS — defer_to_edge parent fetch
+
+`defer_to_edge` loads each parent row under a System actor so privacy can evaluate
+the edge hop. That is one parent fetch per history (or other deferred) row in a
+list today. Batching or caching those parent loads is deferred: correctness and
+fail-closed ACL come first. Revisit if list latency or DB load becomes a product
+issue; until then treat the per-row parent fetch as an accepted cost with no
+extra VERIFICATION gate.
+
 Extended tag CI: [`.github/workflows/ci-extended.yml`](../.github/workflows/ci-extended.yml).

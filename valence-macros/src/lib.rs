@@ -138,7 +138,8 @@ pub fn valence_schema(input: TokenStream) -> TokenStream {
 /// ## Policy fields
 ///
 /// A `policies` block accepts `read`, `create`, `update`, and `delete`. Each operation accepts
-/// `always_allow`, `allow`, `block`, and `always_block` rule lists.
+/// `always_allow`, `allow`, `block`, and `always_block` rule lists. Read policies may also set
+/// `defer_to_edge: "edge_name"` so satellite rows inherit the parent record's Read policy.
 ///
 /// ## Connection fields
 ///

@@ -1,0 +1,19 @@
+[package]
+name = "privacy-defer-to-edge"
+version = "0.1.0"
+edition = "2021"
+license.workspace = true
+publish = false
+description = "Example: defer_to_edge read privacy (owner allow + stranger deny)"
+
+[[bin]]
+name = "privacy-defer-to-edge"
+path = "src/main.rs"
+
+[dependencies]
+valence = { path = "../../valence", features = ["mem"], package = "uf-valence" }
+serde_json = { workspace = true }
+tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
+
+[lints]
+workspace = true

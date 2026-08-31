@@ -271,3 +271,109 @@ fn test_parse_missing_table() {
     let err = schema.to_schema().unwrap_err();
     assert!(err.to_string().contains("Missing 'table'"));
 }
+
+#[test]
+fn defer_to_edge_parses_string_edge_happy() {
+    let input = r#"
+            Hist {
+                table: "hist",
+                version: "0.1.0",
+                policies: {
+                    read: {
+                        defer_to_edge: "source",
+                    }
+                },
+                fields: [
+                    id: { r#type: FieldType::String, primary_key: true, required: true }
+                ]
+            }
+        "#;
+    let schema = syn::parse_str::<SchemaSpec>(input).expect("parse");
+    let parsed = schema.to_schema().expect("to_schema");
+    let read = parsed
+        .policies
+        .as_ref()
+        .expect("policies")
+        .read
+        .as_ref()
+        .expect("read");
+    assert_eq!(read.defer_to_edge.as_deref(), Some("source"));
+}
+
+#[test]
+fn defer_to_edge_unknown_key_sad() {
+    let input = r#"
+            Hist {
+                table: "hist",
+                version: "0.1.0",
+                policies: {
+                    read: {
+                        not_a_real_bucket: [PUBLIC_READ],
+                    }
+                },
+                fields: [
+                    id: { r#type: FieldType::String, primary_key: true, required: true }
+                ]
+            }
+        "#;
+    let schema = syn::parse_str::<SchemaSpec>(input).expect("parse structure");
+    let err = schema.to_schema().expect_err("unknown policy key");
+    let msg = err.to_string();
+    assert!(
+        msg.contains("Unknown policy rule key") || msg.contains("not_a_real_bucket"),
+        "{msg}"
+    );
+}
+
+#[test]
+fn defer_to_edge_non_string_sad() {
+    let input = r#"
+            Hist {
+                table: "hist",
+                version: "0.1.0",
+                policies: {
+                    read: {
+                        defer_to_edge: 123,
+                    }
+                },
+                fields: [
+                    id: { r#type: FieldType::String, primary_key: true, required: true }
+                ]
+            }
+        "#;
+    let msg = match syn::parse_str::<SchemaSpec>(input) {
+        Err(e) => e.to_string(),
+        Ok(_) => panic!("non-string defer_to_edge must fail parse"),
+    };
+    assert!(
+        msg.contains("defer_to_edge") || msg.contains("expected") || msg.contains("string"),
+        "{msg}"
+    );
+}
+
+#[test]
+fn defer_to_edge_empty_edge_sad() {
+    let input = r#"
+            Hist {
+                table: "hist",
+                version: "0.1.0",
+                policies: {
+                    read: {
+                        defer_to_edge: "",
+                    }
+                },
+                fields: [
+                    id: { r#type: FieldType::String, primary_key: true, required: true }
+                ]
+            }
+        "#;
+    let result = syn::parse_str::<SchemaSpec>(input);
+    let err_msg = match result {
+        Err(e) => e.to_string(),
+        Ok(schema) => schema.to_schema().expect_err("empty edge").to_string(),
+    };
+    assert!(
+        err_msg.contains("non-empty") || err_msg.contains("defer_to_edge"),
+        "{err_msg}"
+    );
+}

@@ -17,6 +17,8 @@ pub struct TraitPolicyRules {
     pub allow: &'static [SchemaPolicyRule],
     pub block: &'static [SchemaPolicyRule],
     pub always_block: &'static [SchemaPolicyRule],
+    /// Optional parent-edge defer (see schema `defer_to_edge` on any op).
+    pub defer_to_edge: Option<&'static str>,
 }
 
 /// Entity-level privacy policies declared by a trait.

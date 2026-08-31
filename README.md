@@ -90,7 +90,7 @@ From git (same package name):
 
 ```toml
 [dependencies]
-valence = { package = "uf-valence", git = "https://github.com/deathbreakfast/valence", features = ["mem"] }
+valence = { package = "uf-valence", git = "https://github.com/unified-field-dev/valence", features = ["mem"] }
 ```
 
 Published crates use the `uf-*` package names on crates.io (`uf-valence`, `uf-valence-core`, …). Rust imports remain `use valence::…`.

@@ -192,6 +192,21 @@ cargo run -p privacy-actor-ports
 
 ---
 
+### `privacy-defer-to-edge` — satellite Read via parent edge
+
+**Teaches:** `defer_to_edge` on a satellite history table — owner Read on the parent allows history Read; a stranger is denied. Parent fetch runs as System without elevating the viewer actor.
+
+```bash
+cargo run -p privacy-defer-to-edge
+```
+
+**Open first:** [`privacy-defer-to-edge/src/main.rs`](privacy-defer-to-edge/src/main.rs)
+
+**Success:** stdout prints `privacy-defer-to-edge: OK — owner allow + stranger deny`.
+Cycle and depth denials are covered by `cargo test -p uf-valence-core --test defer_to_edge`.
+
+---
+
 ### `remote-multi-backend-host` — live Postgres + Redis
 
 **Teaches:** Live multi-remote routing — `Project` on Postgres (`primary`), `Task` on Redis (`cache`) — two real network-backed engines behind one router, proven with an actual create + read round trip on each. Skips cleanly when `DATABASE_URL` / `VALENCE_REDIS_URL` are unset.
@@ -316,6 +331,7 @@ Tear down with `docker rm -f valence-postgres valence-redis valence-mongodb vale
 | Product | `cargo test -p product-model-host -- --test-threads=1` | Connections + delete queue |
 | Cross-backend | `cargo run -p cross-backend-model-host` | Mem↔sqlite hop |
 | Admin | `cargo run -p admin-runtime-host` | QueryCore smoke |
+| Defer-to-edge | `cargo run -p privacy-defer-to-edge` | Owner allow + stranger deny via parent Read |
 | Ports + privacy | `cargo run -p privacy-actor-ports` | Secrets/identity/endpoints + allow/deny |
 | Remote multi-backend | `cargo run -p remote-multi-backend-host` | Live Postgres + Redis routing |
 | Surreal bootstrap | `cargo run -p embedded-bootstrap` | Inventory router |

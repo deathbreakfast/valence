@@ -17,6 +17,10 @@
 //! - **Host ports** — secrets, actor identity, endpoints, and telemetry injected at boot
 //! - **Privacy-aware CRUD** — policy and ownership hooks on generated [`Model`] paths; field
 //!   privacy via [`PrivacyEvaluator::filter_entity_fields`] on `Model::get` and query rows
+//! - **Defer-to-edge read privacy** — satellite tables (for example audit history) set
+//!   `read: { defer_to_edge: "source" }` so Read inherits the parent record's Read policy,
+//!   with recursive evaluation and a cycle/depth guard ([`DEFER_TO_EDGE_MAX_DEPTH`]).
+//!   [Get started](#defer-to-edge-read-privacy).
 //! - **Queued delete** — `Model::delete` authorizes **Delete** on every **CascadeDelete** DAG node
 //!   ([`check_dag_delete_privacy`]) before queueing; Read is not required. `SetNull` / `RemoveEdge`
 //!   clear under the requester via deletion-scoped `merge_record` / `unrelate_edge`. Host workers
@@ -32,6 +36,90 @@
 //! Enable backends with Cargo features (`mem` is the default). The crate `README.md` lists every
 //! feature flag and environment variable. See repository [`SECURITY.md`](https://github.com/unified-field-dev/valence/blob/main/SECURITY.md)
 //! for integrator wiring.
+//!
+//! # Defer-to-edge read privacy
+//!
+//! Satellite rows such as audit history often should be readable exactly when the parent
+//! record is readable. Declare that on the satellite **read** policy with `defer_to_edge`
+//! naming a HasOne / Record edge (usually `source`).
+//!
+//! After `always_block` / `always_allow` / `block` / `allow` buckets run, Valence loads the
+//! parent through that edge (fetch as System, evaluate Read as the viewer) and recurses.
+//! Missing or null edges, missing parents, cycles, and depth over [`DEFER_TO_EDGE_MAX_DEPTH`]
+//! deny with [`Error::Privacy`]. A misnamed edge that is not on the schema returns
+//! [`Error::Validation`].
+//!
+//! ## Prerequisites
+//!
+//! - Parent and satellite schemas registered (codegen / `valence_schema!` inventory).
+//! - The named edge exists as a connection or Record field on the satellite.
+//!
+//! ## Declare and check
+//!
+//! ```rust,ignore
+//! use valence::prelude::*;
+//! use valence::privacy_policies::common::SYSTEM_ONLY;
+//!
+//! valence_schema! {
+//!     InvoiceHistory {
+//!         table: "invoice_history",
+//!         version: "0.1.0",
+//!         policies: {
+//!             read: {
+//!                 always_allow: [SYSTEM_ONLY],
+//!                 defer_to_edge: "source",
+//!             },
+//!             create: { allow: [SYSTEM_ONLY] },
+//!             update: { always_block: [valence::privacy_policies::common::BLOCK_ALL] },
+//!             delete: { allow: [SYSTEM_ONLY] },
+//!         },
+//!         fields: [
+//!             id: { r#type: FieldType::String, primary_key: true, required: true },
+//!             source: { r#type: FieldType::Record("invoice"), required: true },
+//!         ],
+//!         connections: [
+//!             source: {
+//!                 table: "invoice",
+//!                 cardinality: HasOne,
+//!                 required: true,
+//!                 on_delete: Cascade,
+//!             },
+//!         ],
+//!     }
+//! }
+//!
+//! // Viewer who can read the invoice can read history; others get Error::Privacy.
+//! PrivacyEvaluator::check_entity_read(history_schema, &history_json, &valence).await?;
+//! ```
+//!
+//! Observable outcome: `Ok(())` when parent Read allows the viewer; `Err(Error::Privacy(_))`
+//! when the parent denies, the edge is missing, or a cycle/depth guard trips. List/query
+//! paths that call `check_entity_read` per row inherit the same rule, so union queries
+//! cannot bypass parent ACL once the satellite adopts `defer_to_edge`.
+//!
+//!
+//! ## Denials, cycles, and depth
+//!
+//! Primary deny paths use the same entry point as allow:
+//!
+//! ```rust,ignore
+//! // Parent Read denies the viewer
+//! let err = PrivacyEvaluator::check_entity_read(history_schema, &history_json, &stranger)
+//!     .await
+//!     .unwrap_err();
+//! assert!(matches!(err, Error::Privacy(_)));
+//! ```
+//!
+//! Missing or null edges, missing parents, cycles, and depth over
+//! [`DEFER_TO_EDGE_MAX_DEPTH`] (8) also return [`Error::Privacy`]. A misnamed
+//! edge that is not on the schema returns [`Error::Validation`].
+//!
+//! ```bash
+//! cargo run -p privacy-defer-to-edge
+//! cargo test -p uf-valence-core --test defer_to_edge
+//! ```
+//!
+//! Next: adopt this policy on Record History product tables.
 //!
 //! # Topologies
 //!
@@ -400,7 +488,7 @@
 //!
 //! Workspace hosts (see [`examples/README.md`](https://github.com/unified-field-dev/valence/blob/main/examples/README.md)):
 //! `minimal-schema`, `codegen-host`, `product-model-host`, `cross-backend-model-host`,
-//! `admin-runtime-host`, `embedded-bootstrap`, `acme-valence-backend-stub`.
+//! `admin-runtime-host`, `embedded-bootstrap`, `acme-valence-backend-stub`, `privacy-actor-ports`, `privacy-defer-to-edge`.
 //! Hop crates (`hop-pair-model-host`, `hop-chain-model-host`) are testkit/matrix fixtures only.
 
 extern crate self as valence;

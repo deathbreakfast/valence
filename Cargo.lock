@@ -3563,6 +3563,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "privacy-defer-to-edge"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
+ "tokio",
+ "uf-valence",
+]
+
+[[package]]
 name = "proc-macro-crate"
 version = "3.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"

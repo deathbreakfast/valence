@@ -6,6 +6,7 @@ use valence_core::compiled_query::CompiledQuery;
 use valence_core::error::{Error, Result};
 use valence_core::record_id::RecordId;
 
+use valence_core::safe_ident::quote_sql_ident;
 use valence_core::storage_layout::StorageLayout;
 
 use crate::ensure_table;
@@ -179,7 +180,12 @@ pub async fn merge_record_sqlite(
 }
 
 pub async fn delete_record_sqlite(pool: &sqlx::SqlitePool, table: &str, id: &str) -> Result<()> {
-    let q = format!("DELETE FROM {table} WHERE id = ?");
+    assert_safe_table(table)?;
+    let q = format!(
+        "DELETE FROM {} WHERE {} = ?",
+        quote_sql_ident(table),
+        quote_sql_ident("id")
+    );
     sqlx::query(&q)
         .bind(id)
         .execute(pool)

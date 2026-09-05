@@ -175,8 +175,13 @@ fn parse_external_enum(s: &str) -> Option<String> {
 }
 
 /// `FieldType :: Enum (& ["A", "B"])` after `to_string()` normalization.
+///
+/// `TokenStream::to_string()` usually inserts spaces (`:: Enum`), but longer
+/// variant lists can wrap with newlines (`::\n Enum`) or omit the space
+/// (`::Enum`). Collapse whitespace first so both forms lower to `enum:A,B`.
 fn parse_braced_enum_variants(s: &str) -> Option<Vec<String>> {
-    let enum_pos = s.find(":: Enum")?;
+    let s: String = s.split_whitespace().collect::<Vec<_>>().join(" ");
+    let enum_pos = s.find(":: Enum").or_else(|| s.find("::Enum"))?;
     let after = s[enum_pos + 2..].trim_start();
     if !after.starts_with("Enum") {
         return None;
@@ -405,5 +410,33 @@ mod tests {
         let ts = quote! { FieldType::Currency };
         let got = extract_field_type(&ts).unwrap();
         assert_eq!(got.field_type, "currency");
+    }
+
+    #[test]
+    fn extract_long_enum_variants() {
+        let ts = quote! {
+            FieldType::Enum(&[
+                "queued",
+                "in_progress",
+                "completed",
+                "failed",
+                "skipped",
+            ])
+        };
+        let got = extract_field_type(&ts).unwrap();
+        assert_eq!(
+            got.field_type,
+            "enum:queued,in_progress,completed,failed,skipped"
+        );
+    }
+
+    #[test]
+    fn extract_enum_compact_path_spacing() {
+        // Compact `::Enum` (no space) used to miss `:: Enum` and emit Debug-ish lowercase.
+        let ts: TokenStream = "FieldType::Enum(&[\"queued\", \"in_progress\"])"
+            .parse()
+            .unwrap();
+        let got = extract_field_type(&ts).unwrap();
+        assert_eq!(got.field_type, "enum:queued,in_progress");
     }
 }

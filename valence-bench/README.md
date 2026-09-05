@@ -1,6 +1,6 @@
 # valence-bench
 
-Binary CLI for synthetic Valence throughput experiments (`bm-v0`..`bm-v30`). Highlights: [PERFORMANCE.md](PERFORMANCE.md). Full experiment registry and AWS baselines come from AWS campaign runs.
+Binary CLI for synthetic Valence throughput experiments (`bm-v0`..`bm-v31`). Highlights: [PERFORMANCE.md](PERFORMANCE.md). Full experiment registry and AWS baselines come from AWS campaign runs.
 
 ## Quick start
 

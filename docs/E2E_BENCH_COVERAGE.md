@@ -102,6 +102,7 @@ Living coverage map for Valence. Status legend:
 | Admin registry/read/delete | Y (all storages via contract) | P | N |
 | DeletionService queue | Y | N | bm-v9 |
 | Pre-queue DAG Delete privacy (CascadeDelete-only) | Y (`dag_privacy` integ + SetNull filter) | Y (child Deny) | N |
+| Synchronous `delete_now` / `delete_entity_now` | Y (`delete_now` integ: cascade, Delete-without-Read, order, id normalize) | Y (privacy deny, Restrict, pending refusal) | **bm-v31** (registered; not executed in this change) |
 | Deletion requester actor restore | Y (platform `requester_actor`) | Y (missing `requested_by`) | N |
 | DAG plan vs live graph | Y (platform + catalog OnDelete) | Y (Restrict) | N |
 
@@ -117,7 +118,9 @@ Registered campaign scenario IDs: `ttl-native-expire`, `ttl-deferred-stamp`, `tt
 `iter-scan-complete`,
 `typed-field-roundtrip`, `query-filter-datetime`, `query-filter-datetime-miss`,
 `on-delete-cascade-same-backend`, `on-delete-set-null`, `on-delete-remove-edge`, `on-delete-restrict-blocks`,
-`on-delete-cascade-cross-engine`, `on-delete-set-null-cross-engine` (AcmeStub skipped for OnDelete / TTL / typed-field).
+`on-delete-cascade-cross-engine`, `on-delete-set-null-cross-engine`,
+`delete-now-cascade`, `delete-now-privacy-deny`, `delete-now-restrict`, `delete-now-cross-engine-partial-retry`
+(AcmeStub skipped for OnDelete / TTL / typed-field / delete-now).
 
 ## Storage × suite
 

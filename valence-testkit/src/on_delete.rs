@@ -1,11 +1,11 @@
-//! OnDelete catalog + cross-engine contracts via [`apply_deletion_node`].
+//! OnDelete catalog + cross-engine contracts via [`delete_entity_now`] / [`apply_deletion_dag`].
 
 use std::sync::Arc;
 
 use serde_json::json;
 use valence_core::actor::Actor;
-use valence_core::deletion::apply_deletion_node;
 use valence_core::deletion::dag::{DeletionDag, DeletionNode};
+use valence_core::deletion::{apply_deletion_dag, delete_entity_now};
 use valence_core::evaluator::{Database, DatabaseEvaluator, DEFAULT_IN_MEMORY};
 use valence_core::privacy_policies::common::PUBLIC_READ;
 use valence_core::query::QueryCore;
@@ -18,7 +18,6 @@ use valence_core::schema_api::{
     Schema, SchemaConnection, SchemaField, SchemaMeta, SchemaPolicies, SchemaPolicyRule,
     SchemaPolicyRules, SchemaPrivacy,
 };
-use valence_core::trait_registry::TraitRegistry;
 use valence_core::DatabaseBackend;
 
 use crate::bootstrap::WireBackendOptions;
@@ -149,7 +148,8 @@ fn m2m_conn(name: &str, from: &str, to: &str, edge: &str, on_delete: &str) -> Sc
 }
 
 /// Sort DAG nodes: depth descending, then RemoveEdge → SetNull → CascadeDelete.
-pub fn ordered_deletion_nodes(dag: &DeletionDag) -> Vec<&DeletionNode> {
+#[cfg(test)]
+fn ordered_deletion_nodes(dag: &DeletionDag) -> Vec<&DeletionNode> {
     let max_d = dag.nodes.iter().map(|n| n.depth).max().unwrap_or(0);
     let mut out = Vec::new();
     for d in (0..=max_d).rev() {
@@ -164,115 +164,39 @@ pub fn ordered_deletion_nodes(dag: &DeletionDag) -> Vec<&DeletionNode> {
     out
 }
 
-/// Apply every node in wave order under `valence`.
+/// Apply every node in DAG execution order under `valence`.
 pub async fn apply_ordered_dag(
     dag: &DeletionDag,
     valence: &Valence,
 ) -> valence_core::error::Result<()> {
-    for node in ordered_deletion_nodes(dag) {
-        apply_deletion_node(node, valence).await?;
-    }
-    Ok(())
+    apply_deletion_dag(dag, valence).await
 }
 
-fn same_backend_registry(kind: SameBackendKind) -> SchemaRegistry {
-    let mut reg = SchemaRegistry::new();
-    match kind {
-        SameBackendKind::Cascade => {
-            reg.register(public_delete_schema(
-                "od_cascade_parent",
-                vec![DEFAULT_IN_MEMORY.name().to_string()],
-                &DEFAULT_IN_MEMORY,
-                vec![has_many_conn(
-                    "kids",
-                    "od_cascade_parent",
-                    "od_cascade_child",
-                    "parent_id",
-                    "Cascade",
-                )],
-            ));
-            reg.register(public_delete_schema(
-                "od_cascade_child",
-                vec![DEFAULT_IN_MEMORY.name().to_string()],
-                &DEFAULT_IN_MEMORY,
-                vec![],
-            ));
-        }
-        SameBackendKind::SetNull => {
-            reg.register(public_delete_schema(
-                "od_setnull_parent",
-                vec![DEFAULT_IN_MEMORY.name().to_string()],
-                &DEFAULT_IN_MEMORY,
-                vec![has_many_conn(
-                    "kids",
-                    "od_setnull_parent",
-                    "od_setnull_child",
-                    "parent_id",
-                    "SetNull",
-                )],
-            ));
-            reg.register(public_delete_schema(
-                "od_setnull_child",
-                vec![DEFAULT_IN_MEMORY.name().to_string()],
-                &DEFAULT_IN_MEMORY,
-                vec![],
-            ));
-        }
-        SameBackendKind::RemoveEdge => {
-            reg.register(public_delete_schema(
-                "od_edge_parent",
-                vec![DEFAULT_IN_MEMORY.name().to_string()],
-                &DEFAULT_IN_MEMORY,
-                vec![m2m_conn(
-                    "tags",
-                    "od_edge_parent",
-                    "od_edge_peer",
-                    "od_edge_link",
-                    "SetNull",
-                )],
-            ));
-            reg.register(public_delete_schema(
-                "od_edge_peer",
-                vec![DEFAULT_IN_MEMORY.name().to_string()],
-                &DEFAULT_IN_MEMORY,
-                vec![],
-            ));
-        }
-        SameBackendKind::Restrict => {
-            reg.register(public_delete_schema(
-                "od_restrict_parent",
-                vec![DEFAULT_IN_MEMORY.name().to_string()],
-                &DEFAULT_IN_MEMORY,
-                vec![has_many_conn(
-                    "kids",
-                    "od_restrict_parent",
-                    "od_restrict_child",
-                    "parent_id",
-                    "Restrict",
-                )],
-            ));
-            reg.register(public_delete_schema(
-                "od_restrict_child",
-                vec![DEFAULT_IN_MEMORY.name().to_string()],
-                &DEFAULT_IN_MEMORY,
-                vec![],
-            ));
-        }
-    }
-    reg
+fn ensure_same_backend_schemas_registered() {
+    let reg = SchemaRegistry::global();
+    assert!(
+        reg.get_schema("od_cascade_parent").is_some()
+            && reg.get_schema("od_cascade_child").is_some()
+            && reg.get_schema("od_setnull_parent").is_some()
+            && reg.get_schema("od_setnull_child").is_some()
+            && reg.get_schema("od_edge_parent").is_some()
+            && reg.get_schema("od_edge_peer").is_some()
+            && reg.get_schema("od_restrict_parent").is_some()
+            && reg.get_schema("od_restrict_child").is_some(),
+        "OnDelete same-backend schemas missing from SchemaRegistry::global (inventory link?)"
+    );
 }
 
-#[derive(Clone, Copy)]
-enum SameBackendKind {
-    Cascade,
-    SetNull,
-    RemoveEdge,
-    Restrict,
+fn unique_suffix() -> u128 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0)
 }
 
-/// Same-engine CascadeDelete via compute + apply.
+/// Same-engine CascadeDelete via `delete_entity_now`.
 pub async fn run_on_delete_cascade_same_backend(valence: &Valence) -> Result<(), String> {
-    let reg = same_backend_registry(SameBackendKind::Cascade);
+    ensure_same_backend_schemas_registered();
     let backend = valence.active_backend().map_err(|e| e.to_string())?;
     let tag = unique_suffix();
     let pid = format!("p_{tag}");
@@ -292,22 +216,7 @@ pub async fn run_on_delete_cascade_same_backend(valence: &Valence) -> Result<(),
         .await
         .map_err(|e| e.to_string())?;
 
-    let dag = DeletionDag::compute_with_registry(
-        "od_cascade_parent",
-        &pid,
-        valence,
-        &reg,
-        &TraitRegistry::new(),
-    )
-    .await
-    .map_err(|e| e.to_string())?;
-    if !dag.restrict_violations.is_empty() {
-        return Err(format!(
-            "unexpected Restrict: {:?}",
-            dag.restrict_violations
-        ));
-    }
-    apply_ordered_dag(&dag, valence)
+    delete_entity_now("od_cascade_parent", &pid, valence)
         .await
         .map_err(|e| e.to_string())?;
 
@@ -323,7 +232,7 @@ pub async fn run_on_delete_cascade_same_backend(valence: &Valence) -> Result<(),
 
 /// Same-engine SetNull.
 pub async fn run_on_delete_set_null(valence: &Valence) -> Result<(), String> {
-    let reg = same_backend_registry(SameBackendKind::SetNull);
+    ensure_same_backend_schemas_registered();
     let backend = valence.active_backend().map_err(|e| e.to_string())?;
     let tag = unique_suffix();
     let pid = format!("p_{tag}");
@@ -344,16 +253,7 @@ pub async fn run_on_delete_set_null(valence: &Valence) -> Result<(), String> {
         .await
         .map_err(|e| e.to_string())?;
 
-    let dag = DeletionDag::compute_with_registry(
-        "od_setnull_parent",
-        &pid,
-        valence,
-        &reg,
-        &TraitRegistry::new(),
-    )
-    .await
-    .map_err(|e| e.to_string())?;
-    apply_ordered_dag(&dag, valence)
+    delete_entity_now("od_setnull_parent", &pid, valence)
         .await
         .map_err(|e| e.to_string())?;
 
@@ -373,7 +273,7 @@ pub async fn run_on_delete_remove_edge(valence: &Valence) -> Result<(), String> 
     if !backend.capabilities().supports_graph_edges {
         return Ok(());
     }
-    let reg = same_backend_registry(SameBackendKind::RemoveEdge);
+    ensure_same_backend_schemas_registered();
     let tag = unique_suffix();
     let pid = format!("p_{tag}");
     let tid = format!("t_{tag}");
@@ -392,16 +292,7 @@ pub async fn run_on_delete_remove_edge(valence: &Valence) -> Result<(), String> 
         .await
         .map_err(|e| e.to_string())?;
 
-    let dag = DeletionDag::compute_with_registry(
-        "od_edge_parent",
-        &pid,
-        valence,
-        &reg,
-        &TraitRegistry::new(),
-    )
-    .await
-    .map_err(|e| e.to_string())?;
-    apply_ordered_dag(&dag, valence)
+    delete_entity_now("od_edge_parent", &pid, valence)
         .await
         .map_err(|e| e.to_string())?;
 
@@ -424,7 +315,7 @@ pub async fn run_on_delete_remove_edge(valence: &Valence) -> Result<(), String> 
 
 /// Restrict blocks apply (sad path).
 pub async fn run_on_delete_restrict_blocks(valence: &Valence) -> Result<(), String> {
-    let reg = same_backend_registry(SameBackendKind::Restrict);
+    ensure_same_backend_schemas_registered();
     let backend = valence.active_backend().map_err(|e| e.to_string())?;
     let tag = unique_suffix();
     let pid = format!("p_{tag}");
@@ -444,22 +335,15 @@ pub async fn run_on_delete_restrict_blocks(valence: &Valence) -> Result<(), Stri
         .await
         .map_err(|e| e.to_string())?;
 
-    let dag = DeletionDag::compute_with_registry(
-        "od_restrict_parent",
-        &pid,
-        valence,
-        &reg,
-        &TraitRegistry::new(),
-    )
-    .await
-    .map_err(|e| e.to_string())?;
-    if dag.restrict_violations.is_empty() {
-        return Err("expected Restrict violations".into());
+    let err = match delete_entity_now("od_restrict_parent", &pid, valence).await {
+        Ok(()) => return Err("expected Restrict Validation error".into()),
+        Err(e) => e,
+    };
+    let msg = err.to_string().to_lowercase();
+    if !msg.contains("restrict") {
+        return Err(format!("expected Restrict in error, got {err}"));
     }
-    if !dag.nodes.is_empty() {
-        return Err("Restrict DAG must have empty nodes".into());
-    }
-    // Do not apply — parent and child must still exist.
+
     if QueryCore::get_record_json("od_restrict_parent", &pid, valence)
         .await
         .map_err(|e| e.to_string())?
@@ -467,14 +351,14 @@ pub async fn run_on_delete_restrict_blocks(valence: &Valence) -> Result<(), Stri
     {
         return Err("parent must remain when Restrict blocks".into());
     }
+    if QueryCore::get_record_json("od_restrict_child", &cid, valence)
+        .await
+        .map_err(|e| e.to_string())?
+        .is_none()
+    {
+        return Err("child must remain when Restrict blocks".into());
+    }
     Ok(())
-}
-
-fn unique_suffix() -> u128 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_nanos())
-        .unwrap_or(0)
 }
 
 /// Representative secondary for OnDelete cross-engine when `primary` is the catalog storage.
@@ -593,16 +477,7 @@ pub async fn run_on_delete_cascade_cross_engine(
         return Err("cross-engine fixture must use distinct parent/child backends".into());
     }
 
-    let dag = DeletionDag::compute("od_xe_ca_parent", &pid, &valence)
-        .await
-        .map_err(|e| e.to_string())?;
-    if !dag.restrict_violations.is_empty() {
-        return Err(format!(
-            "unexpected Restrict: {:?}",
-            dag.restrict_violations
-        ));
-    }
-    apply_ordered_dag(&dag, &valence)
+    delete_entity_now("od_xe_ca_parent", &pid, &valence)
         .await
         .map_err(|e| e.to_string())?;
 
@@ -656,10 +531,7 @@ pub async fn run_on_delete_set_null_cross_engine(
         .await
         .map_err(|e| e.to_string())?;
 
-    let dag = DeletionDag::compute("od_xe_sn_parent", &pid, &valence)
-        .await
-        .map_err(|e| e.to_string())?;
-    apply_ordered_dag(&dag, &valence)
+    delete_entity_now("od_xe_sn_parent", &pid, &valence)
         .await
         .map_err(|e| e.to_string())?;
 
@@ -683,6 +555,112 @@ fn ensure_cross_engine_schemas_registered() {
             && reg.get_schema("od_xe_sn_child").is_some(),
         "OnDelete cross-engine schemas missing from SchemaRegistry::global (inventory link?)"
     );
+}
+
+// Same-backend OnDelete schemas for `delete_entity_now`.
+valence_core::inventory::submit! {
+    valence_core::schema::SchemaMetadataInit(|| {
+        public_delete_schema(
+            "od_cascade_parent",
+            vec![DEFAULT_IN_MEMORY.name().to_string()],
+            &DEFAULT_IN_MEMORY,
+            vec![has_many_conn(
+                "kids",
+                "od_cascade_parent",
+                "od_cascade_child",
+                "parent_id",
+                "Cascade",
+            )],
+        )
+    })
+}
+valence_core::inventory::submit! {
+    valence_core::schema::SchemaMetadataInit(|| {
+        public_delete_schema(
+            "od_cascade_child",
+            vec![DEFAULT_IN_MEMORY.name().to_string()],
+            &DEFAULT_IN_MEMORY,
+            vec![],
+        )
+    })
+}
+valence_core::inventory::submit! {
+    valence_core::schema::SchemaMetadataInit(|| {
+        public_delete_schema(
+            "od_setnull_parent",
+            vec![DEFAULT_IN_MEMORY.name().to_string()],
+            &DEFAULT_IN_MEMORY,
+            vec![has_many_conn(
+                "kids",
+                "od_setnull_parent",
+                "od_setnull_child",
+                "parent_id",
+                "SetNull",
+            )],
+        )
+    })
+}
+valence_core::inventory::submit! {
+    valence_core::schema::SchemaMetadataInit(|| {
+        public_delete_schema(
+            "od_setnull_child",
+            vec![DEFAULT_IN_MEMORY.name().to_string()],
+            &DEFAULT_IN_MEMORY,
+            vec![],
+        )
+    })
+}
+valence_core::inventory::submit! {
+    valence_core::schema::SchemaMetadataInit(|| {
+        public_delete_schema(
+            "od_edge_parent",
+            vec![DEFAULT_IN_MEMORY.name().to_string()],
+            &DEFAULT_IN_MEMORY,
+            vec![m2m_conn(
+                "tags",
+                "od_edge_parent",
+                "od_edge_peer",
+                "od_edge_link",
+                "SetNull",
+            )],
+        )
+    })
+}
+valence_core::inventory::submit! {
+    valence_core::schema::SchemaMetadataInit(|| {
+        public_delete_schema(
+            "od_edge_peer",
+            vec![DEFAULT_IN_MEMORY.name().to_string()],
+            &DEFAULT_IN_MEMORY,
+            vec![],
+        )
+    })
+}
+valence_core::inventory::submit! {
+    valence_core::schema::SchemaMetadataInit(|| {
+        public_delete_schema(
+            "od_restrict_parent",
+            vec![DEFAULT_IN_MEMORY.name().to_string()],
+            &DEFAULT_IN_MEMORY,
+            vec![has_many_conn(
+                "kids",
+                "od_restrict_parent",
+                "od_restrict_child",
+                "parent_id",
+                "Restrict",
+            )],
+        )
+    })
+}
+valence_core::inventory::submit! {
+    valence_core::schema::SchemaMetadataInit(|| {
+        public_delete_schema(
+            "od_restrict_child",
+            vec![DEFAULT_IN_MEMORY.name().to_string()],
+            &DEFAULT_IN_MEMORY,
+            vec![],
+        )
+    })
 }
 
 // Inventory registration so `DeletionDag::compute` + `backend_for_table` route hop engines.
@@ -779,4 +757,83 @@ pub async fn run_on_delete_hop_pairs(
             .map_err(valence_core::error::Error::Internal)?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use valence_backend_mem::InMemoryBackend;
+    use valence_core::deletion::dag::DeletionAction;
+
+    fn mem_valence() -> Valence {
+        Valence::builder()
+            .add_backend(
+                "default",
+                Arc::new(InMemoryBackend::new()) as Arc<dyn DatabaseBackend>,
+            )
+            .with_actor(Actor::User {
+                user_id: "on_delete_unit".into(),
+            })
+            .build()
+            .expect("build")
+    }
+
+    #[tokio::test]
+    async fn on_delete_cascade_same_backend_mem() {
+        run_on_delete_cascade_same_backend(&mem_valence())
+            .await
+            .expect("cascade");
+    }
+
+    #[tokio::test]
+    async fn on_delete_set_null_mem() {
+        run_on_delete_set_null(&mem_valence())
+            .await
+            .expect("set null");
+    }
+
+    #[tokio::test]
+    async fn on_delete_restrict_blocks_mem() {
+        run_on_delete_restrict_blocks(&mem_valence())
+            .await
+            .expect("restrict");
+    }
+
+    #[tokio::test]
+    async fn on_delete_remove_edge_mem() {
+        run_on_delete_remove_edge(&mem_valence())
+            .await
+            .expect("remove edge");
+    }
+
+    #[tokio::test]
+    async fn on_delete_apply_ordered_dag_delegates() {
+        let v = mem_valence();
+        let backend = v.active_backend().unwrap();
+        backend
+            .create_record("od_cascade_parent", json!({"id": "dag_p"}))
+            .await
+            .unwrap();
+        backend
+            .create_record(
+                "od_cascade_child",
+                json!({"id": "dag_c", "parent_id": "od_cascade_parent:dag_p"}),
+            )
+            .await
+            .unwrap();
+        let dag = DeletionDag::compute("od_cascade_parent", "dag_p", &v)
+            .await
+            .unwrap();
+        assert!(!dag.nodes.is_empty());
+        let ordered = ordered_deletion_nodes(&dag);
+        assert_eq!(ordered.len(), dag.nodes.len());
+        assert!(ordered
+            .iter()
+            .any(|n| matches!(n.action, DeletionAction::CascadeDelete)));
+        apply_ordered_dag(&dag, &v).await.expect("apply");
+        assert!(QueryCore::get_record_json("od_cascade_child", "dag_c", &v)
+            .await
+            .unwrap()
+            .is_none());
+    }
 }

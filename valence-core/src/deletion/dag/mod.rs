@@ -5,7 +5,9 @@ mod plan;
 mod validate;
 
 pub use plan::{DeletionAction, DeletionDag, DeletionNode, RestrictViolation};
-pub use validate::{table_skips_pending_deletion_filter, SKIP_DELETION_GRAPH_TABLES};
+pub use validate::{
+    assert_safe_bare_thing_id, table_skips_pending_deletion_filter, SKIP_DELETION_GRAPH_TABLES,
+};
 
 use std::collections::{HashMap, VecDeque};
 
@@ -18,7 +20,7 @@ use build::{
     count_m2m_edges_from_root, count_where_thing_eq, list_m2m_edge_pairs_for_endpoint,
     select_child_ids_hasmany, select_hasone_cascade_children,
 };
-use validate::{assert_safe_bare_thing_id, assert_safe_ident, skip_graph_table};
+use validate::{assert_safe_ident, skip_graph_table};
 
 /// Child tables for a connection `to_table`, expanding `trait:TraitName` via [`TraitRegistry`].
 fn connection_child_tables(

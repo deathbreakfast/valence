@@ -198,6 +198,14 @@ pub enum ScenarioStep {
     OnDeleteCascadeCrossEngine,
     /// Cross-engine SetNull on secondary engine.
     OnDeleteSetNullCrossEngine,
+    /// Sync `delete_entity_now` cascade (same-backend).
+    DeleteNowCascade,
+    /// Sync delete_now child Delete privacy deny (no mutation).
+    DeleteNowPrivacyDeny,
+    /// Sync delete_now Restrict blocks (no mutation).
+    DeleteNowRestrict,
+    /// Cross-engine partial apply then idempotent `delete_entity_now` retry.
+    DeleteNowCrossEnginePartialRetry,
     /// Ensure typed layout, add a field via additive sync, read/write the new column.
     TypedSyncAddField {
         /// Physical table name (unique per storage on shared wire stores).
@@ -715,6 +723,40 @@ impl ScenarioSpec {
             steps: vec![
                 ScenarioStep::BuildValence,
                 ScenarioStep::OnDeleteSetNullCrossEngine,
+            ],
+        }
+    }
+
+    pub fn delete_now_cascade() -> Self {
+        Self {
+            id: "delete-now-cascade".into(),
+            steps: vec![ScenarioStep::BuildValence, ScenarioStep::DeleteNowCascade],
+        }
+    }
+
+    pub fn delete_now_privacy_deny() -> Self {
+        Self {
+            id: "delete-now-privacy-deny".into(),
+            steps: vec![
+                ScenarioStep::BuildValence,
+                ScenarioStep::DeleteNowPrivacyDeny,
+            ],
+        }
+    }
+
+    pub fn delete_now_restrict() -> Self {
+        Self {
+            id: "delete-now-restrict".into(),
+            steps: vec![ScenarioStep::BuildValence, ScenarioStep::DeleteNowRestrict],
+        }
+    }
+
+    pub fn delete_now_cross_engine_partial_retry() -> Self {
+        Self {
+            id: "delete-now-cross-engine-partial-retry".into(),
+            steps: vec![
+                ScenarioStep::BuildValence,
+                ScenarioStep::DeleteNowCrossEnginePartialRetry,
             ],
         }
     }

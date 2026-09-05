@@ -8,7 +8,7 @@ pub const ALL_EXPERIMENT_IDS: &[&str] = &[
     "bm-v0", "bm-v1", "bm-v2", "bm-v3", "bm-v4", "bm-v5", "bm-v6", "bm-v7", "bm-v8", "bm-v9",
     "bm-v11", "bm-v12", "bm-v13", "bm-v14", "bm-v15", "bm-v16", "bm-v17", "bm-v18", "bm-v19",
     "bm-v20", "bm-v21", "bm-v22", "bm-v23", "bm-v24", "bm-v25", "bm-v26", "bm-v27", "bm-v28",
-    "bm-v29", "bm-v30",
+    "bm-v29", "bm-v30", "bm-v31",
 ];
 
 /// Experiments that always use in-process mem (ignore matrix `--storage`).
@@ -50,7 +50,7 @@ pub struct ExperimentPlan {
 pub fn resolve_experiment(id: &str, ops: Option<usize>) -> Result<ExperimentPlan> {
     let default_ops = match id {
         "bm-v0" | "bm-v1" | "bm-v2" | "bm-v4" | "bm-v6" | "bm-v8" | "bm-v9" | "bm-v16"
-        | "bm-v18" | "bm-v20" | "bm-v21" => 1000,
+        | "bm-v18" | "bm-v20" | "bm-v21" | "bm-v31" => 1000,
         "bm-v3" | "bm-v13" | "bm-v14" | "bm-v15" | "bm-v19" | "bm-v23" => 500,
         "bm-v5" | "bm-v7" | "bm-v28" | "bm-v29" | "bm-v30" => 0,
         "bm-v11" | "bm-v12" | "bm-v22" => 1000,
@@ -66,6 +66,14 @@ pub fn resolve_experiment(id: &str, ops: Option<usize>) -> Result<ExperimentPlan
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn v31_is_registered() {
+        assert!(ALL_EXPERIMENT_IDS.contains(&"bm-v31"));
+        let plan = resolve_experiment("bm-v31", None).expect("v31");
+        assert_eq!(plan.id, "bm-v31");
+        assert_eq!(plan.default_ops, 1000);
+    }
 
     #[test]
     fn v30_is_registered_and_defaults_to_zero_ops() {

@@ -1,14 +1,11 @@
 //! Table-keyed queued delete for admin tooling.
 
-use crate::deletion::dag::table_skips_pending_deletion_filter;
-use crate::deletion::dag::DeletionDag;
-use crate::deletion::{dispatch, DeletionRequest, DeletionService};
-use crate::error::{Error, Result};
-use crate::ownership;
-use crate::privacy::{PrivacyEvaluator, PrivacyOperation};
-use crate::query::QueryCore;
+use crate::deletion::{
+    dispatch, prepare_deletion, DeletionMode, DeletionRequest, DeletionService, PreparedDeletion,
+};
+use crate::error::Result;
+use crate::ownership::OwnershipService;
 use crate::runtime::Valence;
-use crate::schema::SchemaRegistry;
 
 /// Queue a privacy-checked deletion run for `table`/`id`.
 ///
@@ -36,66 +33,34 @@ pub async fn queue_delete_entity_returning_run_id(
     id: &str,
     v: &Valence,
 ) -> Result<Option<String>> {
-    if table_skips_pending_deletion_filter(table) {
-        return Err(Error::Validation(format!(
-            "queued delete is not supported for table {table:?}"
-        )));
-    }
+    match prepare_deletion(table, id, DeletionMode::Queued, v).await? {
+        PreparedDeletion::Missing | PreparedDeletion::Pending { .. } => Ok(None),
+        PreparedDeletion::Ready { bare_id, dag } => {
+            OwnershipService::mark_pending_deletion(table, &bare_id, v).await?;
 
-    let registry = SchemaRegistry::global();
-    let schema = registry
-        .get_schema(table)
-        .ok_or_else(|| Error::NotFound(format!("unknown table {table}")))?;
+            let actor_json = serde_json::to_value(v.actor()).unwrap_or(serde_json::Value::Null);
+            let run_id =
+                DeletionService::create_run(table, &bare_id, actor_json.clone(), v).await?;
+            #[cfg(feature = "instrumentation")]
+            {
+                let max_depth = dag.nodes.iter().map(|n| n.depth).max().unwrap_or(0) as usize;
+                crate::instrumentation::record_run_queued(
+                    table,
+                    &bare_id,
+                    dag.nodes.len(),
+                    max_depth,
+                );
+            }
+            let _ = dag;
+            dispatch(DeletionRequest {
+                run_id: run_id.clone(),
+                root_table: table.to_string(),
+                root_record_id: bare_id,
+                actor_json,
+            })
+            .await?;
 
-    let Some(existing) = QueryCore::get_record_json(table, id, v).await? else {
-        return Ok(None);
-    };
-
-    PrivacyEvaluator::check_entity_access(schema, PrivacyOperation::Delete, &existing, v).await?;
-
-    let bare = ownership::normalize_record_id_for_ownership(id);
-    if let Ok(Some(ownership)) =
-        ownership::OwnershipService::get_ownership_json(table, &bare, v).await
-    {
-        if ownership.get("status").and_then(|s| s.as_str()) == Some("pending_deletion") {
-            return Ok(None);
+            Ok(Some(run_id))
         }
     }
-
-    let dag = DeletionDag::compute(table, &bare, v).await?;
-    if !dag.restrict_violations.is_empty() {
-        #[cfg(feature = "instrumentation")]
-        for v in &dag.restrict_violations {
-            crate::instrumentation::record_restrict_blocked(
-                table,
-                &bare,
-                &v.connection_name,
-                v.blocking_record_count.max(0) as usize,
-            );
-        }
-        return Err(Error::Validation(format!(
-            "delete restricted: {:?}",
-            dag.restrict_violations
-        )));
-    }
-    crate::deletion::check_dag_delete_privacy(&dag, v).await?;
-
-    ownership::OwnershipService::mark_pending_deletion(table, &bare, v).await?;
-
-    let actor_json = serde_json::to_value(v.actor()).unwrap_or(serde_json::Value::Null);
-    let run_id = DeletionService::create_run(table, &bare, actor_json.clone(), v).await?;
-    #[cfg(feature = "instrumentation")]
-    {
-        let max_depth = dag.nodes.iter().map(|n| n.depth).max().unwrap_or(0) as usize;
-        crate::instrumentation::record_run_queued(table, &bare, dag.nodes.len(), max_depth);
-    }
-    dispatch(DeletionRequest {
-        run_id: run_id.clone(),
-        root_table: table.to_string(),
-        root_record_id: bare,
-        actor_json,
-    })
-    .await?;
-
-    Ok(Some(run_id))
 }

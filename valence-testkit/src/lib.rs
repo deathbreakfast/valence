@@ -32,6 +32,7 @@ mod admin_contract;
 mod backend_contract;
 mod bootstrap;
 mod catalog;
+mod delete_now;
 mod deletion_capture;
 mod deletion_contract;
 mod fixtures;
@@ -52,6 +53,10 @@ pub use bootstrap::{BootstrapMode, BootstrapSession, WireBackendOptions};
 pub use catalog::{
     catalog_for_storage, e2e_storage_backends, embedded_catalog, run_catalog_entry, CatalogEntry,
     PathKind,
+};
+pub use delete_now::{
+    run_delete_now_cascade, run_delete_now_cross_engine_partial_retry,
+    run_delete_now_partial_retry_for_storage, run_delete_now_privacy_deny, run_delete_now_restrict,
 };
 #[cfg(feature = "surreal-mem")]
 pub use deletion_contract::run_deletion_contract_surreal_mem;

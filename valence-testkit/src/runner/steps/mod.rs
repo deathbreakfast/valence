@@ -1,6 +1,7 @@
 //! Step dispatch — one concern per submodule (keeps cyclomatic complexity low).
 
 mod crud;
+mod delete_now;
 mod model;
 mod on_delete;
 mod privacy;
@@ -76,6 +77,12 @@ pub(super) async fn run_step(
         | ScenarioStep::OnDeleteRestrictBlocks
         | ScenarioStep::OnDeleteCascadeCrossEngine
         | ScenarioStep::OnDeleteSetNullCrossEngine => on_delete::run(session, step, mode).await,
+        ScenarioStep::DeleteNowCascade
+        | ScenarioStep::DeleteNowPrivacyDeny
+        | ScenarioStep::DeleteNowRestrict
+        | ScenarioStep::DeleteNowCrossEnginePartialRetry => {
+            delete_now::run(session, step, mode).await
+        }
     }
 }
 
@@ -137,6 +144,12 @@ pub(super) fn step_label(step: &ScenarioStep) -> String {
         ScenarioStep::OnDeleteRestrictBlocks => "on_delete_restrict_blocks".into(),
         ScenarioStep::OnDeleteCascadeCrossEngine => "on_delete_cascade_cross_engine".into(),
         ScenarioStep::OnDeleteSetNullCrossEngine => "on_delete_set_null_cross_engine".into(),
+        ScenarioStep::DeleteNowCascade => "delete_now_cascade".into(),
+        ScenarioStep::DeleteNowPrivacyDeny => "delete_now_privacy_deny".into(),
+        ScenarioStep::DeleteNowRestrict => "delete_now_restrict".into(),
+        ScenarioStep::DeleteNowCrossEnginePartialRetry => {
+            "delete_now_cross_engine_partial_retry".into()
+        }
         ScenarioStep::TypedSyncAddField { .. } => "typed_sync_add_field".into(),
         ScenarioStep::SchemaVersionSkip => "schema_version_skip".into(),
         ScenarioStep::SchemaVersionBumpAddField { .. } => "schema_version_bump_add_field".into(),

@@ -2,23 +2,28 @@
 
 #![allow(clippy::expect_used, clippy::unwrap_used)]
 
+use std::pin::Pin;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
+use async_trait::async_trait;
 use serde_json::json;
 use valence_backend_mem::InMemoryBackend;
 use valence_core::actor::Actor;
+use valence_core::compiled_query::CompiledQuery;
 use valence_core::deletion::dag::{DeletionAction, DeletionDag};
 use valence_core::deletion::{
-    delete_entity_now, normalize_record_id_for_deletion, prepare_deletion, DeletionMode,
-    PreparedDeletion,
+    delete_entity_now, normalize_record_id_for_deletion, prepare_deletion,
+    DeleteSideEffectDescriptor, DeletionMode, PreparedDeletion,
 };
-use valence_core::error::Error;
+use valence_core::error::{Error, Result as VResult};
 use valence_core::evaluator::DEFAULT_IN_MEMORY;
 use valence_core::owner_ref::OwnerRef;
 use valence_core::ownership::OwnershipService;
 use valence_core::privacy::PrivacyRule;
 use valence_core::privacy_policies::common::{AUTHENTICATED, PUBLIC_READ, SYSTEM_ONLY};
 use valence_core::query::QueryCore;
+use valence_core::read_cache;
 use valence_core::record_id::RecordId;
 use valence_core::schema::{SchemaMetadata, SchemaRegistry};
 use valence_core::schema_api::{
@@ -150,11 +155,145 @@ fn ensure_dn_schemas() {
         "dn_pgp",
         "dn_pending",
         "dn_missing",
+        "dn_se",
+        "dn_own",
+        "dn_fault_p",
+        "dn_fault_c",
     ] {
         assert!(
             reg.get_schema(table).is_some(),
             "delete_now schema {table} missing from SchemaRegistry::global (inventory link?)"
         );
+    }
+}
+
+static DN_SE_CALLS: AtomicUsize = AtomicUsize::new(0);
+static DN_FAULT_SE_CALLS: AtomicUsize = AtomicUsize::new(0);
+
+fn dn_se_dispatch(
+    _v: Valence,
+    _row: serde_json::Value,
+) -> Pin<Box<dyn std::future::Future<Output = ()> + Send + 'static>> {
+    Box::pin(async move {
+        DN_SE_CALLS.fetch_add(1, Ordering::SeqCst);
+    })
+}
+
+fn dn_fault_se_dispatch(
+    _v: Valence,
+    _row: serde_json::Value,
+) -> Pin<Box<dyn std::future::Future<Output = ()> + Send + 'static>> {
+    Box::pin(async move {
+        DN_FAULT_SE_CALLS.fetch_add(1, Ordering::SeqCst);
+    })
+}
+
+valence_core::inventory::submit! {
+    DeleteSideEffectDescriptor {
+        table_name: "dn_se",
+        dispatch: dn_se_dispatch,
+    }
+}
+
+valence_core::inventory::submit! {
+    DeleteSideEffectDescriptor {
+        table_name: "dn_fault_p",
+        dispatch: dn_fault_se_dispatch,
+    }
+}
+
+/// Fails the Nth `delete_record` (1-based) when `fail_on` is non-zero.
+#[derive(Debug)]
+struct FailNthDelete {
+    inner: Arc<dyn DatabaseBackend>,
+    deletes: AtomicUsize,
+    /// 1-based delete index to fail; `0` disables injection.
+    fail_on: AtomicUsize,
+}
+
+#[async_trait]
+impl DatabaseBackend for FailNthDelete {
+    fn engine_id(&self) -> &'static str {
+        self.inner.engine_id()
+    }
+
+    fn capabilities(&self) -> valence_core::backend::BackendCapabilities {
+        self.inner.capabilities()
+    }
+
+    async fn execute_compiled_query(
+        &self,
+        compiled: &CompiledQuery,
+    ) -> VResult<Vec<serde_json::Value>> {
+        self.inner.execute_compiled_query(compiled).await
+    }
+
+    async fn get_record(&self, table: &str, id: &str) -> VResult<Option<serde_json::Value>> {
+        self.inner.get_record(table, id).await
+    }
+
+    async fn create_record(
+        &self,
+        table: &str,
+        content: serde_json::Value,
+    ) -> VResult<serde_json::Value> {
+        self.inner.create_record(table, content).await
+    }
+
+    async fn update_record(
+        &self,
+        table: &str,
+        id: &str,
+        content: serde_json::Value,
+    ) -> VResult<serde_json::Value> {
+        self.inner.update_record(table, id, content).await
+    }
+
+    async fn merge_record(
+        &self,
+        table: &str,
+        id: &str,
+        patch: serde_json::Value,
+    ) -> VResult<serde_json::Value> {
+        self.inner.merge_record(table, id, patch).await
+    }
+
+    async fn upsert_record(
+        &self,
+        table: &str,
+        id: &str,
+        content: serde_json::Value,
+    ) -> VResult<serde_json::Value> {
+        self.inner.upsert_record(table, id, content).await
+    }
+
+    async fn delete_record(&self, table: &str, id: &str) -> VResult<()> {
+        let fail_on = self.fail_on.load(Ordering::SeqCst);
+        if fail_on > 0 {
+            let n = self.deletes.fetch_add(1, Ordering::SeqCst) + 1;
+            if n == fail_on {
+                return Err(Error::database(format!(
+                    "injected delete failure at {table}:{id}"
+                )));
+            }
+        }
+        self.inner.delete_record(table, id).await
+    }
+
+    async fn relate_edge(&self, from: &RecordId, edge_table: &str, to: &RecordId) -> VResult<()> {
+        self.inner.relate_edge(from, edge_table, to).await
+    }
+
+    async fn unrelate_edge(&self, from: &RecordId, edge_table: &str, to: &RecordId) -> VResult<()> {
+        self.inner.unrelate_edge(from, edge_table, to).await
+    }
+
+    async fn get_edge_targets(&self, from: &RecordId, edge_table: &str) -> VResult<Vec<RecordId>> {
+        self.inner.get_edge_targets(from, edge_table).await
+    }
+
+    async fn get_edge_sources(&self, to: &RecordId, edge_table: &str) -> VResult<Vec<RecordId>> {
+        self.inner.get_edge_sources(to, edge_table).await
     }
 }
 
@@ -243,6 +382,29 @@ valence_core::inventory::submit! {
 }
 valence_core::inventory::submit! {
     valence_core::schema::SchemaMetadataInit(|| public_delete_schema("dn_missing", vec![]))
+}
+valence_core::inventory::submit! {
+    valence_core::schema::SchemaMetadataInit(|| public_delete_schema("dn_se", vec![]))
+}
+valence_core::inventory::submit! {
+    valence_core::schema::SchemaMetadataInit(|| public_delete_schema("dn_own", vec![]))
+}
+valence_core::inventory::submit! {
+    valence_core::schema::SchemaMetadataInit(|| {
+        public_delete_schema(
+            "dn_fault_p",
+            vec![has_many(
+                "kids",
+                "dn_fault_p",
+                "dn_fault_c",
+                "parent_id",
+                "Cascade",
+            )],
+        )
+    })
+}
+valence_core::inventory::submit! {
+    valence_core::schema::SchemaMetadataInit(|| public_delete_schema("dn_fault_c", vec![]))
 }
 
 #[tokio::test]
@@ -593,4 +755,185 @@ async fn delete_now_missing_row_returns_ok() {
     delete_entity_now("dn_missing", "no-such-row", &v)
         .await
         .expect("missing is Ok");
+}
+
+#[tokio::test]
+async fn delete_now_dispatches_delete_side_effect_once() {
+    ensure_dn_schemas();
+    DN_SE_CALLS.store(0, Ordering::SeqCst);
+    let (v, backend) = mem_valence(Actor::User {
+        user_id: "u1".into(),
+    });
+    backend
+        .create_record("dn_se", json!({"id": "s1"}))
+        .await
+        .unwrap();
+
+    delete_entity_now("dn_se", "s1", &v)
+        .await
+        .expect("delete with SE");
+    assert_eq!(DN_SE_CALLS.load(Ordering::SeqCst), 1);
+
+    delete_entity_now("dn_se", "s1", &v)
+        .await
+        .expect("missing is Ok");
+    assert_eq!(
+        DN_SE_CALLS.load(Ordering::SeqCst),
+        1,
+        "missing row must not re-dispatch Delete side effects"
+    );
+}
+
+#[tokio::test]
+async fn delete_now_marks_ownership_deleted() {
+    ensure_dn_schemas();
+    let (v, backend) = mem_valence(Actor::User {
+        user_id: "u1".into(),
+    });
+    backend
+        .create_record("dn_own", json!({"id": "o1"}))
+        .await
+        .unwrap();
+    OwnershipService::ensure_active_ownership("dn_own", "o1", OwnerRef::system(), &v)
+        .await
+        .unwrap();
+
+    delete_entity_now("dn_own", "o1", &v).await.expect("delete");
+
+    let own = OwnershipService::get_ownership_json("dn_own", "o1", &v)
+        .await
+        .unwrap()
+        .expect("ownership row remains as audit");
+    assert_eq!(own.get("status").and_then(|s| s.as_str()), Some("deleted"));
+}
+
+#[tokio::test]
+async fn delete_now_invalidates_deleted_and_set_null_cache_entries() {
+    ensure_dn_schemas();
+    read_cache::clear_for_test();
+    let (v, backend) = mem_valence(Actor::User {
+        user_id: "u1".into(),
+    });
+    backend
+        .create_record("dn_root", json!({"id": "cache1"}))
+        .await
+        .unwrap();
+    backend
+        .create_record(
+            "dn_ref",
+            json!({"id": "cache_r1", "parent_id": "dn_root:cache1", "name": "keep"}),
+        )
+        .await
+        .unwrap();
+
+    let be = v.active_backend().unwrap();
+    let warm = read_cache::get_record_via_cache(&be, "dn_root", "cache1")
+        .await
+        .unwrap();
+    assert!(warm.is_some());
+    let warm_ref = read_cache::get_record_via_cache(&be, "dn_ref", "cache_r1")
+        .await
+        .unwrap();
+    assert_eq!(
+        warm_ref
+            .as_ref()
+            .and_then(|r| r.get("parent_id"))
+            .and_then(|p| p.as_str()),
+        Some("dn_root:cache1")
+    );
+
+    delete_entity_now("dn_root", "cache1", &v)
+        .await
+        .expect("cascade + setnull");
+
+    assert!(read_cache::get_record_via_cache(&be, "dn_root", "cache1")
+        .await
+        .unwrap()
+        .is_none());
+    let after_ref = read_cache::get_record_via_cache(&be, "dn_ref", "cache_r1")
+        .await
+        .unwrap()
+        .expect("set-null row remains");
+    assert!(after_ref.get("parent_id").unwrap().is_null());
+}
+
+#[tokio::test]
+async fn delete_now_partial_failure_then_idempotent_retry() {
+    ensure_dn_schemas();
+    DN_FAULT_SE_CALLS.store(0, Ordering::SeqCst);
+
+    let inner: Arc<dyn DatabaseBackend> = Arc::new(InMemoryBackend::new());
+    let fault_backend = Arc::new(FailNthDelete {
+        inner: Arc::clone(&inner),
+        deletes: AtomicUsize::new(0),
+        fail_on: AtomicUsize::new(2),
+    });
+    let fault: Arc<dyn DatabaseBackend> = Arc::clone(&fault_backend) as _;
+    let v = Valence::builder()
+        .add_backend("default", Arc::clone(&fault))
+        .with_actor(Actor::User {
+            user_id: "u1".into(),
+        })
+        .build()
+        .expect("build");
+
+    fault
+        .create_record("dn_fault_p", json!({"id": "fp1"}))
+        .await
+        .unwrap();
+    fault
+        .create_record(
+            "dn_fault_c",
+            json!({"id": "fc1", "parent_id": "dn_fault_p:fp1"}),
+        )
+        .await
+        .unwrap();
+
+    let err = delete_entity_now("dn_fault_p", "fp1", &v)
+        .await
+        .expect_err("second delete_record must fail");
+    let msg = err.to_string();
+    assert!(
+        msg.contains("dn_fault_p:fp1") || msg.contains("injected delete failure"),
+        "error should name safe table:id context, got {msg}"
+    );
+    assert_eq!(
+        DN_FAULT_SE_CALLS.load(Ordering::SeqCst),
+        0,
+        "root SE must not run when root delete fails"
+    );
+
+    assert!(QueryCore::get_record_json("dn_fault_c", "fc1", &v)
+        .await
+        .unwrap()
+        .is_none());
+    assert!(QueryCore::get_record_json("dn_fault_p", "fp1", &v)
+        .await
+        .unwrap()
+        .is_some());
+
+    fault_backend.fail_on.store(0, Ordering::SeqCst);
+    fault_backend.deletes.store(0, Ordering::SeqCst);
+
+    delete_entity_now("dn_fault_p", "fp1", &v)
+        .await
+        .expect("idempotent retry completes");
+    assert!(QueryCore::get_record_json("dn_fault_p", "fp1", &v)
+        .await
+        .unwrap()
+        .is_none());
+    assert_eq!(
+        DN_FAULT_SE_CALLS.load(Ordering::SeqCst),
+        1,
+        "root Delete SE once after successful physical delete"
+    );
+
+    delete_entity_now("dn_fault_p", "fp1", &v)
+        .await
+        .expect("second retry on missing");
+    assert_eq!(
+        DN_FAULT_SE_CALLS.load(Ordering::SeqCst),
+        1,
+        "missing root must not re-fire SE"
+    );
 }

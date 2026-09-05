@@ -25,9 +25,11 @@
 //!   ([`check_dag_delete_privacy`]) before queueing; Read is not required. `SetNull` / `RemoveEdge`
 //!   clear under the requester via deletion-scoped `merge_record` / `unrelate_edge`. Host workers
 //!   restore the deleting actor and run schema `side_effects` on physical CascadeDelete.
+//!   [Get started](#choose-a-deletion-mode).
 //! - **Delete now** — [`Model::delete_now`] / [`delete_entity_now`] run the same DAG authorize +
 //!   apply path in the current future for bounded workloads. A root already marked
 //!   `pending_deletion` returns [`Error::PendingDeletion`]. Prefer queued delete for large graphs.
+//!   [Get started](#delete-now).
 //! - **Query privacy** — [`QueryCore::execute`] / `Model::query` post-filter rows by entity read
 //!   policy and field policies
 //! - **Default-deny policies** — schemas without entity `policies:` deny non-System actors
@@ -343,6 +345,12 @@
 //!
 //! ### Choose a deletion mode
 //!
+//! Valence offers two deletion modes that share one DAG prepare + authorize path. Pick
+//! **queued** when the graph is large or must survive process restarts; pick **now** when the
+//! work fits the current request and you want the rows gone before the handler returns.
+//! Product hosts (for example Neutrino vault delete) use **now**, then tear down Gauge ACL
+//! bundles only after physical rows succeed.
+//!
 //! - **Queued** — [`Model::delete`] / [`queue_delete_entity`] authorize the DAG, mark
 //!   `pending_deletion`, and dispatch a durable run. Use this for large or retry-heavy graphs.
 //! - **Now** — [`Model::delete_now`] / [`delete_entity_now`] authorize and physically apply the
@@ -359,6 +367,33 @@
 //! // Durable background path for large DAGs.
 //! Project::delete("large-project", &session_valence).await?;
 //! ```
+//!
+//! Next: [Delete now](#delete-now) for the synchronous path alone, or continue to multi-backend
+//! routing below.
+//!
+//! ### Delete now
+//!
+//! Synchronous deletion authorizes every CascadeDelete node under the requesting actor, then
+//! applies the DAG in the current future (cache invalidation, ownership completion, and Delete
+//! side effects included). Call it from request handlers and product teardown when the fan-out
+//! is bounded; do not use it as a substitute for Chronon-backed queued delete on large graphs.
+//!
+//! **Prerequisites:** session [`Valence`] with Delete privacy for every cascade target; root not
+//! already `pending_deletion`.
+//!
+//! ```rust,ignore
+//! use valence::{delete_entity_now, Model};
+//!
+//! Project::delete_now("small-project", &session_valence).await?;
+//! // Dynamic table path:
+//! delete_entity_now("project", "small-project", &session_valence).await?;
+//! assert!(Project::get("small-project", &session_valence).await?.is_none());
+//! ```
+//!
+//! Missing roots succeed (idempotent). [`Error::PendingDeletion`] means a queued run already owns
+//! the root — wait for that worker instead of racing `delete_now`. Partial cross-backend failure
+//! may leave earlier nodes applied; retry the same call safely. Next: [Choose a deletion
+//! mode](#choose-a-deletion-mode) if you are still deciding queued vs now.
 //!
 //! Product-shaped schemas and connections: [`examples/product-model-host`](https://github.com/unified-field-dev/valence/blob/main/examples/product-model-host/).
 //!

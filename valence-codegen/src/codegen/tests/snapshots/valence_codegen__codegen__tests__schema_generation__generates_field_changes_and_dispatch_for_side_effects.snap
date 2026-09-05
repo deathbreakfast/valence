@@ -1,6 +1,5 @@
 ---
 source: valence-codegen/src/codegen/tests/schema_generation.rs
-assertion_line: 183
 expression: generated
 ---
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -315,60 +314,42 @@ impl valence::Model for ScoreTracker {
         Self::update_with_before(id, data, None, valence).await
     }
     async fn delete(id: &str, valence: &valence::Valence) -> valence::Result<()> {
-        let before_snapshot = match Self::get(id, valence).await {
-            Ok(s) => s,
-            Err(valence::Error::PendingDeletion(_)) => return Ok(()),
-            Err(e) => return Err(e),
-        };
-        if let Some(ref existing) = before_snapshot {
-            existing.check_delete_privacy(valence).await?;
-        } else {
-            return Ok(());
-        }
-        let __bare = valence::ownership::normalize_record_id_for_ownership(id);
-        let dag = valence::deletion::dag::DeletionDag::compute(
+        match valence::deletion::prepare_deletion(
                 Self::table_name(),
-                &__bare,
+                id,
+                valence::deletion::DeletionMode::Queued,
                 valence,
             )
-            .await?;
-        if !dag.restrict_violations.is_empty() {
-            return Err(
-                valence::Error::Validation(
-                    format!(
-                        "delete restricted by schema connections: {:?}", dag
-                        .restrict_violations
-                    ),
-                ),
-            );
+            .await?
+        {
+            valence::deletion::PreparedDeletion::Missing
+            | valence::deletion::PreparedDeletion::Pending { .. } => Ok(()),
+            valence::deletion::PreparedDeletion::Ready { bare_id, .. } => {
+                valence::ownership::OwnershipService::mark_pending_deletion(
+                        Self::table_name(),
+                        &bare_id,
+                        valence,
+                    )
+                    .await?;
+                let actor_json = serde_json::to_value(valence.actor())
+                    .unwrap_or(serde_json::Value::Null);
+                let run_id = valence::deletion::DeletionService::create_run(
+                        Self::table_name(),
+                        &bare_id,
+                        actor_json.clone(),
+                        valence,
+                    )
+                    .await?;
+                valence::deletion::dispatch(valence::deletion::DeletionRequest {
+                        run_id,
+                        root_table: Self::table_name().to_string(),
+                        root_record_id: bare_id,
+                        actor_json,
+                    })
+                    .await?;
+                Ok(())
+            }
         }
-        valence::deletion::check_dag_delete_privacy(&dag, valence).await?;
-        if before_snapshot.is_some() {
-            let __bare = valence::ownership::normalize_record_id_for_ownership(id);
-            valence::ownership::OwnershipService::mark_pending_deletion(
-                    Self::table_name(),
-                    &__bare,
-                    valence,
-                )
-                .await?;
-        }
-        let actor_json = serde_json::to_value(valence.actor())
-            .unwrap_or(serde_json::Value::Null);
-        let run_id = valence::deletion::DeletionService::create_run(
-                Self::table_name(),
-                &__bare,
-                actor_json.clone(),
-                valence,
-            )
-            .await?;
-        valence::deletion::dispatch(valence::deletion::DeletionRequest {
-                run_id,
-                root_table: Self::table_name().to_string(),
-                root_record_id: __bare,
-                actor_json,
-            })
-            .await?;
-        Ok(())
     }
     async fn upsert(
         id: &str,

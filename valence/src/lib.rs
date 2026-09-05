@@ -25,6 +25,9 @@
 //!   ([`check_dag_delete_privacy`]) before queueing; Read is not required. `SetNull` / `RemoveEdge`
 //!   clear under the requester via deletion-scoped `merge_record` / `unrelate_edge`. Host workers
 //!   restore the deleting actor and run schema `side_effects` on physical CascadeDelete.
+//! - **Delete now** — [`Model::delete_now`] / [`delete_entity_now`] run the same DAG authorize +
+//!   apply path in the current future for bounded workloads. A root already marked
+//!   `pending_deletion` returns [`Error::PendingDeletion`]. Prefer queued delete for large graphs.
 //! - **Query privacy** — [`QueryCore::execute`] / `Model::query` post-filter rows by entity read
 //!   policy and field policies
 //! - **Default-deny policies** — schemas without entity `policies:` deny non-System actors
@@ -336,6 +339,25 @@
 //! let loaded = Widget::get(created.id(), &valence).await?;
 //! Widget::update(created.id(), updated, &valence).await?;
 //! Widget::delete(created.id(), &valence).await?;
+//! ```
+//!
+//! ### Choose a deletion mode
+//!
+//! - **Queued** — [`Model::delete`] / [`queue_delete_entity`] authorize the DAG, mark
+//!   `pending_deletion`, and dispatch a durable run. Use this for large or retry-heavy graphs.
+//! - **Now** — [`Model::delete_now`] / [`delete_entity_now`] authorize and physically apply the
+//!   DAG in the current future. Use this for bounded request work (for example a secret with a
+//!   handful of versions). Cross-backend deletes are sequential and not transactional; retry is
+//!   safe because missing nodes succeed.
+//!
+//! ```rust,ignore
+//! use valence::Model;
+//!
+//! // Bounded current-request hard delete.
+//! Project::delete_now("small-project", &session_valence).await?;
+//!
+//! // Durable background path for large DAGs.
+//! Project::delete("large-project", &session_valence).await?;
 //! ```
 //!
 //! Product-shaped schemas and connections: [`examples/product-model-host`](https://github.com/unified-field-dev/valence/blob/main/examples/product-model-host/).

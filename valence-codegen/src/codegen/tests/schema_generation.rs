@@ -161,8 +161,12 @@ valence_schema! {
         "Expected queued deletion run creation in generated delete()"
     );
     assert!(
-        generated.contains("valence::deletion::check_dag_delete_privacy"),
-        "Expected pre-queue DAG Delete privacy check in generated delete()"
+        generated.contains("valence::deletion::prepare_deletion"),
+        "Expected shared deletion prepare (DAG privacy + Restrict) in generated delete()"
+    );
+    assert!(
+        generated.contains("valence::deletion::DeletionMode::Queued"),
+        "Expected queued deletion mode in generated delete()"
     );
 
     // Side effect errors are logged, not propagated

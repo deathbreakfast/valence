@@ -174,9 +174,10 @@ fn parse_external_enum(s: &str) -> Option<String> {
     Some(param.trim_matches('"').trim().replace(' ', ""))
 }
 
-/// `FieldType :: Enum (& ["A", "B"])` after `to_string()` normalization.
+/// `FieldType::Enum(&["A", "B"])` or `FieldType :: Enum (& ["A", "B"])` after `to_string()`.
 fn parse_braced_enum_variants(s: &str) -> Option<Vec<String>> {
-    let enum_pos = s.find(":: Enum")?;
+    // TokenStream spacing varies (`::Enum` vs `:: Enum`); accept both.
+    let enum_pos = s.find(":: Enum").or_else(|| s.find("::Enum"))?;
     let after = s[enum_pos + 2..].trim_start();
     if !after.starts_with("Enum") {
         return None;

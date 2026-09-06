@@ -130,14 +130,13 @@ impl SchemaRegistry {
     /// [`SchemaConnectionsOverlayInit`] for trait-merged connections.
     pub fn register(&mut self, metadata: &'static SchemaMetadata) {
         let key = metadata.table_name.to_string();
-        if self.inner.contains_key(&key) {
-            panic!(
-                "duplicate SchemaMetadata registration for table `{key}`: \
-                 multiple inventory submissions were linked. Keep one \
-                 SchemaMetadataInit per table (use SchemaConnectionsOverlayInit \
-                 for trait-merged connections)."
-            );
-        }
+        assert!(
+            !self.inner.contains_key(&key),
+            "duplicate SchemaMetadata registration for table `{key}`: \
+             multiple inventory submissions were linked. Keep one \
+             SchemaMetadataInit per table (use SchemaConnectionsOverlayInit \
+             for trait-merged connections)."
+        );
         self.inner.insert(key, metadata);
     }
 

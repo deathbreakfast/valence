@@ -575,11 +575,12 @@ valence_core::inventory::submit! {
 }
 valence_core::inventory::submit! {
     valence_core::schema::SchemaMetadataInit(|| {
-        public_delete_schema(
+        public_delete_schema_with_fields(
             "od_cascade_child",
             vec![DEFAULT_IN_MEMORY.name().to_string()],
             &DEFAULT_IN_MEMORY,
             vec![],
+            vec![parent_id_field()],
         )
     })
 }
@@ -601,11 +602,12 @@ valence_core::inventory::submit! {
 }
 valence_core::inventory::submit! {
     valence_core::schema::SchemaMetadataInit(|| {
-        public_delete_schema(
+        public_delete_schema_with_fields(
             "od_setnull_child",
             vec![DEFAULT_IN_MEMORY.name().to_string()],
             &DEFAULT_IN_MEMORY,
             vec![],
+            vec![parent_id_field()],
         )
     })
 }

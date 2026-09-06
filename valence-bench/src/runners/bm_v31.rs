@@ -126,10 +126,10 @@ fn public_child() -> &'static SchemaMetadata {
 }
 
 valence_core::inventory::submit! {
-    valence_core::schema::SchemaMetadataInit(|| public_cascade_root())
+    valence_core::schema::SchemaMetadataInit(public_cascade_root)
 }
 valence_core::inventory::submit! {
-    valence_core::schema::SchemaMetadataInit(|| public_child())
+    valence_core::schema::SchemaMetadataInit(public_child)
 }
 
 fn ensure_schemas() {

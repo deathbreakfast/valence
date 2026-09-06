@@ -53,7 +53,7 @@ cargo test -p uf-valence-core --test dag_privacy --test delete_side_effects --te
 # Bench runner: cargo test -p valence-bench -- bm_v31
 
 # Host: requester actor + OnDelete (SetNull / RemoveEdge / cascade SE)
-# cargo test -p valence-platform --test requester_actor --test public_contracts --test deletion_on_delete
+# Host kit: requester_actor / public_contracts / deletion_on_delete (out of tree)
 
 # Matrix E2E (includes typed-field / on-delete-* catalog)
 # Soft-skip wire adapters unless VALENCE_MATRIX_STRICT=1

@@ -110,7 +110,7 @@ Living coverage map for Valence. Status legend:
 
 | Feature | Happy | Sad | Notes |
 |---------|-------|-----|-------|
-| Table TTL (create-only) | Y | Y | Catalog: `ttl-native-expire` (Redis/Mongo), `ttl-deferred-stamp` (Deferred/Unsupported linger without Chronon), `ttl-deferred-sweep-delete` (Deferred adapters: expired row gone), `ttl-create-only-no-refresh`, `ttl-non-native-warn`. Platform budgeted sweeper: `valence-platform` `ttl_sweep_*` / hybrid integ. Bench: **not required**. Mongo purge timing not waited (TTL monitor). |
+| Table TTL (create-only) | Y | Y | Catalog: `ttl-native-expire` (Redis/Mongo), `ttl-deferred-stamp` (Deferred/Unsupported linger without Chronon), `ttl-deferred-sweep-delete` (Deferred adapters: expired row gone), `ttl-create-only-no-refresh`, `ttl-non-native-warn`. Platform budgeted sweeper: host `ttl_sweep_*` / hybrid integ. Bench: **not required**. Mongo purge timing not waited (TTL monitor). |
 | Side effects on queued/cascade physical delete | Y (platform TM-V3 cascade-child SE) | Y (Restrict → SE=0) | Platform integ; L0 catalog uses `apply_deletion_node` without Chronon SE |
 | Iters / trait mixin / encrypted | Y (`iter-scan-complete` on SQL/Surreal/mem/hybrid) | X Redis/Mongo/Indra/Acme (no keyset pushdown yet) | Platform: `iter_scan_complete` test. Trait mixin / encrypted still N. |
 

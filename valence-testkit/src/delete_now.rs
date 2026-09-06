@@ -17,8 +17,8 @@ use valence_core::router_key::router_key;
 use valence_core::runtime::Valence;
 use valence_core::schema::{SchemaMetadata, SchemaRegistry};
 use valence_core::schema_api::{
-    Schema, SchemaConnection, SchemaMeta, SchemaPolicies, SchemaPolicyRule, SchemaPolicyRules,
-    SchemaPrivacy,
+    Schema, SchemaConnection, SchemaField, SchemaMeta, SchemaPolicies, SchemaPolicyRule,
+    SchemaPolicyRules, SchemaPrivacy,
 };
 
 use crate::bootstrap::WireBackendOptions;
@@ -58,9 +58,38 @@ fn schema_with_delete(
     delete_eval: &'static PrivacyRule,
     delete_name: &str,
 ) -> &'static SchemaMetadata {
+    schema_with_delete_fields(name, connections, delete_eval, delete_name, vec![])
+}
+
+fn parent_id_field() -> SchemaField {
+    SchemaField {
+        name: "parent_id".into(),
+        field_type: "string".into(),
+        primary: false,
+        nullable: true,
+        indexed: false,
+        unique: false,
+        default: None,
+        fk: None,
+        validations: Vec::new(),
+        policies: None,
+        encrypted: false,
+        enum_variants: Vec::new(),
+        enum_type: None,
+        model_path: None,
+    }
+}
+
+fn schema_with_delete_fields(
+    name: &str,
+    connections: Vec<SchemaConnection>,
+    delete_eval: &'static PrivacyRule,
+    delete_name: &str,
+    fields: Vec<SchemaField>,
+) -> &'static SchemaMetadata {
     let schema = leak_schema(Schema {
         name: name.to_string(),
-        version: "0.1.0".to_string(),
+        version: "0.1.1".to_string(),
         databases: vec![DEFAULT_IN_MEMORY.name().to_string()],
         database_evaluator: &DEFAULT_IN_MEMORY,
         privacy: SchemaPrivacy {
@@ -78,7 +107,7 @@ fn schema_with_delete(
             }),
             ..SchemaPolicies::default()
         }),
-        fields: vec![],
+        fields,
         edges: Vec::new(),
         connections,
         side_effects: Vec::new(),
@@ -138,7 +167,13 @@ valence_core::inventory::submit! {
 }
 valence_core::inventory::submit! {
     valence_core::schema::SchemaMetadataInit(|| {
-        schema_with_delete("dncat_priv_c", vec![], &SYSTEM_ONLY, "SYSTEM_ONLY")
+        schema_with_delete_fields(
+            "dncat_priv_c",
+            vec![],
+            &SYSTEM_ONLY,
+            "SYSTEM_ONLY",
+            vec![parent_id_field()],
+        )
     })
 }
 

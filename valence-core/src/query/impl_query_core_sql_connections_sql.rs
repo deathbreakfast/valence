@@ -58,11 +58,16 @@ impl QueryCore {
             .replacen("SELECT id, body", "SELECT id", 1)
             .replacen("SELECT *", "SELECT id", 1);
         let sub_params_len = sub_params.len();
-        let (rewritten, params) = Self::rename_subquery_params(inner, sub_params, prefix);
+        let (rewritten, mut params) = Self::rename_subquery_params(inner, sub_params, prefix);
         *param_counter += sub_params_len;
+        let edge_key = Self::next_param_key(param_counter);
+        params.push((
+            edge_key.clone(),
+            serde_json::Value::String(edge_table.to_string()),
+        ));
         Ok((
             format!(
-                "id IN (SELECT from_id FROM valence_edges WHERE edge_type = '{edge_table}' \
+                "id IN (SELECT from_id FROM valence_edges WHERE edge_type = ${edge_key} \
                  AND to_id IN ({rewritten}))"
             ),
             params,
@@ -74,9 +79,14 @@ impl QueryCore {
         target: &crate::RecordId,
         param_counter: &mut usize,
     ) -> (String, Vec<(String, serde_json::Value)>) {
+        let edge_key = Self::next_param_key(param_counter);
         let tb_key = Self::next_param_key(param_counter);
         let id_key = Self::next_param_key(param_counter);
         let params = vec![
+            (
+                edge_key.clone(),
+                serde_json::Value::String(edge_table.to_string()),
+            ),
             (
                 tb_key.clone(),
                 serde_json::Value::String(target.table().to_string()),
@@ -88,7 +98,7 @@ impl QueryCore {
         ];
         (
             format!(
-                "id IN (SELECT from_id FROM valence_edges WHERE edge_type = '{edge_table}' \
+                "id IN (SELECT from_id FROM valence_edges WHERE edge_type = ${edge_key} \
                  AND to_table = ${tb_key} AND to_id = ${id_key})"
             ),
             params,
@@ -108,6 +118,9 @@ impl QueryCore {
         outer_table: &str,
         param_counter: &mut usize,
     ) -> Result<(String, Vec<(String, serde_json::Value)>)> {
+        if let HopType::ManyToManyForward { edge_table } = &hop.hop_type {
+            crate::safe_ident::assert_registered_edge_ident(edge_table)?;
+        }
         let (source_sql, source_params) = hop.source_query.to_sql()?;
         let source_params_len = source_params.len();
         let prefix = format!("hop_{}", *param_counter);
@@ -140,13 +153,19 @@ impl QueryCore {
                 let inner = source_sql
                     .replacen("SELECT id, body", "SELECT id", 1)
                     .replacen("SELECT *", "SELECT id", 1);
-                let (rewritten, p) =
+                let (rewritten, mut p) =
                     Self::rename_subquery_params(inner, source_params, &prefix);
+                *param_counter += source_params_len;
+                let edge_key = Self::next_param_key(param_counter);
+                p.push((
+                    edge_key.clone(),
+                    serde_json::Value::String(edge_table.clone()),
+                ));
                 let sql = format!(
-                    "id IN (SELECT to_id FROM valence_edges WHERE edge_type = '{edge_table}' \
+                    "id IN (SELECT to_id FROM valence_edges WHERE edge_type = ${edge_key} \
                      AND from_id IN ({rewritten}))"
                 );
-                (sql, p)
+                return Ok((sql, p));
             }
         };
         *param_counter += source_params_len;

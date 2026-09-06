@@ -71,7 +71,7 @@ impl valence::Model for PlainModel {
     async fn get(id: &str, valence: &valence::Valence) -> valence::Result<Option<Self>> {
         let id = id.to_string();
         let (
-            result,
+            mut result,
             __bundle_status,
         ): (Option<Self>, valence::ownership::OwnershipGateStatus) = valence::retry_on_database_tx_conflict(
                 "Model::get",
@@ -118,14 +118,16 @@ impl valence::Model for PlainModel {
             let __bare = valence::ownership::normalize_record_id_for_ownership(
                 id.as_str(),
             );
-            if __bundle_status == valence::ownership::OwnershipGateStatus::NotFetched {
+            let __privacy = if __bundle_status
+                == valence::ownership::OwnershipGateStatus::NotFetched
+            {
                 valence::ownership::OwnershipService::check_privacy_with_pending_gate(
                         record.check_read_privacy(valence),
                         Self::table_name(),
                         &__bare,
                         valence,
                     )
-                    .await?;
+                    .await
             } else {
                 valence::ownership::OwnershipService::check_privacy_with_bundled_gate(
                         record.check_read_privacy(valence),
@@ -133,7 +135,14 @@ impl valence::Model for PlainModel {
                         &__bare,
                         __bundle_status,
                     )
-                    .await?;
+                    .await
+            };
+            match __privacy {
+                Ok(()) => {}
+                Err(valence::Error::Privacy(_)) => {
+                    result = None;
+                }
+                Err(e) => return Err(e),
             }
         }
         let result = match result {

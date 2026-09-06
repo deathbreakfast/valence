@@ -187,27 +187,39 @@ impl QueryCore {
     }
 
     /// Execute as a distinct-value query, returning a flat `Vec<String>`.
+    ///
+    /// Loads rows through [`Self::execute`] so entity / connection / hop privacy
+    /// post-filters apply before values are collected.
+    ///
     /// # Errors
     ///
     /// Returns an error when the requested operation cannot be completed.
     pub async fn distinct_values(mut self, field: &str, valence: &Valence) -> Result<Vec<String>> {
-        self.projection = Some(vec![format!("VALUE {}", field)]);
-        self.group_by = vec![field.to_string()];
+        crate::safe_ident::assert_safe_ident(field)?;
+        self.projection = None;
+        self.group_by.clear();
         self.order_by.clear();
         self.limit = None;
         self.offset = None;
 
-        use crate::query_compiler_registry::compile_for_engine;
-
-        let table = self.table.clone();
-        let backend = valence.backend_for_table(backend_schema_table(table.as_str()))?;
-        let compiled = compile_for_engine(backend.engine_id(), &self)?;
-        let json_rows: Vec<serde_json::Value> = backend.execute_compiled_query(&compiled).await?;
-        let mut results = Vec::with_capacity(json_rows.len());
-        for row in json_rows {
-            results.push(
-                serde_json::from_value(row).map_err(Error::from)?,
-            );
+        let rows: Vec<serde_json::Value> = self.execute(valence).await?;
+        let mut seen = std::collections::HashSet::new();
+        let mut results = Vec::with_capacity(rows.len());
+        for row in rows {
+            let Some(raw) = row.get(field) else {
+                continue;
+            };
+            let value = match raw {
+                serde_json::Value::String(s) => s.clone(),
+                serde_json::Value::Null => continue,
+                other => other
+                    .as_str()
+                    .map(str::to_string)
+                    .unwrap_or_else(|| other.to_string()),
+            };
+            if seen.insert(value.clone()) {
+                results.push(value);
+            }
         }
         Ok(results)
     }

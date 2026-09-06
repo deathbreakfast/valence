@@ -100,18 +100,7 @@ impl SchemaRegistry {
         let mut registry = Self::new();
         for init in inventory::iter::<SchemaMetadataInit> {
             let metadata = (init.0)();
-            let key = metadata.table_name.to_string();
-            if let Some(existing) = registry.inner.get(&key) {
-                // Prefer the richer registration when both `valence_schema!` (entity-only)
-                // and build.rs codegen (trait-merged) submit the same table.
-                let existing_score =
-                    existing.schema.fields.len() + existing.schema.connections.len();
-                let new_score = metadata.schema.fields.len() + metadata.schema.connections.len();
-                if new_score <= existing_score {
-                    continue;
-                }
-            }
-            registry.inner.insert(key, metadata);
+            registry.register(metadata);
         }
         registry
     }
@@ -130,8 +119,26 @@ impl SchemaRegistry {
         GLOBAL_REGISTRY.get_or_init(SchemaRegistry::auto_discover)
     }
 
+    /// Insert schema metadata for `table_name`.
+    ///
+    /// # Panics
+    ///
+    /// Panics when `table_name` is already registered. Duplicate inventory
+    /// submissions must not silently pick a winner (policy strength is not
+    /// correlated with field/connection count). Prefer a single
+    /// [`SchemaMetadataInit`] per table and
+    /// [`SchemaConnectionsOverlayInit`] for trait-merged connections.
     pub fn register(&mut self, metadata: &'static SchemaMetadata) {
-        self.inner.insert(metadata.table_name.to_string(), metadata);
+        let key = metadata.table_name.to_string();
+        if self.inner.contains_key(&key) {
+            panic!(
+                "duplicate SchemaMetadata registration for table `{key}`: \
+                 multiple inventory submissions were linked. Keep one \
+                 SchemaMetadataInit per table (use SchemaConnectionsOverlayInit \
+                 for trait-merged connections)."
+            );
+        }
+        self.inner.insert(key, metadata);
     }
 
     pub fn register_schema(&mut self, schema: &'static Schema) {
@@ -155,6 +162,29 @@ impl SchemaRegistry {
 
     pub fn has_schema(&self, table_name: &str) -> bool {
         self.inner.contains_key(table_name)
+    }
+
+    /// True when `edge_table` appears as a ManyToMany `edge_table` on any
+    /// registered (or overlay) schema connection.
+    #[must_use]
+    pub fn has_edge_table(edge_table: &str) -> bool {
+        let matches = |meta: &SchemaMetadata| {
+            schema_connections_for_table(meta)
+                .iter()
+                .any(|c| c.edge_table.as_deref() == Some(edge_table))
+        };
+        for name in Self::global().list_schemas() {
+            if let Some(meta) = Self::global().get_schema(name) {
+                if matches(meta) {
+                    return true;
+                }
+            }
+        }
+        SCHEMA_OVERLAY
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .values()
+            .any(|meta| matches(meta))
     }
 }
 
@@ -198,7 +228,7 @@ impl Default for SchemaRegistry {
 mod tests {
     use super::*;
     use crate::evaluator::DEFAULT_IN_MEMORY;
-    use crate::schema_api::{SchemaField, SchemaMeta, SchemaPrivacy};
+    use crate::schema_api::{SchemaConnection, SchemaField, SchemaMeta, SchemaPrivacy};
 
     fn build_schema(name: &str) -> &'static Schema {
         Box::leak(Box::new(Schema {
@@ -251,5 +281,76 @@ mod tests {
         registry.register(Box::leak(Box::new(SchemaMetadata::from_schema(schema))));
         assert!(registry.has_schema("fixture"));
         assert_eq!(registry.list_schemas(), vec!["fixture"]);
+    }
+
+    #[test]
+    #[should_panic(expected = "duplicate SchemaMetadata registration for table `fixture`")]
+    fn register_duplicate_table_panics() {
+        let mut registry = SchemaRegistry::new();
+        let schema_a = build_schema("fixture");
+        let schema_b = build_schema("fixture");
+        registry.register(Box::leak(Box::new(SchemaMetadata::from_schema(schema_a))));
+        registry.register(Box::leak(Box::new(SchemaMetadata::from_schema(schema_b))));
+    }
+
+    #[test]
+    fn has_edge_table_from_connection() {
+        let schema = Box::leak(Box::new(Schema {
+            name: "edge_probe_parent".to_string(),
+            version: "1.0.0".to_string(),
+            databases: vec!["default".to_string()],
+            database_evaluator: &DEFAULT_IN_MEMORY,
+            privacy: SchemaPrivacy {
+                read: "public".to_string(),
+                write: "service".to_string(),
+            },
+            policies: None,
+            fields: vec![SchemaField {
+                name: "id".to_string(),
+                field_type: "string".to_string(),
+                primary: true,
+                nullable: false,
+                indexed: false,
+                unique: false,
+                default: None,
+                fk: None,
+                validations: Vec::new(),
+                policies: None,
+                encrypted: false,
+                enum_variants: Vec::new(),
+                enum_type: None,
+                model_path: None,
+            }],
+            edges: Vec::new(),
+            connections: vec![SchemaConnection {
+                name: "peers".to_string(),
+                from_table: "edge_probe_parent".to_string(),
+                from_field: "id".to_string(),
+                to_table: "edge_probe_parent".to_string(),
+                cardinality: "ManyToMany".to_string(),
+                required: false,
+                on_delete: "Cascade".to_string(),
+                label: "peers".to_string(),
+                model_path: None,
+                reverse_field: None,
+                edge_table: Some("edge_probe_rel".to_string()),
+                target_trait: None,
+            }],
+            side_effects: Vec::new(),
+            iters: Vec::new(),
+            composite_key: Vec::new(),
+            traits: Vec::new(),
+            ttl: None,
+            ownership: None,
+            meta: SchemaMeta {
+                retention: "365 days".to_string(),
+                row_count: 0,
+                owner: "system".to_string(),
+                description: None,
+            },
+        }));
+        SchemaRegistry::register_overlay(Box::leak(Box::new(SchemaMetadata::from_schema(schema))));
+        assert!(SchemaRegistry::has_edge_table("edge_probe_rel"));
+        assert!(!SchemaRegistry::has_edge_table("missing_edge_rel"));
     }
 }

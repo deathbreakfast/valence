@@ -202,7 +202,7 @@ pub async fn run_on_delete_cascade_same_backend(valence: &Valence) -> Result<(),
     let pid = format!("p_{tag}");
     let cid = format!("c_{tag}");
     backend
-        .create_record("od_cascade_parent", json!({"id": pid, "name": "p"}))
+        .create_record("od_cascade_parent", json!({"id": pid}))
         .await
         .map_err(|e| e.to_string())?;
     backend
@@ -238,7 +238,7 @@ pub async fn run_on_delete_set_null(valence: &Valence) -> Result<(), String> {
     let pid = format!("p_{tag}");
     let cid = format!("c_{tag}");
     backend
-        .create_record("od_setnull_parent", json!({"id": pid, "name": "p"}))
+        .create_record("od_setnull_parent", json!({"id": pid}))
         .await
         .map_err(|e| e.to_string())?;
     backend
@@ -246,8 +246,7 @@ pub async fn run_on_delete_set_null(valence: &Valence) -> Result<(), String> {
             "od_setnull_child",
             json!({
                 "id": cid,
-                "parent_id": format!("od_setnull_parent:{pid}"),
-                "name": "keep"
+                "parent_id": format!("od_setnull_parent:{pid}")
             }),
         )
         .await

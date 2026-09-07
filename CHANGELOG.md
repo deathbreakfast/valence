@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- SQL / mem filters for Currency subfields (`where_{field}_code` /
+  `where_{field}_minor`): dotted paths emit `json_extract` (Postgres rewrite +
+  integer cast for `amount_minor`); mem row-filter parses typed-column extracts
+  and AND-conjunct LHS segments.
+- Catalog scenarios `query-filter-currency` / `query-filter-currency-miss`.
+
+### Added
+
+- Crate-root Features + guides for **Currency fields** and **DateTime unix
+  storage** (typed money cell + UTC unix seconds persistence).
+
 ### Breaking
 
 - SQL adapters store schema fields as real columns (SQLite/Postgres). The old
@@ -63,7 +76,7 @@ https://github.com/unified-field-dev/valence
 Replace Cargo dependency names when consuming from git or crates.io:
 
 ```toml
-uf-valence = { git = "https://github.com/deathbreakfast/valence", package = "uf-valence", features = ["mem"] }
+uf-valence = { git = "https://github.com/unified-field-dev/valence", package = "uf-valence", features = ["mem"] }
 ```
 
 Rust code continues to use `use valence::…` (crate `[lib] name` is unchanged).

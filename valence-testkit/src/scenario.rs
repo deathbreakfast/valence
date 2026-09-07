@@ -148,6 +148,10 @@ pub enum ScenarioStep {
     QueryFilterDatetime,
     /// ORM DateTimePredicate::After far-future returns empty (sad path).
     QueryFilterDatetimeMiss,
+    /// ORM Currency code + minor filters return matching rows.
+    QueryFilterCurrency,
+    /// ORM Currency filter miss returns empty (sad path).
+    QueryFilterCurrencyMiss,
     /// ORM order_by ascending.
     QueryOrderBy,
     /// ORM limit/offset page size.
@@ -566,6 +570,26 @@ impl ScenarioSpec {
             steps: vec![
                 ScenarioStep::BuildValence,
                 ScenarioStep::QueryFilterDatetimeMiss,
+            ],
+        }
+    }
+
+    pub fn query_filter_currency() -> Self {
+        Self {
+            id: "query-filter-currency".into(),
+            steps: vec![
+                ScenarioStep::BuildValence,
+                ScenarioStep::QueryFilterCurrency,
+            ],
+        }
+    }
+
+    pub fn query_filter_currency_miss() -> Self {
+        Self {
+            id: "query-filter-currency-miss".into(),
+            steps: vec![
+                ScenarioStep::BuildValence,
+                ScenarioStep::QueryFilterCurrencyMiss,
             ],
         }
     }

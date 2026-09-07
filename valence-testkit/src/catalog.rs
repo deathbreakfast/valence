@@ -282,6 +282,12 @@ pub fn embedded_catalog() -> &'static [CatalogEntry] {
         entry_generated_model("query-filter-datetime-miss", PathKind::Sad, |_| {
             ScenarioSpec::query_filter_datetime_miss()
         }),
+        entry_generated_model("query-filter-currency", PathKind::Happy, |_| {
+            ScenarioSpec::query_filter_currency()
+        }),
+        entry_generated_model("query-filter-currency-miss", PathKind::Sad, |_| {
+            ScenarioSpec::query_filter_currency_miss()
+        }),
         entry_generated_model("query-order-by", PathKind::Happy, |_| {
             ScenarioSpec::query_order_by()
         }),

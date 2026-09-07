@@ -273,6 +273,27 @@ mod tests {
     }
 
     #[test]
+    fn rewrite_json_extract_currency_code() {
+        let q = "SELECT id FROM typed_probe WHERE json_extract(price, '$.code') = $param_0";
+        let out = rewrite_json_extract_for_postgres(q);
+        assert_eq!(
+            out,
+            "SELECT id FROM typed_probe WHERE (price->>'code') = $param_0"
+        );
+    }
+
+    #[test]
+    fn rewrite_json_extract_amount_minor_int_compare() {
+        let q =
+            "SELECT id FROM typed_probe WHERE CAST(json_extract(price, '$.amount_minor') AS INTEGER) = $param_0";
+        let out = rewrite_json_extract_for_postgres(q);
+        assert_eq!(
+            out,
+            "SELECT id FROM typed_probe WHERE CAST((price->>'amount_minor') AS INTEGER) = $param_0"
+        );
+    }
+
+    #[test]
     fn prepare_compiled_postgres_rewrites_json_extract() {
         let compiled = CompiledQuery {
             query_string: "SELECT id, body FROM project WHERE json_extract(body, '$.name') = $param_0 LIMIT 10".into(),

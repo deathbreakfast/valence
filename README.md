@@ -12,7 +12,7 @@
 
 *Typed schemas and models without locking you into one database.*
 
-**Status:** v0.1.1 · MIT · crates.io package **`uf-valence`** (the name `valence` is taken); Rust imports stay `use valence::…`.
+**Status:** v0.1.5 · MIT · crates.io package **`uf-valence`** (the name `valence` is taken); Rust imports stay `use valence::…`.
 
 Import `uf-valence` with the `mem` feature for a minimal embedded stack and follow rustdoc Getting started for a full walkthrough. Contributions: [CONTRIBUTING.md](CONTRIBUTING.md).
 
@@ -82,7 +82,7 @@ package is **`uf-valence`** (the name `valence` is taken); imports stay `use val
 
 ```toml
 [dependencies]
-valence = { package = "uf-valence", version = "0.1.1", features = ["mem"] }
+valence = { package = "uf-valence", version = "0.1.5", features = ["mem"] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 ```
 

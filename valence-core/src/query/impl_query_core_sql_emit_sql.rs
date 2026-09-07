@@ -104,6 +104,14 @@ impl QueryCore {
         param_counter: &mut usize,
     ) -> (String, Vec<(String, serde_json::Value)>) {
         let col = super::sql_document::sql_doc_column(field);
+        // JSON subpaths (e.g. Currency amount_minor) need a numeric cast so
+        // Postgres `->>` text compares as integers; SQLite json_extract already
+        // returns JSON numbers but CAST is harmless.
+        let expr = if super::sql_document::is_json_subpath(field) {
+            format!("CAST({col} AS INTEGER)")
+        } else {
+            col
+        };
         let param_key = Self::next_param_key(param_counter);
         let (op, value) = match pred {
             IntPredicate::Equals(v) => ("=", serde_json::Value::Number((*v).into())),
@@ -113,7 +121,7 @@ impl QueryCore {
             IntPredicate::LessThanOrEqual(v) => ("<=", serde_json::Value::Number((*v).into())),
         };
         let params = vec![(param_key.clone(), value)];
-        (format!("{col} {op} ${param_key}"), params)
+        (format!("{expr} {op} ${param_key}"), params)
     }
 
     fn datetime_clause_sql_doc(

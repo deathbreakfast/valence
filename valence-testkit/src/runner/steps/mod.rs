@@ -51,6 +51,8 @@ pub(super) async fn run_step(
         | ScenarioStep::TypedFieldRoundtrip
         | ScenarioStep::QueryFilterDatetime
         | ScenarioStep::QueryFilterDatetimeMiss
+        | ScenarioStep::QueryFilterCurrency
+        | ScenarioStep::QueryFilterCurrencyMiss
         | ScenarioStep::QueryOrderBy
         | ScenarioStep::QueryPagination
         | ScenarioStep::QueryOffsetEmpty
@@ -125,6 +127,8 @@ pub(super) fn step_label(step: &ScenarioStep) -> String {
         ScenarioStep::TypedFieldRoundtrip => "typed_field_roundtrip".into(),
         ScenarioStep::QueryFilterDatetime => "query_filter_datetime".into(),
         ScenarioStep::QueryFilterDatetimeMiss => "query_filter_datetime_miss".into(),
+        ScenarioStep::QueryFilterCurrency => "query_filter_currency".into(),
+        ScenarioStep::QueryFilterCurrencyMiss => "query_filter_currency_miss".into(),
         ScenarioStep::QueryOrderBy => "query_order_by".into(),
         ScenarioStep::QueryPagination => "query_pagination".into(),
         ScenarioStep::QueryOffsetEmpty => "query_offset_empty".into(),

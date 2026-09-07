@@ -46,9 +46,9 @@ pub fn apply_equality_where(
         let needle = format!("= ${key}");
         if let Some(eq_at) = clause.find(&needle) {
             let before = clause[..eq_at].trim_end();
-            let field = extract_field_ref(before);
+            let field = extract_field_ref(&lhs_segment(before));
             if !field.is_empty() {
-                rows.retain(|row| row_field_equals(row, field, value));
+                rows.retain(|row| row_field_equals(row, &field, value));
             }
             continue;
         }
@@ -58,10 +58,10 @@ pub fn apply_equality_where(
             if let Some(pattern) = value.as_str() {
                 if let Some(like_at) = clause.to_uppercase().find(" LIKE ") {
                     let before = clause[..like_at].trim_end();
-                    let field = extract_field_ref(before);
+                    let field = extract_field_ref(&lhs_segment(before));
                     if !field.is_empty() {
                         rows.retain(|row| {
-                            row_string_field(row, field)
+                            row_string_field(row, &field)
                                 .is_some_and(|s| sql_like_matches(s, pattern))
                         });
                     }
@@ -104,12 +104,22 @@ fn apply_cmp_param(
         return false;
     }
     let before = clause[..at].trim_end();
-    let field = extract_field_ref(before);
+    let field = extract_field_ref(&lhs_segment(before));
     if field.is_empty() {
         return true;
     }
-    rows.retain(|row| row_field_cmp(row, field, value, op));
+    rows.retain(|row| row_field_cmp(row, &field, value, op));
     true
+}
+
+/// Last AND-conjunct before the comparison op (multi-param WHERE clauses).
+fn lhs_segment(before: &str) -> String {
+    let upper = before.to_uppercase();
+    if let Some(idx) = upper.rfind(" AND ") {
+        before[idx + 5..].trim().to_string()
+    } else {
+        before.trim().to_string()
+    }
 }
 
 fn row_field_cmp(
@@ -181,8 +191,8 @@ pub fn apply_order_limit_offset(
         let desc = order_clause.to_uppercase().contains(" DESC");
         let field = order_by_field(order_clause);
         rows.sort_by(|a, b| {
-            let as_ = row_string_field(a, field).unwrap_or("");
-            let bs = row_string_field(b, field).unwrap_or("");
+            let as_ = row_string_field(a, &field).unwrap_or("");
+            let bs = row_string_field(b, &field).unwrap_or("");
             if desc {
                 bs.cmp(as_)
             } else {
@@ -228,7 +238,7 @@ fn or_clause_matches(
                 .trim_end_matches(|c: char| !c.is_ascii_alphanumeric() && c != '_');
             let field = extract_field_ref(before);
             if let Some((_, value)) = params.iter().find(|(k, _)| k == key) {
-                if !field.is_empty() && row_field_equals(row, field, value) {
+                if !field.is_empty() && row_field_equals(row, &field, value) {
                     return true;
                 }
             }
@@ -243,7 +253,7 @@ fn or_clause_matches(
             if let Some((_, value)) = params.iter().find(|(k, _)| k == key) {
                 if let Some(pattern) = value.as_str() {
                     if !field.is_empty()
-                        && row_string_field(row, field)
+                        && row_string_field(row, &field)
                             .is_some_and(|s| sql_like_matches(s, pattern))
                     {
                         return true;
@@ -255,26 +265,46 @@ fn or_clause_matches(
     false
 }
 
-fn extract_field_ref(before: &str) -> &str {
-    let trimmed = before.trim();
-    if let Some(start) = trimmed.find("json_extract(body, '$.") {
-        let rest = &trimmed[start + "json_extract(body, '$.".len()..];
-        if let Some(end) = rest.find("')") {
-            return &rest[..end];
+/// Parse a SQL LHS into a Valence field path (`name`, `body` path, or `price.code`).
+fn extract_field_ref(before: &str) -> String {
+    let mut trimmed = before.trim();
+    // Strip CAST(… AS INTEGER) wrappers from int JSON subpath compares.
+    if let Some(inner) = trimmed
+        .strip_prefix("CAST(")
+        .or_else(|| trimmed.strip_prefix("cast("))
+    {
+        if let Some(as_at) = inner.to_uppercase().rfind(" AS ") {
+            trimmed = inner[..as_at].trim();
         }
     }
-    if let Some(inner) = trimmed.strip_prefix("json_extract(body, '$.") {
-        return inner.trim_end_matches("')");
+    if let Some(start) = trimmed.find("json_extract(") {
+        let rest = &trimmed[start + "json_extract(".len()..];
+        if let Some(comma) = rest.find(',') {
+            let col = rest[..comma].trim();
+            let after = rest[comma + 1..].trim_start();
+            if let Some(path_rest) = after.strip_prefix("'$.") {
+                if let Some(end) = path_rest.find('\'') {
+                    let path = &path_rest[..end];
+                    if col == "body" {
+                        return path.to_string();
+                    }
+                    if !col.is_empty() && !path.is_empty() {
+                        return format!("{col}.{path}");
+                    }
+                }
+            }
+        }
     }
     trimmed
         .rsplit(|c: char| c.is_whitespace() || c == '(')
         .next()
         .unwrap_or("")
         .trim_matches(|c: char| c == '"' || c == '`')
+        .to_string()
 }
 
-fn order_by_field(order_clause: &str) -> &str {
-    if order_clause.contains("json_extract(body, '$.") {
+fn order_by_field(order_clause: &str) -> String {
+    if order_clause.contains("json_extract(") {
         return extract_field_ref(order_clause);
     }
     let token = order_clause.split_whitespace().next().unwrap_or("id");
@@ -395,6 +425,79 @@ mod tests {
         let rows = vec![serde_json::json!({"id": "1", "at": 1_700_000_000_i64})];
         let out = apply_equality_where(rows, &compiled);
         assert!(out.is_empty());
+    }
+
+    #[test]
+    fn extract_field_ref_typed_column_json_extract() {
+        assert_eq!(
+            extract_field_ref("json_extract(price, '$.code')"),
+            "price.code"
+        );
+        assert_eq!(
+            extract_field_ref("CAST(json_extract(price, '$.amount_minor') AS INTEGER)"),
+            "price.amount_minor"
+        );
+        assert_eq!(extract_field_ref("json_extract(body, '$.name')"), "name");
+    }
+
+    #[test]
+    fn apply_equality_where_currency_code_hit() {
+        let compiled = CompiledQuery::new(
+            "SELECT * FROM typed_probe WHERE json_extract(price, '$.code') = $param_0".into(),
+            vec![("param_0".into(), serde_json::json!("USD"))],
+        );
+        let rows = vec![
+            serde_json::json!({"id": "1", "price": {"code": "USD", "amount_minor": 12345}}),
+            serde_json::json!({"id": "2", "price": {"code": "EUR", "amount_minor": 99}}),
+        ];
+        let out = apply_equality_where(rows, &compiled);
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0]["id"], "1");
+    }
+
+    #[test]
+    fn apply_equality_where_currency_code_miss() {
+        let compiled = CompiledQuery::new(
+            "SELECT * FROM typed_probe WHERE json_extract(price, '$.code') = $param_0".into(),
+            vec![("param_0".into(), serde_json::json!("JPY"))],
+        );
+        let rows =
+            vec![serde_json::json!({"id": "1", "price": {"code": "USD", "amount_minor": 12345}})];
+        let out = apply_equality_where(rows, &compiled);
+        assert!(out.is_empty());
+    }
+
+    #[test]
+    fn apply_equality_where_currency_minor_cast_hit() {
+        let compiled = CompiledQuery::new(
+            "SELECT * FROM typed_probe WHERE CAST(json_extract(price, '$.amount_minor') AS INTEGER) = $param_0".into(),
+            vec![("param_0".into(), serde_json::json!(12345_i64))],
+        );
+        let rows = vec![
+            serde_json::json!({"id": "1", "price": {"code": "USD", "amount_minor": 12345}}),
+            serde_json::json!({"id": "2", "price": {"code": "USD", "amount_minor": 1}}),
+        ];
+        let out = apply_equality_where(rows, &compiled);
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0]["id"], "1");
+    }
+
+    #[test]
+    fn apply_equality_where_currency_code_and_minor_and_clause() {
+        let compiled = CompiledQuery::new(
+            "SELECT * FROM typed_probe WHERE json_extract(price, '$.code') = $param_0 AND CAST(json_extract(price, '$.amount_minor') AS INTEGER) = $param_1".into(),
+            vec![
+                ("param_0".into(), serde_json::json!("USD")),
+                ("param_1".into(), serde_json::json!(12345_i64)),
+            ],
+        );
+        let rows = vec![
+            serde_json::json!({"id": "1", "price": {"code": "USD", "amount_minor": 12345}}),
+            serde_json::json!({"id": "2", "price": {"code": "USD", "amount_minor": 1}}),
+        ];
+        let out = apply_equality_where(rows, &compiled);
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0]["id"], "1");
     }
 
     #[test]

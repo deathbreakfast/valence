@@ -4,7 +4,7 @@ use valence_core::ownership::{OwnershipGateStatus, OwnershipService};
 use valence_core::read_cache::{invalidate, read_cache_enabled};
 use valence_core::record_id::RecordId;
 use valence_core::{
-    Currency, CurrencyCode, DateTimePredicate, Model, SortDirection, StringPredicate,
+    Currency, CurrencyCode, DateTimePredicate, IntPredicate, Model, SortDirection, StringPredicate,
 };
 
 use chrono::{TimeZone, Utc};
@@ -39,6 +39,8 @@ pub(super) async fn run(
         ScenarioStep::TypedFieldRoundtrip => typed_field_roundtrip(session, mode).await?,
         ScenarioStep::QueryFilterDatetime => query_filter_datetime(session, mode).await?,
         ScenarioStep::QueryFilterDatetimeMiss => query_filter_datetime_miss(session, mode).await?,
+        ScenarioStep::QueryFilterCurrency => query_filter_currency(session, mode).await?,
+        ScenarioStep::QueryFilterCurrencyMiss => query_filter_currency_miss(session, mode).await?,
         ScenarioStep::QueryOrderBy => query_order_by(session, mode).await?,
         ScenarioStep::QueryPagination => query_pagination(session, mode).await?,
         ScenarioStep::QueryOffsetEmpty => query_offset_empty(session, mode).await?,
@@ -308,6 +310,80 @@ async fn query_filter_datetime_miss(
     if mode == RunMode::Correctness && !rows.is_empty() {
         return Err(format!(
             "expected empty datetime After miss, got {}",
+            rows.len()
+        ));
+    }
+    Ok(())
+}
+
+async fn query_filter_currency(
+    session: &mut BootstrapSession,
+    mode: RunMode,
+) -> Result<(), String> {
+    std::env::set_var("VALENCE_OWNERSHIP_UNIFIED_FETCH", "0");
+    let tag = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_nanos());
+    let label = format!("typed-cur-{tag}");
+    let (probe, _) = seed_typed_probe(&label)?;
+    let valence = session.ensure_valence().map_err(|e| e.to_string())?;
+    let created = TypedProbe::create(probe, valence)
+        .await
+        .map_err(|e| e.to_string())?;
+    let id = created
+        .id()
+        .ok_or("missing typed_probe id")?
+        .id()
+        .to_string();
+    let rows = TypedProbe::query(valence)
+        .where_price_code(CurrencyCode::Usd)
+        .where_price_minor(IntPredicate::Equals(12345))
+        .await
+        .map_err(|e| e.to_string())?;
+    if mode == RunMode::Correctness {
+        let hit = rows
+            .iter()
+            .find(|r| r.id().is_some_and(|rid| rid.id() == id));
+        let Some(hit) = hit else {
+            return Err(format!(
+                "expected currency filter hit for {id}, got {} rows",
+                rows.len()
+            ));
+        };
+        if hit.price().code() != CurrencyCode::Usd {
+            return Err(format!("currency code mismatch: {:?}", hit.price().code()));
+        }
+        if hit.price().amount_minor() != 12345 {
+            return Err(format!(
+                "currency minor mismatch: {}",
+                hit.price().amount_minor()
+            ));
+        }
+    }
+    Ok(())
+}
+
+async fn query_filter_currency_miss(
+    session: &mut BootstrapSession,
+    mode: RunMode,
+) -> Result<(), String> {
+    std::env::set_var("VALENCE_OWNERSHIP_UNIFIED_FETCH", "0");
+    let tag = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_nanos());
+    let label = format!("typed-cur-miss-{tag}");
+    let (probe, _) = seed_typed_probe(&label)?;
+    let valence = session.ensure_valence().map_err(|e| e.to_string())?;
+    TypedProbe::create(probe, valence)
+        .await
+        .map_err(|e| e.to_string())?;
+    let rows = TypedProbe::query(valence)
+        .where_price_code(CurrencyCode::Eur)
+        .await
+        .map_err(|e| e.to_string())?;
+    if mode == RunMode::Correctness && !rows.is_empty() {
+        return Err(format!(
+            "expected empty currency code miss, got {}",
             rows.len()
         ));
     }

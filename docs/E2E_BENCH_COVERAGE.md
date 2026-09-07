@@ -57,6 +57,7 @@ Living coverage map for Valence. Status legend:
 | Filtered WHERE | Y (`query-filter-eq`) | Y (`query-filter-miss`) | **bm-v21** |
 | DateTime / Currency / JsonAs round-trip | Y (`typed-field-roundtrip`) | N (serde units cover digit-string) | N |
 | DateTimePredicate filter | Y (`query-filter-datetime`) | Y (`query-filter-datetime-miss`) | N |
+| Currency code / minor filter | Y (`query-filter-currency`) | Y (`query-filter-currency-miss`) | N |
 | ORDER BY | Y (`query-order-by`) | N | **bm-v23** |
 | Pagination | Y (`query-pagination`) | Y (`query-offset-empty`) | bm-v14; **bm-v23** |
 | Full scan / large-N | P | N | **bm-v22** |

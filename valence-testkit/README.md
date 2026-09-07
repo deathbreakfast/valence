@@ -23,7 +23,7 @@ Capability **X** cells (AcmeStub model runtime, Indra TTL Unsupported, Redis/Mon
 | `matrix.rs` | `MatrixSpec`, `matrix_strict()`, storage enums |
 | `bootstrap/session.rs` | `BootstrapSession::spawn` |
 | `backend_contract.rs` | `run_backend_contract` (asserts SELECT datetime numbers when seeded) |
-| `catalog.rs` | Full correctness catalog (includes `typed-field-roundtrip`, `query-filter-datetime*`) |
+| `catalog.rs` | Full correctness catalog (includes `typed-field-roundtrip`, `query-filter-datetime*`, `query-filter-currency*`) |
 | `scenario.rs` / `runner.rs` | Declarative steps |
 
 ## Features

@@ -30,6 +30,11 @@
 //!   apply path in the current future for bounded workloads. A root already marked
 //!   `pending_deletion` returns [`Error::PendingDeletion`]. Prefer queued delete for large graphs.
 //!   [Get started](#delete-now).
+//! - **Currency fields** — Money as ISO [`CurrencyCode`] plus signed minor units in one cell,
+//!   with typed query helpers for code and amount. [Get started](#currency-fields).
+//! - **DateTime unix storage** — Timestamps stay `chrono::DateTime<Utc>` in Rust while
+//!   persistence uses UTC unix seconds and [`DateTimePredicate`] filters.
+//!   [Get started](#datetime-unix-storage).
 //! - **Query privacy** — [`QueryCore::execute`] / `Model::query` post-filter rows by entity read
 //!   policy and field policies
 //! - **Default-deny policies** — schemas without entity `policies:` deny non-System actors
@@ -125,6 +130,95 @@
 //! ```
 //!
 //! Next: adopt this policy on Record History product tables.
+//!
+//! # Currency fields
+//!
+//! Ledger and product schemas store money as one value: an ISO [`CurrencyCode`] and a signed
+//! `amount_minor` integer. That keeps FX and float rounding out of the persistence path, and
+//! codegen exposes `where_{field}_code` / `where_{field}_minor` for filters. Use this when a
+//! row carries a monetary amount (journal lines, prices, budgets).
+//!
+//! ## Prerequisites
+//!
+//! - Schema registered with `FieldType::Currency` (macro or codegen host).
+//! - [`Valence`] built with a backend that supports typed JSON cells (mem, SQLite, Postgres, Surreal, …).
+//!
+//! ## Declare, write, and filter
+//!
+//! ```rust,ignore
+//! use valence::prelude::*;
+//! use valence::{Currency, CurrencyCode, FieldType, IntPredicate};
+//!
+//! valence_schema! {
+//!     Line {
+//!         table: "line",
+//!         version: "0.1.0",
+//!         database: /* DatabaseFromEngine */,
+//!         fields: [
+//!             id: { r#type: FieldType::String, primary_key: true, required: true },
+//!             amount: { r#type: FieldType::Currency, required: true },
+//!         ],
+//!     }
+//! }
+//!
+//! let row = Line::new(Currency::new(CurrencyCode::Usd, -1_250))?;
+//! Line::create(row, &valence).await?;
+//! let hits = Line::query(&valence)
+//!     .where_amount_code(CurrencyCode::Usd)
+//!     .where_amount_minor(IntPredicate::LessThan(0))
+//!     .await?;
+//! assert!(!hits.is_empty());
+//! ```
+//!
+//! Observable outcome: matching rows include the seeded id and amount. Unknown ISO codes fail at
+//! deserialize / construct time ([`CurrencyError`] / [`ParseCurrencyCodeError`]). Cross-currency
+//! [`Currency::checked_add`] returns an error. Empty filter results mean no row matched (not a
+//! typed error). Next: [DateTime unix storage](#datetime-unix-storage) for timestamps on the same
+//! models, or catalog scenario `query-filter-currency` in `valence-e2e`.
+//!
+//! # DateTime unix storage
+//!
+//! `FieldType::DateTime` keeps the Model API on `chrono::DateTime<Utc>` while SQL and Surreal
+//! cells store signed UTC **unix seconds**. Predicates take chrono values and emit numeric
+//! comparisons on the wire. Prefer this for event times and audit stamps so adapters share one
+//! integer layout.
+//!
+//! ## Prerequisites
+//!
+//! - Schema field typed as `FieldType::DateTime`.
+//! - Serde on generated models uses [`datetime_unix`] (codegen applies this automatically).
+//!
+//! ## Declare, write, and filter
+//!
+//! ```rust,ignore
+//! use chrono::{TimeZone, Utc};
+//! use valence::prelude::*;
+//! use valence::{DateTimePredicate, FieldType};
+//!
+//! valence_schema! {
+//!     Event {
+//!         table: "event",
+//!         version: "0.1.0",
+//!         database: /* DatabaseFromEngine */,
+//!         fields: [
+//!             id: { r#type: FieldType::String, primary_key: true, required: true },
+//!             at: { r#type: FieldType::DateTime, required: true },
+//!         ],
+//!     }
+//! }
+//!
+//! let at = Utc.timestamp_opt(1_700_000_000, 0).single().unwrap();
+//! Event::create(Event::new(at)?, &valence).await?;
+//! let hits = Event::query(&valence)
+//!     .where_at(DateTimePredicate::Equals(at))
+//!     .await?;
+//! assert_eq!(hits[0].at().timestamp(), 1_700_000_000);
+//! ```
+//!
+//! Observable outcome: `Equals` / `After` / `Before` return the expected rows; a far-future
+//! `After` returns empty. Reads still accept legacy RFC3339 strings for migration. Next:
+//! [Currency fields](#currency-fields) when amounts share the schema, or
+//! `query-filter-datetime` in the e2e catalog.
 //!
 //! # Topologies
 //!
@@ -304,10 +398,10 @@
 //!
 //! ```toml
 //! [dependencies]
-//! uf-valence = { git = "https://github.com/deathbreakfast/valence", package = "uf-valence", features = ["mem"] }
+//! uf-valence = { git = "https://github.com/unified-field-dev/valence", package = "uf-valence", features = ["mem"] }
 //!
 //! [build-dependencies]
-//! uf-valence-codegen = { git = "https://github.com/deathbreakfast/valence", package = "uf-valence-codegen" }
+//! uf-valence-codegen = { git = "https://github.com/unified-field-dev/valence", package = "uf-valence-codegen" }
 //! ```
 //!
 //! ```ignore

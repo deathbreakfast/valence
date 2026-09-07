@@ -33,6 +33,11 @@ fn leak_schema(schema: Schema) -> &'static Schema {
     Box::leak(Box::new(schema))
 }
 
+/// FK cleared after SetNull: SQL engines keep JSON `null`; Surreal `NONE` omits the key.
+fn fk_field_cleared(row: &serde_json::Value, field: &str) -> bool {
+    row.get(field).is_none_or(|v| v.is_null())
+}
+
 fn public_delete_schema(
     name: &str,
     databases: Vec<String>,
@@ -260,8 +265,8 @@ pub async fn run_on_delete_set_null(valence: &Valence) -> Result<(), String> {
         .await
         .map_err(|e| e.to_string())?
         .ok_or("set-null child should remain")?;
-    if !child.get("parent_id").map(|v| v.is_null()).unwrap_or(false) {
-        return Err(format!("expected null parent_id, got {child:?}"));
+    if !fk_field_cleared(&child, "parent_id") {
+        return Err(format!("expected cleared parent_id, got {child:?}"));
     }
     Ok(())
 }
@@ -538,8 +543,8 @@ pub async fn run_on_delete_set_null_cross_engine(
         .await
         .map_err(|e| e.to_string())?
         .ok_or("set-null child should remain on secondary")?;
-    if !child.get("parent_id").map(|v| v.is_null()).unwrap_or(false) {
-        return Err(format!("expected null FK on secondary, got {child:?}"));
+    if !fk_field_cleared(&child, "parent_id") {
+        return Err(format!("expected cleared FK on secondary, got {child:?}"));
     }
     Ok(())
 }

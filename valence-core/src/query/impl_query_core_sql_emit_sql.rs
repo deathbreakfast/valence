@@ -61,19 +61,23 @@ impl QueryCore {
                 edge_table,
                 subquery,
                 ..
-            } => Self::connection_exists_m2m_clause_sql_dialect(
-                edge_table,
-                subquery,
-                "cemtm",
-                param_counter,
-            ),
-            WhereClause::ConnectionContainsManyToMany { edge_table, target } => Ok(
-                Self::connection_contains_m2m_clause_sql_dialect(
+            } => {
+                crate::safe_ident::assert_registered_edge_ident(edge_table)?;
+                Self::connection_exists_m2m_clause_sql_dialect(
+                    edge_table,
+                    subquery,
+                    "cemtm",
+                    param_counter,
+                )
+            }
+            WhereClause::ConnectionContainsManyToMany { edge_table, target } => {
+                crate::safe_ident::assert_registered_edge_ident(edge_table)?;
+                Ok(Self::connection_contains_m2m_clause_sql_dialect(
                     edge_table,
                     target,
                     param_counter,
-                ),
-            ),
+                ))
+            }
             WhereClause::Hop(hop) => Self::hop_clause_sql_dialect(hop, table, param_counter),
         }
     }

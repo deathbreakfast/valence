@@ -336,6 +336,20 @@ pub fn embedded_catalog() -> &'static [CatalogEntry] {
         entry("on-delete-set-null-cross-engine", PathKind::Happy, |_| {
             ScenarioSpec::on_delete_set_null_cross_engine()
         }),
+        entry("delete-now-cascade", PathKind::Happy, |_| {
+            ScenarioSpec::delete_now_cascade()
+        }),
+        entry_sad("delete-now-privacy-deny", |_| {
+            ScenarioSpec::delete_now_privacy_deny()
+        }),
+        entry_sad("delete-now-restrict", |_| {
+            ScenarioSpec::delete_now_restrict()
+        }),
+        entry(
+            "delete-now-cross-engine-partial-retry",
+            PathKind::Happy,
+            |_| ScenarioSpec::delete_now_cross_engine_partial_retry(),
+        ),
         entry("typed-sync-add-field", PathKind::Happy, |storage| {
             let table = format!("typed_sync_{}", storage.slug().replace('-', "_"));
             ScenarioSpec::typed_sync_add_field(table)
@@ -406,9 +420,9 @@ fn iter_catalog_applies(entry_id: &str, storage: StorageAdapter) -> bool {
     )
 }
 
-/// Whether an OnDelete catalog entry applies to this storage adapter.
+/// Whether an OnDelete or delete-now catalog entry applies to this storage adapter.
 fn on_delete_catalog_applies(entry_id: &str, storage: StorageAdapter) -> bool {
-    if !entry_id.starts_with("on-delete-") {
+    if !(entry_id.starts_with("on-delete-") || entry_id.starts_with("delete-now-")) {
         return true;
     }
     if matches!(storage, StorageAdapter::AcmeStub) {

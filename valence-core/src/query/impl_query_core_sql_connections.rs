@@ -82,6 +82,9 @@ impl QueryCore {
         hop: &HopSource,
         param_counter: &mut usize,
     ) -> Result<(String, Vec<(String, serde_json::Value)>)> {
+        if let HopType::ManyToManyForward { edge_table } = &hop.hop_type {
+            crate::safe_ident::assert_registered_edge_ident(edge_table)?;
+        }
         let (source_sql, source_params) = hop.source_query.to_surrealql()?;
         let source_params_len = source_params.len();
         let prefix = format!("hop_{}", *param_counter);
@@ -122,6 +125,9 @@ impl QueryCore {
         hop: &HopSource,
         param_counter: &mut usize,
     ) -> Result<(String, Vec<(String, serde_json::Value)>)> {
+        if let HopType::ManyToManyForward { edge_table } = &hop.hop_type {
+            crate::safe_ident::assert_registered_edge_ident(edge_table)?;
+        }
         let (source_sql, source_params) = hop.source_query.to_surrealql()?;
         let source_params_len = source_params.len();
         let prefix = format!("hop_{}", *param_counter);

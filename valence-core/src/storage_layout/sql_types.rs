@@ -131,8 +131,13 @@ pub fn logical_type_to_storage(field_type: &str) -> Result<FieldStorage> {
         // uniformly across engines (no engine-specific JSON extraction on FK columns).
         "record" => Ok(FieldStorage::String),
         other if other.starts_with("record") => Ok(FieldStorage::String),
-        // Schema DSL / inventory may emit `enum:a,b,c` or `ext_enum:path::Type`.
-        other if other.starts_with("enum:") || other.starts_with("ext_enum:") => {
+        // Schema DSL / inventory may emit `enum:a,b,c`, `ext_enum:path::Type`, or a
+        // legacy TokenStream Debug form `enum(&[...])` when Enum extract missed.
+        other
+            if other.starts_with("enum:")
+                || other.starts_with("enum(")
+                || other.starts_with("ext_enum:") =>
+        {
             Ok(FieldStorage::String)
         }
         other => Err(Error::Validation(format!(
@@ -169,6 +174,10 @@ mod tests {
         );
         assert_eq!(
             logical_type_to_storage("ext_enum:crate::PlanTier").unwrap(),
+            FieldStorage::String
+        );
+        assert_eq!(
+            logical_type_to_storage("enum(&[\"pending\", \"running\", \"failed\",])").unwrap(),
             FieldStorage::String
         );
     }

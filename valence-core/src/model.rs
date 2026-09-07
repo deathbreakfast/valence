@@ -39,14 +39,39 @@ pub trait Model: Sized + Send + Sync {
     /// Schema version string from the DSL `version:` key.
     fn schema_version() -> &'static str;
 
-    /// Fetch one row by primary key; returns `Ok(None)` when absent.
+    /// Fetch one row by primary key; returns `Ok(None)` when absent **or** when
+    /// entity read privacy denies the viewer (uniform not-found).
     async fn get(id: &str, valence: &Valence) -> Result<Option<Self>>;
     /// Insert a new row.
     async fn create(data: Self, valence: &Valence) -> Result<Self>;
     /// Replace an existing row by id.
     async fn update(id: &str, data: Self, valence: &Valence) -> Result<Self>;
-    /// Delete one row by id.
+    /// Queue a durable deletion run (or hard-delete for deletion-skip platform tables).
     async fn delete(id: &str, valence: &Valence) -> Result<()>;
+    /// Physically delete this row and its deletion DAG in the current future.
+    ///
+    /// Authorizes the full DAG under the requesting actor, then applies every node
+    /// before returning. Missing rows succeed. A root already owned by a queued
+    /// deletion returns [`crate::Error::PendingDeletion`].
+    ///
+    /// Intentionally unbounded: use only for bounded request workloads. Prefer
+    /// [`Self::delete`] for large or retry-heavy graphs.
+    ///
+    /// # Errors
+    ///
+    /// Privacy, Restrict validation, pending coordination, or apply failures.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// use valence::Model;
+    ///
+    /// Project::delete_now("project-42", &session_valence).await?;
+    /// assert!(Project::get("project-42", &session_valence).await?.is_none());
+    /// ```
+    async fn delete_now(id: &str, valence: &Valence) -> Result<()> {
+        crate::deletion::delete_entity_now(Self::table_name(), id, valence).await
+    }
     /// Create or replace a row by explicit id.
     ///
     /// Privacy: when the row is absent, **create** policies apply; when it exists, **update**

@@ -1,4 +1,4 @@
-//! Synthetic Valence benchmark CLI (bm-v0..bm-v30 experiments).
+//! Synthetic Valence benchmark CLI (bm-v0..bm-v31 experiments).
 
 #![allow(dead_code)]
 #![allow(clippy::useless_format)]

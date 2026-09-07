@@ -1,4 +1,4 @@
-//! `Model::delete` token emission.
+//! `Model::delete` / `Model::delete_now` token emission.
 
 use proc_macro2::TokenStream;
 use quote::quote;
@@ -11,33 +11,62 @@ pub(super) fn model_delete_method_tokens(cx: &CrudEmitCtx<'_>) -> TokenStream {
     if cx.deletion_skip {
         return quote! {
             async fn delete(id: &str, valence: &valence::Valence) -> valence::Result<()> {
-                let before_snapshot = Self::get(id, valence).await?;
-                if let Some(ref existing) = before_snapshot {
-                    existing.check_delete_privacy(valence).await?;
+                Self::delete_now(id, valence).await
+            }
+
+            async fn delete_now(id: &str, valence: &valence::Valence) -> valence::Result<()> {
+                let bare = valence::deletion::normalize_record_id_for_deletion(
+                    <Self as valence::Model>::table_name(),
+                    id,
+                );
+                let before_json = valence::QueryCore::get_record_json(
+                    <Self as valence::Model>::table_name(),
+                    &bare,
+                    valence,
+                )
+                .await?;
+                let Some(before_json) = before_json else {
+                    valence::read_cache::invalidate(
+                        <Self as valence::Model>::table_name(),
+                        &bare,
+                    );
+                    return Ok(());
+                };
+                if let Some(schema) =
+                    valence::SchemaRegistry::global().get_schema(<Self as valence::Model>::table_name())
+                {
+                    valence::PrivacyEvaluator::check_entity_access(
+                        schema,
+                        valence::PrivacyOperation::Delete,
+                        &before_json,
+                        valence,
+                    )
+                    .await?;
                 }
 
-                let id = id.to_string();
-                valence::retry_on_database_tx_conflict("Model::delete", || {
-                    let id = id.clone();
+                let bare_owned = bare.clone();
+                valence::retry_on_database_tx_conflict("Model::delete_now", || {
+                    let bare_owned = bare_owned.clone();
                     async move {
-                        let backend = valence.backend_for_table(<Self as valence::Model>::table_name())?;
+                        let backend =
+                            valence.backend_for_table(<Self as valence::Model>::table_name())?;
                         backend
-                            .delete_record(Self::table_name(), id.as_str())
+                            .delete_record(Self::table_name(), bare_owned.as_str())
                             .await
                     }
                 })
                 .await?;
 
-                valence::read_cache::invalidate(<Self as valence::Model>::table_name(), id.as_str());
+                valence::read_cache::invalidate(
+                    <Self as valence::Model>::table_name(),
+                    bare.as_str(),
+                );
 
-                if let Some(ref before) = before_snapshot {
-                    let field_changes = #field_changes_name::compute(
-                        Some(before),
-                        None,
-                    );
+                if let Ok(before) = serde_json::from_value::<Self>(before_json) {
+                    let field_changes = #field_changes_name::compute(Some(&before), None);
                     let mutation = valence::Mutation::new(
                         valence::MutationKind::Delete,
-                        before_snapshot,
+                        Some(before),
                         None,
                         field_changes,
                         valence,
@@ -52,48 +81,37 @@ pub(super) fn model_delete_method_tokens(cx: &CrudEmitCtx<'_>) -> TokenStream {
 
     quote! {
         async fn delete(id: &str, valence: &valence::Valence) -> valence::Result<()> {
-            let before_snapshot = match Self::get(id, valence).await {
-                Ok(s) => s,
-                Err(valence::Error::PendingDeletion(_)) => return Ok(()),
-                Err(e) => return Err(e),
-            };
-            if let Some(ref existing) = before_snapshot {
-                existing.check_delete_privacy(valence).await?;
-            } else {
-                return Ok(());
-            }
-
-            let __bare = valence::ownership::normalize_record_id_for_ownership(id);
-            let dag = valence::deletion::dag::DeletionDag::compute(Self::table_name(), &__bare, valence)
-                .await?;
-            if !dag.restrict_violations.is_empty() {
-                return Err(valence::Error::Validation(format!(
-                    "delete restricted by schema connections: {:?}",
-                    dag.restrict_violations
-                )));
-            }
-            valence::deletion::check_dag_delete_privacy(&dag, valence).await?;
-
-            #mark
-
-            let actor_json = serde_json::to_value(valence.actor())
-                .unwrap_or(serde_json::Value::Null);
-            let run_id = valence::deletion::DeletionService::create_run(
+            match valence::deletion::prepare_deletion(
                 Self::table_name(),
-                &__bare,
-                actor_json.clone(),
+                id,
+                valence::deletion::DeletionMode::Queued,
                 valence,
             )
-            .await?;
-            valence::deletion::dispatch(valence::deletion::DeletionRequest {
-                run_id,
-                root_table: Self::table_name().to_string(),
-                root_record_id: __bare,
-                actor_json,
-            })
-            .await?;
-
-            Ok(())
+            .await?
+            {
+                valence::deletion::PreparedDeletion::Missing
+                | valence::deletion::PreparedDeletion::Pending { .. } => Ok(()),
+                valence::deletion::PreparedDeletion::Ready { bare_id, .. } => {
+                    #mark
+                    let actor_json = serde_json::to_value(valence.actor())
+                        .unwrap_or(serde_json::Value::Null);
+                    let run_id = valence::deletion::DeletionService::create_run(
+                        Self::table_name(),
+                        &bare_id,
+                        actor_json.clone(),
+                        valence,
+                    )
+                    .await?;
+                    valence::deletion::dispatch(valence::deletion::DeletionRequest {
+                        run_id,
+                        root_table: Self::table_name().to_string(),
+                        root_record_id: bare_id,
+                        actor_json,
+                    })
+                    .await?;
+                    Ok(())
+                }
+            }
         }
     }
 }
@@ -103,14 +121,11 @@ fn ownership_mark_pending(cx: &CrudEmitCtx<'_>) -> TokenStream {
         return quote! {};
     }
     quote! {
-        if before_snapshot.is_some() {
-            let __bare = valence::ownership::normalize_record_id_for_ownership(id);
-            valence::ownership::OwnershipService::mark_pending_deletion(
-                Self::table_name(),
-                &__bare,
-                valence,
-            )
-            .await?;
-        }
+        valence::ownership::OwnershipService::mark_pending_deletion(
+            Self::table_name(),
+            &bare_id,
+            valence,
+        )
+        .await?;
     }
 }

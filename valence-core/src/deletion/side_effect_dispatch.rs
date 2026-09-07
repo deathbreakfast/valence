@@ -1,7 +1,7 @@
 //! Type-erased delete side-effect dispatch for the queued/cascade physical-delete path.
 //!
 //! Integrators do **not** call this. Codegen registers [`DeleteSideEffectDescriptor`] via
-//! `inventory`; the valence-platform deletion step worker invokes
+//! `inventory`; the host deletion step worker invokes
 //! [`dispatch_queued_delete_side_effects`] after a successful CascadeDelete.
 
 use crate::runtime::Valence;

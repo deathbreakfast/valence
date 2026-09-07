@@ -96,7 +96,7 @@ async fn ttl_deferred_sweep_delete(session: &mut BootstrapSession, id: &str) -> 
         )
         .await
         .map_err(|e| e.to_string())?;
-    // Storage-level delete after expiry stamp (platform budgeted sweeper covered in valence-platform).
+    // Storage-level delete after expiry stamp (platform budgeted sweeper covered in the host kit).
     backend
         .delete_record(CATALOG_TTL_PROBE_TABLE, id)
         .await

@@ -10,9 +10,12 @@ use surrealdb::types::{Array, Number, Object, Value};
 /// links as canonical `table:id` strings on every engine (including Surreal SCHEMAFULL
 /// `TYPE string`), so those objects become wire strings here. `"table:id"` strings pass
 /// through unchanged.
+///
+/// JSON `null` becomes Surreal `NONE` (not SQL `NULL`) so optional SCHEMAFULL fields
+/// such as `TYPE option<string>` accept SetNull / clear patches.
 pub fn json_to_surreal_content_value(v: serde_json::Value) -> Value {
     match v {
-        serde_json::Value::Null => Value::Null,
+        serde_json::Value::Null => Value::None,
         serde_json::Value::Bool(b) => Value::Bool(b),
         serde_json::Value::Number(n) => {
             if let Some(i) = n.as_i64() {

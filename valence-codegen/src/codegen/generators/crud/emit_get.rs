@@ -59,21 +59,29 @@ pub(super) fn model_get_method_tokens(cx: &CrudEmitCtx<'_>) -> TokenStream {
     let privacy_and_gate = if cx.deletion_skip {
         quote! {
             if let Some(record) = &result {
-                record.check_read_privacy(valence).await?;
+                match record.check_read_privacy(valence).await {
+                    Ok(()) => {}
+                    Err(valence::Error::Privacy(_)) => {
+                        result = None;
+                    }
+                    Err(e) => return Err(e),
+                }
             }
         }
     } else {
         quote! {
             if let Some(record) = &result {
                 let __bare = valence::ownership::normalize_record_id_for_ownership(id.as_str());
-                if __bundle_status == valence::ownership::OwnershipGateStatus::NotFetched {
+                let __privacy = if __bundle_status
+                    == valence::ownership::OwnershipGateStatus::NotFetched
+                {
                     valence::ownership::OwnershipService::check_privacy_with_pending_gate(
                         record.check_read_privacy(valence),
                         Self::table_name(),
                         &__bare,
                         valence,
                     )
-                    .await?;
+                    .await
                 } else {
                     valence::ownership::OwnershipService::check_privacy_with_bundled_gate(
                         record.check_read_privacy(valence),
@@ -81,7 +89,14 @@ pub(super) fn model_get_method_tokens(cx: &CrudEmitCtx<'_>) -> TokenStream {
                         &__bare,
                         __bundle_status,
                     )
-                    .await?;
+                    .await
+                };
+                match __privacy {
+                    Ok(()) => {}
+                    Err(valence::Error::Privacy(_)) => {
+                        result = None;
+                    }
+                    Err(e) => return Err(e),
                 }
             }
         }
@@ -89,7 +104,7 @@ pub(super) fn model_get_method_tokens(cx: &CrudEmitCtx<'_>) -> TokenStream {
     quote! {
         async fn get(id: &str, valence: &valence::Valence) -> valence::Result<Option<Self>> {
             let id = id.to_string();
-            let (result, __bundle_status): (
+            let (mut result, __bundle_status): (
                 Option<Self>,
                 valence::ownership::OwnershipGateStatus,
             ) = valence::retry_on_database_tx_conflict("Model::get", || {

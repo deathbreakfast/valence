@@ -7,11 +7,14 @@ impl QueryCore {
         self.projection = Some(fields);
         self
     }
-
     /// Get a record by ID, returning a minimal result with just the ID
     ///
     /// Loads via [`DatabaseBackend::get_record`](crate::DatabaseBackend::get_record)
     /// using `table:id` wire form.
+    ///
+    /// **Privacy:** this helper does **not** evaluate entity read policies. Prefer
+    /// [`Self::get_entity`] or generated [`crate::Model::get`](crate::Model::get) for
+    /// caller-visible reads; those map privacy denial to `Ok(None)`.
     /// # Errors
     ///
     /// Returns an error when the requested operation cannot be completed.
@@ -37,6 +40,8 @@ impl QueryCore {
     /// Get a record by ID and return it as `serde_json::Value`.
     ///
     /// Uses the table's resolved [`crate::backend::DatabaseBackend`] (same routing as CRUD).
+    ///
+    /// **Privacy:** raw storage read with no policy evaluation.
     /// # Errors
     ///
     /// Returns an error when the requested operation cannot be completed.
@@ -89,12 +94,14 @@ impl QueryCore {
     /// Returns a ValenceEntity with only the fields the viewer can see.
     ///
     /// Flow:
-    /// 1. Check if record exists (lightweight query)
-    /// 2. Get schema metadata
-    /// 3. Load full record
-    /// 4. Check entity-level privacy
-    /// 5. Apply field-level privacy filtering
-    /// 6. Return ValenceEntity
+    /// 1. Get schema metadata
+    /// 2. Load full record
+    /// 3. Check entity-level privacy (`Ok(None)` on deny — same as missing)
+    /// 4. Apply field-level privacy filtering
+    /// 5. Return ValenceEntity
+    ///
+    /// Denied reads and missing rows both return `Ok(None)` so callers cannot
+    /// distinguish existence from a privacy denial.
     /// # Errors
     ///
     /// Returns an error when the requested operation cannot be completed.
@@ -111,33 +118,29 @@ impl QueryCore {
         let table_str = table.into();
         let id_str = id.as_ref();
 
-        // Step 1: Check if record exists (lightweight query)
-        let exists = Self::get_id_only(&table_str, id_str, valence).await?;
-        if exists.is_none() {
-            return Ok(None);
-        }
-
-        // Step 2: Get schema metadata
+        // Step 1: Get schema metadata
         let schema = SchemaRegistry::global()
             .get_schema(&table_str)
             .ok_or_else(|| Error::NotFound(format!("Schema not found: {table_str}")))?;
 
-        // Step 3: Load full record
+        // Step 2: Load full record (single trip; no privacy-free existence probe)
         let raw_data = Self::get_record_json(&table_str, id_str, valence).await?;
         let Some(raw_data) = raw_data else {
             return Ok(None);
         };
 
-        // Step 4: Check entity-level privacy
-        // For now, we'll allow access (proper policy evaluation will be added
-        // when schemas include privacy policies in their definitions)
-        PrivacyEvaluator::check_entity_read(schema, &raw_data, valence).await?;
+        // Step 3: Entity-level privacy — deny looks like not-found
+        match PrivacyEvaluator::check_entity_read(schema, &raw_data, valence).await {
+            Ok(()) => {}
+            Err(Error::Privacy(_)) => return Ok(None),
+            Err(e) => return Err(e),
+        }
 
-        // Step 5: Apply field-level privacy filtering
+        // Step 4: Apply field-level privacy filtering
         let (filtered_data, hidden_fields): (BTreeMap<String, serde_json::Value>, Vec<String>) =
             PrivacyEvaluator::filter_entity_fields(schema, &raw_data, valence.actor())?;
 
-        // Step 6: Return ValenceEntity
+        // Step 5: Return ValenceEntity
         Ok(Some(ValenceEntity::new(
             table_str.clone(),
             id_str.to_string(),

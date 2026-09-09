@@ -125,12 +125,19 @@ mod tests {
     }
 
     #[test]
-    fn normalize_record_id_strips_table_prefix() {
+    fn normalize_record_id_strips_registered_table_prefix_only() {
+        assert_eq!(normalize_record_id_for_ownership("bare-id"), "bare-id");
+        // Unregistered `head:` must not be treated as Surreal table:id — app PKs
+        // like `slug:trim` and `appsetmem-slug:trim--uuid` contain colons.
         assert_eq!(
             normalize_record_id_for_ownership("counter:singleton"),
-            "singleton"
+            "counter:singleton"
         );
-        assert_eq!(normalize_record_id_for_ownership("bare-id"), "bare-id");
+        assert_eq!(normalize_record_id_for_ownership("slug:trim"), "slug:trim");
+        assert_eq!(
+            normalize_record_id_for_ownership("appsetmem-slug:trim--app-uuid"),
+            "appsetmem-slug:trim--app-uuid"
+        );
     }
 
     #[test]

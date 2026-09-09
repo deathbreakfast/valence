@@ -201,6 +201,11 @@ pub fn owner_ref_from_ownership_json(v: &Value) -> Option<OwnerRef> {
 }
 
 /// Normalize a primary key string for ownership keys and deletion graphs.
+///
+/// Strips a `table:` prefix only when `table` is a registered schema name (same
+/// idea as [`crate::deletion::normalize_record_id_for_deletion`], but without a
+/// caller-supplied table). Colon-bearing bare ids (for example `slug:…` or
+/// `appsetmem-slug:…--…`) must stay intact so mark/get ownership keys match.
 pub fn normalize_record_id_for_ownership(entity_id: &str) -> String {
     let s = entity_id.trim();
     let Some((head, rest)) = s.split_once(':') else {
@@ -210,9 +215,6 @@ pub fn normalize_record_id_for_ownership(entity_id: &str) -> String {
         return s.to_string();
     }
     if SchemaRegistry::global().get_schema(head).is_some() {
-        return rest.to_string();
-    }
-    if !rest.contains(':') {
         return rest.to_string();
     }
     s.to_string()

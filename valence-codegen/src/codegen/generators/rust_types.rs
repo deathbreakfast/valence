@@ -171,7 +171,6 @@ pub fn json_as_helpers_and_attrs(
     Some((helpers, attrs))
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;

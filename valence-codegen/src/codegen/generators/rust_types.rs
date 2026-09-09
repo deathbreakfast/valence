@@ -66,7 +66,7 @@ pub fn rust_type_tokens(field: &SchemaField, model_name: &str) -> TokenStream {
     match ft {
         "string" => quote! { String },
         "integer" => quote! { i64 },
-        "float" => quote! { f64 },
+        "float" | "decimal" => quote! { f64 },
         "boolean" => quote! { bool },
         "datetime" => quote! { chrono::DateTime<chrono::Utc> },
         "json" => quote! { serde_json::Value },
@@ -80,7 +80,7 @@ pub fn rust_type_tokens(field: &SchemaField, model_name: &str) -> TokenStream {
 pub fn field_type_is_copy(field: &SchemaField) -> bool {
     matches!(
         field.field_type.as_str(),
-        "integer" | "float" | "boolean" | "datetime" | "currency"
+        "integer" | "float" | "decimal" | "boolean" | "datetime" | "currency"
     )
 }
 
@@ -169,4 +169,37 @@ pub fn json_as_helpers_and_attrs(
     };
 
     Some((helpers, attrs))
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use valence_core::{FieldType, SchemaField};
+
+    fn field(name: &str, ft: FieldType) -> SchemaField {
+        SchemaField {
+            name: name.into(),
+            field_type: ft.as_str(),
+            primary: false,
+            nullable: false,
+            indexed: false,
+            unique: false,
+            default: None,
+            fk: None,
+            validations: Vec::new(),
+            policies: None,
+            encrypted: false,
+            enum_variants: Vec::new(),
+            enum_type: None,
+            model_path: None,
+        }
+    }
+
+    #[test]
+    fn decimal_maps_to_f64() {
+        let tokens = rust_type_tokens(&field("price", FieldType::Decimal), "Demo").to_string();
+        assert!(tokens.contains("f64"), "{tokens}");
+        assert!(field_type_is_copy(&field("price", FieldType::Decimal)));
+    }
 }

@@ -237,3 +237,21 @@ fn type_name(v: &Value) -> &'static str {
 pub fn field_by_name<'a>(layout: &'a StorageLayout, name: &str) -> Option<&'a LayoutField> {
     layout.fields.iter().find(|f| f.name == name)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn coerce_decimal_accepts_numeric_string() {
+        let v = coerce_for_storage(FieldStorage::Decimal, &json!("0.03")).unwrap();
+        assert_eq!(v.as_f64(), Some(0.03));
+    }
+
+    #[test]
+    fn coerce_decimal_accepts_number() {
+        let v = coerce_for_storage(FieldStorage::Decimal, &json!(0.036)).unwrap();
+        assert_eq!(v.as_f64(), Some(0.036));
+    }
+}

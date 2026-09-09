@@ -233,3 +233,32 @@ async fn sqlite_missing_column_name_is_null_not_panic() {
     assert_eq!(got["name"], "only");
     assert!(got.get("nope").is_none() || got["nope"].is_null());
 }
+
+#[tokio::test]
+async fn sqlite_create_accepts_decimal_numeric_string() {
+    let backend = Arc::new(SqliteBackend::connect_memory().await.expect("connect"));
+    let layout = StorageLayout {
+        table: "typed_decimal_str".into(),
+        fields: vec![
+            field("id", FieldStorage::String, true),
+            field("price", FieldStorage::Decimal, false),
+        ],
+    };
+    backend.ensure_typed_table(&layout).await.expect("ensure");
+    backend
+        .create_record(
+            "typed_decimal_str",
+            serde_json::json!({
+                "id": {"table":"typed_decimal_str","id":"r1"},
+                "price": "0.03"
+            }),
+        )
+        .await
+        .expect("create with string decimal");
+    let got = backend
+        .get_record("typed_decimal_str", "r1")
+        .await
+        .expect("get")
+        .expect("row");
+    assert_eq!(got["price"].as_f64(), Some(0.03));
+}

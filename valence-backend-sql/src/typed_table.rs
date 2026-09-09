@@ -11,10 +11,10 @@ use valence_core::error::{Error, Result};
 use valence_core::safe_ident::quote_sql_ident;
 use valence_core::schema::SchemaRegistry;
 use valence_core::storage_layout::{
-    decode_sql_cell, layout_diff, postgres_add_column, postgres_drop_default, postgres_set_default,
-    postgres_set_not_null, postgres_set_nullable, row_from_columns, split_record_fields,
-    sql_bind_text, sqlite_add_column, validate_write_types, AdditiveOp, FieldStorage, LayoutField,
-    SafeTweak, StorageLayout,
+    coerce_for_storage, decode_sql_cell, layout_diff, postgres_add_column, postgres_drop_default,
+    postgres_set_default, postgres_set_not_null, postgres_set_nullable, row_from_columns,
+    split_record_fields, sql_bind_text, sqlite_add_column, validate_write_types, AdditiveOp,
+    FieldStorage, LayoutField, SafeTweak, StorageLayout,
 };
 use valence_core::KnownEngines;
 
@@ -602,6 +602,8 @@ fn bind_sqlite<'q>(
     storage: FieldStorage,
     value: &Value,
 ) -> Result<sqlx::query::Query<'q, sqlx::Sqlite, sqlx::sqlite::SqliteArguments<'q>>> {
+    // Match [`validate_write_types`]: stringly decimals/integers coerce before bind.
+    let value = coerce_for_storage(storage, value)?;
     if value.is_null() {
         return Ok(query.bind(None::<String>));
     }
@@ -620,11 +622,11 @@ fn bind_sqlite<'q>(
             Ok(query.bind(v))
         }
         FieldStorage::Json | FieldStorage::Currency => {
-            let s = serde_json::to_string(value).map_err(Error::serialization)?;
+            let s = serde_json::to_string(&value).map_err(Error::serialization)?;
             Ok(query.bind(s))
         }
         FieldStorage::String | FieldStorage::Date => {
-            let s = sql_bind_text(storage, value)?.unwrap_or_default();
+            let s = sql_bind_text(storage, &value)?.unwrap_or_default();
             Ok(query.bind(s))
         }
     }
@@ -635,6 +637,7 @@ fn bind_postgres<'q>(
     storage: FieldStorage,
     value: &Value,
 ) -> Result<sqlx::query::Query<'q, sqlx::Postgres, sqlx::postgres::PgArguments>> {
+    let value = coerce_for_storage(storage, value)?;
     if value.is_null() {
         return Ok(query.bind(None::<String>));
     }
@@ -652,9 +655,9 @@ fn bind_postgres<'q>(
                 .ok_or_else(|| Error::Validation(format!("expected decimal, got {value}")))?;
             Ok(query.bind(v))
         }
-        FieldStorage::Json | FieldStorage::Currency => Ok(query.bind(value.clone())),
+        FieldStorage::Json | FieldStorage::Currency => Ok(query.bind(value)),
         FieldStorage::String | FieldStorage::Date => {
-            let s = sql_bind_text(storage, value)?.unwrap_or_default();
+            let s = sql_bind_text(storage, &value)?.unwrap_or_default();
             Ok(query.bind(s))
         }
     }

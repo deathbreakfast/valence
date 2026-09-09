@@ -24,7 +24,20 @@ pub(super) fn push_many_to_many_concrete_methods(
         /// Navigate the `#conn_name` connection (ManyToMany). Loads related records via edge table, runs read privacy.
         pub async fn #get_method_name(&self, valence: &valence::Valence) -> valence::Result<Vec<#target_type>> {
             let from_rid = self.id().ok_or_else(|| valence::Error::Validation("Record has no id".into()))?;
-            valence.get_many_to_many_targets(&from_rid, #edge_table_lit, #to_table_lit).await
+            let ids = valence
+                .get_many_to_many_target_record_ids(&from_rid, #edge_table_lit)
+                .await?;
+            let mut results = Vec::new();
+            for out_rid in ids {
+                if out_rid.table() != #to_table_lit {
+                    continue;
+                }
+                let id = valence::extract_id_from_record(&out_rid)?;
+                if let Some(row) = <#target_type as valence::Model>::get(&id, valence).await? {
+                    results.push(row);
+                }
+            }
+            Ok(results)
         }
     });
 

@@ -14,6 +14,7 @@ use valence::privacy_policies::common::{PUBLIC_READ, AUTHENTICATED};
 
 valence_schema! {
     TtlPrepareProbe {
+        repository: "https://github.com/unified-field-dev/valence",
         table: "ttl_prepare_probe",
         database: valence::DEFAULT_SURREAL_STORAGE,
         version: "0.1.0",

@@ -149,4 +149,37 @@ impl QueryCore {
             Arc::new((*schema).clone()),
         )))
     }
+
+    /// Declared Unscoped read of raw JSON (same as [`Self::get_record_json`]).
+    pub async fn get_record_json_used(
+        table: impl Into<String>,
+        id: impl AsRef<str>,
+        valence: &Valence,
+        purpose: crate::data_use::DataUsePurpose,
+    ) -> Result<Option<serde_json::Value>> {
+        let _ = purpose;
+        Self::get_record_json(table, id, valence).await
+    }
+
+    /// Declared Unscoped latest-ids helper (same as [`Self::latest_ids`]).
+    pub async fn latest_ids_used(
+        table: impl Into<String>,
+        limit: u32,
+        valence: &Valence,
+        purpose: crate::data_use::DataUsePurpose,
+    ) -> Result<Vec<IdOnlyRecord>> {
+        let _ = purpose;
+        Self::latest_ids(table, limit, valence).await
+    }
+
+    /// Declared Unscoped entity read (same as [`Self::get_entity`]).
+    pub async fn get_entity_used(
+        table: impl Into<String>,
+        id: impl AsRef<str>,
+        valence: &Valence,
+        purpose: crate::data_use::DataUsePurpose,
+    ) -> Result<Option<ValenceEntity>> {
+        let _ = purpose;
+        Self::get_entity(table, id, valence).await
+    }
 }

@@ -9,6 +9,7 @@ fn parses_ttl_from_schema_file() {
         r#"
         valence_schema! {
             Foo {
+        repository: "https://github.com/unified-field-dev/valence",
                 table: "foo",
                 version: "0.1.0",
                 ttl: { seconds: 1800 },
@@ -32,6 +33,7 @@ fn parses_database_expr() {
         use crate::PROJECT_DB;
         valence_schema! {
             Project {
+        repository: "https://github.com/unified-field-dev/valence",
                 table: "project",
                 version: "0.1.0",
                 database: PROJECT_DB,
@@ -52,6 +54,7 @@ fn parses_side_effects_list() {
         r#"
         valence_schema! {
             Foo {
+        repository: "https://github.com/unified-field-dev/valence",
                 table: "foo",
                 version: "0.1.0",
                 side_effects: [MyEffect],
@@ -73,6 +76,7 @@ fn parses_trait_target_connection() {
         r#"
         valence_schema! {
             Foo {
+        repository: "https://github.com/unified-field-dev/valence",
                 table: "foo",
                 version: "0.1.0",
                 fields: [

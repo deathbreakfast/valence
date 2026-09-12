@@ -25,6 +25,9 @@ pub(super) struct SchemaMetadataPieces {
     pub connections: Vec<TokenStream>,
     pub description_code: TokenStream,
     pub description_const_code: TokenStream,
+    pub repository_lit: LitStr,
+    pub retention_lit: LitStr,
+    pub owner_lit: LitStr,
     pub policies_code: TokenStream,
     pub trait_names_code: TokenStream,
     pub side_effects_code: TokenStream,
@@ -83,6 +86,16 @@ pub(super) fn collect_schema_metadata_pieces(schema: &SchemaContext) -> SchemaMe
         quote! { None }
     };
 
+    let repository_lit = LitStr::new(
+        &schema.schema.meta.repository,
+        proc_macro2::Span::call_site(),
+    );
+    let retention_lit = LitStr::new(
+        &schema.schema.meta.retention,
+        proc_macro2::Span::call_site(),
+    );
+    let owner_lit = LitStr::new(&schema.schema.meta.owner, proc_macro2::Span::call_site());
+
     let policies_code = generate_policies_code(schema.policies.as_ref());
 
     let trait_names_code = string_names_to_vec_code(&schema.traits);
@@ -138,6 +151,9 @@ pub(super) fn collect_schema_metadata_pieces(schema: &SchemaContext) -> SchemaMe
         connections,
         description_code,
         description_const_code,
+        repository_lit,
+        retention_lit,
+        owner_lit,
         policies_code,
         trait_names_code,
         side_effects_code,

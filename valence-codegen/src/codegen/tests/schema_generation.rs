@@ -13,6 +13,7 @@ use valence::prelude::*;
 
 valence_schema! {
     TestEntity {
+        repository: "https://github.com/unified-field-dev/valence",
         table: "test_entity",
         version: "0.1.0",
         description: "Test entity for DSL parsing",
@@ -39,6 +40,7 @@ use valence::prelude::*;
 
 valence_schema! {
     TestNotification {
+        repository: "https://github.com/unified-field-dev/valence",
         table: "test_notification",
         version: "0.1.0",
         description: "Test entity with optional field for clear method",
@@ -88,6 +90,7 @@ use valence::prelude::*;
 
 valence_schema! {
     ScoreTracker {
+        repository: "https://github.com/unified-field-dev/valence",
         table: "score_tracker",
         version: "0.1.0",
         description: "Test entity with side effects",
@@ -194,6 +197,7 @@ use valence::prelude::*;
 
 valence_schema! {
     PlainModel {
+        repository: "https://github.com/unified-field-dev/valence",
         table: "plain_model",
         version: "0.1.0",
         description: "Model with no side effects",
@@ -292,6 +296,7 @@ use valence::prelude::*;
 
 valence_schema! {
     TestEntity {
+        repository: "https://github.com/unified-field-dev/valence",
         table: "test_entity",
         version: "0.1.0",
         description: "Simple entity for union/join test",
@@ -333,6 +338,7 @@ use valence::prelude::*;
 
 valence_schema! {
     TypedFields {
+        repository: "https://github.com/unified-field-dev/valence",
         table: "typed_fields",
         version: "0.1.0",
         fields: [
@@ -398,6 +404,7 @@ use valence::prelude::*;
 
 valence_schema! {
     Note {
+        repository: "https://github.com/unified-field-dev/valence",
         table: "note",
         version: "0.1.0",
         fields: [

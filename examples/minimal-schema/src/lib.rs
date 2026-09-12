@@ -11,6 +11,7 @@ use valence::privacy_policies::common::PUBLIC_READ;
 
 valence_schema! {
     Smoke {
+        repository: "https://github.com/unified-field-dev/valence",
         table: "smoke",
         version: "0.1.0",
         // Explicit policies: empty entity policy lists default-deny non-System actors.

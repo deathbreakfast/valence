@@ -18,6 +18,7 @@ pub(super) fn model_update_with_before_body_tokens(
                 Some(existing)
             }
             None => {
+                #[allow(deprecated)]
                 let fetched = <Self as valence::Model>::get(id, valence).await?;
                 if let Some(ref existing) = fetched {
                     existing.check_update_privacy(valence).await?;

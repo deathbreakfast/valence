@@ -2,6 +2,7 @@ use valence::prelude::*;
 
 valence_schema! {
     Note {
+        repository: "https://github.com/unified-field-dev/valence",
         table: "hop_chain_note",
         version: "0.1.0",
         database: crate::NOTE_DB,

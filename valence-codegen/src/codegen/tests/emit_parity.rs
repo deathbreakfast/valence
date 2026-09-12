@@ -15,6 +15,7 @@ use valence::prelude::*;
 
 valence_schema! {
     Routed {
+        repository: "https://github.com/unified-field-dev/valence",
         table: "routed",
         version: "0.1.0",
         database: crate::ROUTED_DB,
@@ -48,6 +49,7 @@ use valence::prelude::*;
 
 valence_schema! {
     OwnedComp {
+        repository: "https://github.com/unified-field-dev/valence",
         table: "owned_comp",
         version: "0.1.0",
         ownership: { system: true },
@@ -85,6 +87,7 @@ use valence::privacy_policies::common::PUBLIC_READ;
 
 valence_schema! {
     PolicyProbe {
+        repository: "https://github.com/unified-field-dev/valence",
         table: "policy_probe",
         version: "0.1.0",
         policies: {
@@ -116,6 +119,7 @@ use valence::prelude::*;
 
 valence_schema! {
     BadDb {
+        repository: "https://github.com/unified-field-dev/valence",
         table: "bad_db",
         version: "0.1.0",
         database: "not-an-evaluator",

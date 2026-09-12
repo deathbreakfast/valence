@@ -36,6 +36,14 @@ impl<'a> NamedQueryAll<'a> {
         core.projection = Some(vec!["id".to_string(), "name".to_string()]);
         Self { inner: core, valence }
     }
+    /// Declared trait query builder (catalog target: Trait).
+    pub fn query_used(
+        valence: &'a valence::Valence,
+        purpose: valence::DataUsePurpose,
+    ) -> Self {
+        let _ = purpose;
+        #[allow(deprecated)] Self::query(valence)
+    }
     pub fn where_name(mut self, predicate: valence::StringPredicate) -> Self {
         self.inner = self.inner.where_string("name".to_string(), predicate);
         self

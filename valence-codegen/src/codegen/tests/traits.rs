@@ -10,17 +10,18 @@ use super::support::write_temp_schema_file;
 
 #[test]
 fn generates_trait_definition() {
-    let trait_schema = r"
+    let trait_schema = r#"
 use valence::prelude::*;
 
 valence_trait_schema! {
     Named {
+        repository: "https://github.com/unified-field-dev/valence",
         fields: [
             name: { r#type: FieldType::String, required: true },
         ],
     }
 }
-";
+"#;
 
     let path = write_temp_schema_file(trait_schema, "named_valence_trait.rs");
     let generated = generate_from_trait_file(&path).expect("trait codegen failed");
@@ -67,23 +68,25 @@ valence_trait_schema! {
 
 #[test]
 fn generates_schema_with_trait() {
-    let trait_schema = r"
+    let trait_schema = r#"
 use valence::prelude::*;
 
 valence_trait_schema! {
     Named {
+        repository: "https://github.com/unified-field-dev/valence",
         fields: [
             name: { r#type: FieldType::String, required: true },
         ],
     }
 }
-";
+"#;
 
     let schema = r#"
 use valence::prelude::*;
 
 valence_schema! {
     TestTraitA {
+        repository: "https://github.com/unified-field-dev/valence",
         table: "test_trait_a",
         version: "0.1.0",
 
@@ -156,6 +159,7 @@ use valence::prelude::*;
 
 valence_trait_schema! {
     HasOwner {
+        repository: "https://github.com/unified-field-dev/valence",
         fields: [
             owner: { r#type: FieldType::Record("user"), required: true },
         ],
@@ -177,6 +181,7 @@ use valence::prelude::*;
 
 valence_schema! {
     OwnedItem {
+        repository: "https://github.com/unified-field-dev/valence",
         table: "owned_item",
         version: "0.1.0",
 
@@ -227,35 +232,38 @@ valence_schema! {
 
 #[test]
 fn generates_schema_with_multiple_traits() {
-    let named_trait = r"
+    let named_trait = r#"
 use valence::prelude::*;
 
 valence_trait_schema! {
     Named {
+        repository: "https://github.com/unified-field-dev/valence",
         fields: [
             name: { r#type: FieldType::String, required: true },
         ],
     }
 }
-";
+"#;
 
-    let tagged_trait = r"
+    let tagged_trait = r#"
 use valence::prelude::*;
 
 valence_trait_schema! {
     Tagged {
+        repository: "https://github.com/unified-field-dev/valence",
         fields: [
             tag: { r#type: FieldType::String, required: false },
         ],
     }
 }
-";
+"#;
 
     let schema = r#"
 use valence::prelude::*;
 
 valence_schema! {
     MultiTrait {
+        repository: "https://github.com/unified-field-dev/valence",
         table: "multi_trait",
         version: "0.1.0",
 

@@ -42,10 +42,83 @@
 //! - **Dual-key privacy bypass** — bench/test only: `VALENCE_PRIVACY_BYPASS` +
 //!   `VALENCE_PRIVACY_BYPASS_FORCE_ON` (never in production; see repository `SECURITY.md`)
 //! - **Actor JSON policy** — optional [`RejectExternalSystemActor`] on factory builds
+//! - **Declared data uses** — Pairs `*_used` Model / trait / [`QueryCore`] methods with
+//!   [`use_!`] so purpose markdown is catalogued for valence-uf-app Data uses surfaces.
+//!   Every schema and trait requires a `repository:` URL for View source links.
+//!   [Get started](#declare-a-data-use).
 //!
 //! Enable backends with Cargo features (`mem` is the default). The crate `README.md` lists every
 //! feature flag and environment variable. See repository [`SECURITY.md`](https://github.com/unified-field-dev/valence/blob/main/SECURITY.md)
 //! for integrator wiring.
+//!
+//! # Declare a data use
+//!
+//! Declared data uses pair `*_used` Model / trait / [`QueryCore`] methods with
+//! [`use_!`] purpose markdown so operators can read why code touched a table on
+//! valence-uf-app Data uses surfaces. Prefer this path whenever product or service
+//! code reads or writes Valence data; hosts scan call sites at build time.
+//!
+//! ## Prerequisites
+//!
+//! - A generated or macro [`Model`] (or trait query / [`QueryCore`]) that exposes `*_used`.
+//! - Every schema and trait declares `repository:` as the Git HTTPS root (required for
+//!   View source links in the ops UI).
+//! - Optional: host `build.rs` wired to `uf-valence-data-use-scan` when you want the
+//!   catalog snapshot for valence-uf-app.
+//!
+//! ## Call with purpose
+//!
+//! Op and target are inferred from the method (`get_used` → Read + Schema;
+//! `NamedQueryAll::query_used` → Trait; `QueryCore::execute_used` → Unscoped).
+//!
+//! ```rust,ignore
+//! use valence::{use_, FieldType, Model, valence_schema};
+//!
+//! valence_schema! {
+//!     User {
+//!         repository: "https://github.com/unified-field-dev/valence",
+//!         table: "user",
+//!         version: "0.1.0",
+//!         repository: "https://github.com/unified-field-dev/valence",
+//!         fields: [
+//!             id: { r#type: FieldType::String, primary_key: true, required: true },
+//!         ],
+//!     }
+//! }
+//!
+//! async fn load_session_user(
+//!     id: &str,
+//!     v: &valence::Valence,
+//! ) -> valence::Result<Option<User>> {
+//!     let row = User::get_used(
+//!         id,
+//!         v,
+//!         use_!(r#"
+//! Load the user to validate the session cookie.
+//! "#),
+//!     )
+//!     .await?;
+//!     println!("session user loaded: {}", row.is_some());
+//!     Ok(row)
+//! }
+//! ```
+//!
+//! Observable outcome: `get_used` returns the same entity option as `get`, and the
+//! purpose string is captured for the catalog. Omitting `repository:` fails schema /
+//! trait parse or codegen. Bare `Model::get` / `create` / … remain available but are
+//! deprecated (warn-only in v1).
+//!
+//! ## Variant: trait and Unscoped
+//!
+//! ```rust,ignore
+//! use valence::{use_, QueryCore};
+//!
+//! NamedQueryAll::query_used(&v, use_!("List named entities for the admin picker.")).await?;
+//! QueryCore::execute_used(builder, use_!("Run the Valence graph walk across registered models.")).await?;
+//! ```
+//!
+//! Next: wire `uf-valence-data-use-scan::generate` from host `build.rs`,
+//! then open Data uses cards / `/valence/unscoped-uses` in valence-uf-app.
 //!
 //! # Defer-to-edge read privacy
 //!
@@ -72,6 +145,7 @@
 //!
 //! valence_schema! {
 //!     InvoiceHistory {
+//!         repository: "https://github.com/unified-field-dev/valence",
 //!         table: "invoice_history",
 //!         version: "0.1.0",
 //!         policies: {
@@ -151,6 +225,7 @@
 //!
 //! valence_schema! {
 //!     Line {
+//!         repository: "https://github.com/unified-field-dev/valence",
 //!         table: "line",
 //!         version: "0.1.0",
 //!         database: /* DatabaseFromEngine */,
@@ -197,6 +272,7 @@
 //!
 //! valence_schema! {
 //!     Event {
+//!         repository: "https://github.com/unified-field-dev/valence",
 //!         table: "event",
 //!         version: "0.1.0",
 //!         database: /* DatabaseFromEngine */,
@@ -286,6 +362,7 @@
 //!
 //! valence_schema! {
 //!     Counter {
+//!         repository: "https://github.com/unified-field-dev/valence",
 //!         table: "counter",
 //!         version: "0.1.0",
 //!         description: "Simple counter",
@@ -321,6 +398,7 @@
 //! # #[cfg(feature = "mem")]
 //! valence_schema! {
 //!     Counter {
+//!         repository: "https://github.com/unified-field-dev/valence",
 //!         table: "counter",
 //!         version: "0.1.0",
 //!         database: COUNTER_DB,
@@ -361,6 +439,7 @@
 //!
 //! valence_schema! {
 //!     Counter {
+//!         repository: "https://github.com/unified-field-dev/valence",
 //!         table: "counter",
 //!         version: "0.1.0",
 //!         description: "Simple counter",

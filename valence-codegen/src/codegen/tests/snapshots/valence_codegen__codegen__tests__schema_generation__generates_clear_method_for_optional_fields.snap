@@ -278,6 +278,7 @@ impl valence::Model for TestNotification {
         data: Self,
         valence: &valence::Valence,
     ) -> valence::Result<Self> {
+        #[allow(deprecated)]
         let before_snapshot = Self::get(id, valence).await?;
         if let Some(ref existing) = before_snapshot {
             existing.check_update_privacy(valence).await?;
@@ -348,6 +349,7 @@ impl valence::Model for TestNotification {
         patch: serde_json::Value,
         valence: &valence::Valence,
     ) -> valence::Result<Self> {
+        #[allow(deprecated)]
         let before_snapshot = Self::get(id, valence).await?;
         let Some(ref existing) = before_snapshot else {
             return Err(
@@ -580,6 +582,7 @@ impl TestNotification {
                 Some(existing)
             }
             None => {
+                #[allow(deprecated)]
                 let fetched = <Self as valence::Model>::get(id, valence).await?;
                 if let Some(ref existing) = fetched {
                     existing.check_update_privacy(valence).await?;
@@ -708,6 +711,7 @@ impl<'a> TestNotificationMutable<'a> {
     }
     /// Load entity from DB directly as mutable.
     pub async fn get(id: &str, valence: &'a valence::Valence) -> valence::Result<Self> {
+        #[allow(deprecated)]
         let model = <TestNotification as valence::Model>::get(id, valence)
             .await?
             .ok_or_else(|| valence::Error::Validation(
@@ -762,20 +766,43 @@ impl<'a> TestNotificationMutable<'a> {
 }
 impl TestNotification {
     /// Get a mutable builder for this model.
+    #[deprecated(
+        note = "use get_mutable_used with use_!(...) for declared data-use transparency"
+    )]
     pub fn get_mutable<'a>(
         &self,
         valence: &'a valence::Valence,
     ) -> TestNotificationMutable<'a> {
         TestNotificationMutable::new(self.clone(), valence)
     }
+    /// Declared mutable builder (purpose captured at get_mutable; commit uses same row).
+    pub fn get_mutable_used<'a>(
+        &self,
+        valence: &'a valence::Valence,
+        purpose: valence::DataUsePurpose,
+    ) -> TestNotificationMutable<'a> {
+        let _ = purpose;
+        #[allow(deprecated)] self.get_mutable(valence)
+    }
 }
 impl TestNotification {
     /// Start a type-safe query
+    #[deprecated(
+        note = "use query_used with use_!(...) for declared data-use transparency"
+    )]
     pub fn query(valence: &valence::Valence) -> TestNotificationQuery<'_> {
         TestNotificationQuery {
             inner: valence::QueryCore::new("test_notification".to_string()),
             valence,
         }
+    }
+    /// Declared schema query builder (catalog target: Schema).
+    pub fn query_used(
+        valence: &valence::Valence,
+        purpose: valence::DataUsePurpose,
+    ) -> TestNotificationQuery<'_> {
+        let _ = purpose;
+        #[allow(deprecated)] Self::query(valence)
     }
 }
 /// Query builder for #struct_name
@@ -959,6 +986,8 @@ impl TestNotificationSchema {
                             "Test entity with optional field for clear method"
                                 .to_string(),
                         ),
+                        repository: "https://github.com/unified-field-dev/valence"
+                            .to_string(),
                     },
                 }
             })

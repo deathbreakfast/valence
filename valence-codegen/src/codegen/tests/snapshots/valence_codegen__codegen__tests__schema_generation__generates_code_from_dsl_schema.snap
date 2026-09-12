@@ -272,6 +272,7 @@ impl valence::Model for TestEntity {
         data: Self,
         valence: &valence::Valence,
     ) -> valence::Result<Self> {
+        #[allow(deprecated)]
         let before_snapshot = Self::get(id, valence).await?;
         if let Some(ref existing) = before_snapshot {
             existing.check_update_privacy(valence).await?;
@@ -342,6 +343,7 @@ impl valence::Model for TestEntity {
         patch: serde_json::Value,
         valence: &valence::Valence,
     ) -> valence::Result<Self> {
+        #[allow(deprecated)]
         let before_snapshot = Self::get(id, valence).await?;
         let Some(ref existing) = before_snapshot else {
             return Err(
@@ -573,6 +575,7 @@ impl TestEntity {
                 Some(existing)
             }
             None => {
+                #[allow(deprecated)]
                 let fetched = <Self as valence::Model>::get(id, valence).await?;
                 if let Some(ref existing) = fetched {
                     existing.check_update_privacy(valence).await?;
@@ -701,6 +704,7 @@ impl<'a> TestEntityMutable<'a> {
     }
     /// Load entity from DB directly as mutable.
     pub async fn get(id: &str, valence: &'a valence::Valence) -> valence::Result<Self> {
+        #[allow(deprecated)]
         let model = <TestEntity as valence::Model>::get(id, valence)
             .await?
             .ok_or_else(|| valence::Error::Validation(
@@ -755,20 +759,43 @@ impl<'a> TestEntityMutable<'a> {
 }
 impl TestEntity {
     /// Get a mutable builder for this model.
+    #[deprecated(
+        note = "use get_mutable_used with use_!(...) for declared data-use transparency"
+    )]
     pub fn get_mutable<'a>(
         &self,
         valence: &'a valence::Valence,
     ) -> TestEntityMutable<'a> {
         TestEntityMutable::new(self.clone(), valence)
     }
+    /// Declared mutable builder (purpose captured at get_mutable; commit uses same row).
+    pub fn get_mutable_used<'a>(
+        &self,
+        valence: &'a valence::Valence,
+        purpose: valence::DataUsePurpose,
+    ) -> TestEntityMutable<'a> {
+        let _ = purpose;
+        #[allow(deprecated)] self.get_mutable(valence)
+    }
 }
 impl TestEntity {
     /// Start a type-safe query
+    #[deprecated(
+        note = "use query_used with use_!(...) for declared data-use transparency"
+    )]
     pub fn query(valence: &valence::Valence) -> TestEntityQuery<'_> {
         TestEntityQuery {
             inner: valence::QueryCore::new("test_entity".to_string()),
             valence,
         }
+    }
+    /// Declared schema query builder (catalog target: Schema).
+    pub fn query_used(
+        valence: &valence::Valence,
+        purpose: valence::DataUsePurpose,
+    ) -> TestEntityQuery<'_> {
+        let _ = purpose;
+        #[allow(deprecated)] Self::query(valence)
     }
 }
 /// Query builder for #struct_name
@@ -949,6 +976,8 @@ impl TestEntitySchema {
                         row_count: 0,
                         owner: "system".to_string(),
                         description: Some("Test entity for DSL parsing".to_string()),
+                        repository: "https://github.com/unified-field-dev/valence"
+                            .to_string(),
                     },
                 }
             })

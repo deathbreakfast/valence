@@ -44,6 +44,7 @@ impl From<syn::Error> for FileParseError {
 ///     use valence::prelude::*;
 ///     valence_schema! {
 ///         Widget {
+///             repository: "https://github.com/unified-field-dev/valence",
 ///             table: "widget",
 ///             version: "0.1.0",
 ///             fields: [
@@ -185,6 +186,7 @@ mod tests {
             use valence::prelude::*;
             valence_schema! {
                 Widget {
+                repository: "https://github.com/unified-field-dev/valence",
                     table: "widget",
                     version: "0.1.0",
                     fields: [
@@ -204,6 +206,7 @@ mod tests {
             use crate::PROJECT_DB;
             valence_schema! {
                 Project {
+                repository: "https://github.com/unified-field-dev/valence",
                     table: "project",
                     version: "0.1.0",
                     database: PROJECT_DB,
@@ -242,15 +245,16 @@ mod tests {
 
     #[test]
     fn parses_trait_file() {
-        let src = r"
+        let src = r#"
             valence_trait_schema! {
                 Named {
+                    repository: "https://github.com/unified-field-dev/valence",
                     fields: [
                         name: { r#type: FieldType::String, required: true },
                     ],
                 }
             }
-        ";
+        "#;
         let parsed = parse_trait_file(src).expect("parse");
         assert_eq!(parsed.name, "Named");
         assert_eq!(parsed.fields.len(), 1);

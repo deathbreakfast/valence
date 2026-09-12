@@ -63,6 +63,7 @@ pub(super) fn model_upsert_method_tokens(cx: &CrudEmitCtx<'_>) -> TokenStream {
     let own_create = ownership_after_row_persisted(cx, "upserted");
     quote! {
         async fn upsert(id: &str, data: Self, valence: &valence::Valence) -> valence::Result<Self> {
+            #[allow(deprecated)]
             let before_snapshot = Self::get(id, valence).await?;
             if let Some(ref existing) = before_snapshot {
                 existing.check_update_privacy(valence).await?;
@@ -138,6 +139,7 @@ pub(super) fn model_merge_method_tokens(field_changes_name: &proc_macro2::Ident)
             patch: serde_json::Value,
             valence: &valence::Valence,
         ) -> valence::Result<Self> {
+            #[allow(deprecated)]
             let before_snapshot = Self::get(id, valence).await?;
             let Some(ref existing) = before_snapshot else {
                 return Err(valence::Error::NotFound(format!(

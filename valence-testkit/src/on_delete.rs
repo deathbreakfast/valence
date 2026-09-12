@@ -107,6 +107,8 @@ fn public_delete_schema_with_fields(
             row_count: 0,
             owner: "t".into(),
             description: None,
+
+            repository: "https://github.com/unified-field-dev/valence".to_string(),
         },
     });
     Box::leak(Box::new(SchemaMetadata::from_schema(schema)))

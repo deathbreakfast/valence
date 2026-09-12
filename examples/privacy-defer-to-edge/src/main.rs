@@ -21,6 +21,7 @@ use valence::{
 
 valence::valence_schema! {
     DeferDemoParent {
+        repository: "https://github.com/unified-field-dev/valence",
         table: "defer_demo_parent",
         version: "0.1.0",
         description: "Owner-scoped parent for defer-to-edge demo",
@@ -39,6 +40,7 @@ valence::valence_schema! {
 
 valence::valence_schema! {
     DeferDemoHistory {
+        repository: "https://github.com/unified-field-dev/valence",
         table: "defer_demo_history",
         version: "0.1.0",
         description: "Satellite history that defers read to parent source",

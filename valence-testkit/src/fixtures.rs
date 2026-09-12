@@ -49,6 +49,8 @@ pub fn empty_policies_schema() -> &'static SchemaMetadata {
                 row_count: 0,
                 owner: "system".to_string(),
                 description: None,
+
+                repository: "https://github.com/unified-field-dev/valence".to_string(),
             },
         }));
         SchemaMetadata::from_schema(schema)
@@ -102,6 +104,8 @@ pub fn authenticated_only_schema() -> &'static SchemaMetadata {
                 row_count: 0,
                 owner: "system".to_string(),
                 description: None,
+
+                repository: "https://github.com/unified-field-dev/valence".to_string(),
             },
         }));
         SchemaMetadata::from_schema(schema)
@@ -201,6 +205,8 @@ pub fn system_only_field_schema() -> &'static SchemaMetadata {
                 row_count: 0,
                 owner: "system".to_string(),
                 description: None,
+
+                repository: "https://github.com/unified-field-dev/valence".to_string(),
             },
         }));
         SchemaMetadata::from_schema(schema)
@@ -276,6 +282,8 @@ fn catalog_ttl_probe_schema() -> &'static Schema {
                 row_count: 0,
                 owner: "system".to_string(),
                 description: Some("matrix TTL probe".into()),
+
+                repository: "https://github.com/unified-field-dev/valence".to_string(),
             },
         }))
     })
@@ -358,6 +366,8 @@ fn catalog_iter_probe_schema() -> &'static Schema {
                 row_count: 0,
                 owner: "system".to_string(),
                 description: Some("matrix iter scan probe".into()),
+
+                repository: "https://github.com/unified-field-dev/valence".to_string(),
             },
         }))
     })

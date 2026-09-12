@@ -60,6 +60,7 @@ pub(super) fn push_has_one_methods_for_connection(
                 match &self.#field_ident {
                     Some(rid) => {
                         let id = valence::connection::extract_id_from_record(rid)?;
+                        #[allow(deprecated)]
                         <#target_type as valence::Model>::get(&id, valence).await
                     }
                     None => Ok(None),
@@ -71,8 +72,9 @@ pub(super) fn push_has_one_methods_for_connection(
             /// Navigate the `#from_field` connection. Loads full target, runs read privacy.
             pub async fn #get_method_name(&self, valence: &valence::Valence) -> valence::Result<#target_type> {
                 let id = valence::connection::extract_id_from_record(&self.#field_ident)?;
-                <#target_type as valence::Model>::get(&id, valence).await?
-                    .ok_or_else(|| valence::Error::NotFound(
+                #[allow(deprecated)]
+                let row = <#target_type as valence::Model>::get(&id, valence).await?;
+                row.ok_or_else(|| valence::Error::NotFound(
                         format!("{} {} not found", #target_table_lit, id),
                     ))
             }
@@ -82,6 +84,7 @@ pub(super) fn push_has_one_methods_for_connection(
             /// Navigate the `#from_field` connection. Loads full target, runs read privacy.
             pub async fn #get_method_name(&self, valence: &valence::Valence) -> valence::Result<Option<#target_type>> {
                 let id = valence::connection::extract_id_from_record(&self.#field_ident)?;
+                #[allow(deprecated)]
                 <#target_type as valence::Model>::get(&id, valence).await
             }
         }
@@ -106,6 +109,7 @@ pub(super) fn push_has_one_methods_for_connection(
             target_id: &str,
             valence: &valence::Valence,
         ) -> valence::Result<Vec<#struct_name>> {
+            #[allow(deprecated)]
             #struct_name::query(valence)
                 .#where_method_name(valence::RecordPredicate::Equals(
                     valence::RecordId::new(#to_table_lit, target_id),

@@ -26,6 +26,7 @@ const COUNTER_DB: DatabaseFromEngine = Database::from_engine("default", SURREAL_
 
 valence_schema! {
     Counter {
+        repository: "https://github.com/unified-field-dev/valence",
         table: "counter",
         version: "0.1.0",
         description: "Simple counter",

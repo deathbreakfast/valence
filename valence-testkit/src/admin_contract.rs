@@ -70,6 +70,8 @@ fn authenticated_only_schema() -> &'static SchemaMetadata {
                 row_count: 0,
                 owner: "system".to_string(),
                 description: None,
+
+                repository: "https://github.com/unified-field-dev/valence".to_string(),
             },
         }));
         SchemaMetadata::from_schema(schema)

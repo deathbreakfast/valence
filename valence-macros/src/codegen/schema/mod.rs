@@ -49,6 +49,9 @@ fn expand_parsed_schema(parsed: &valence_schema_dsl::ParsedSchema) -> TokenStrea
     } else {
         quote! { None }
     };
+    let repository_lit = LitStr::new(&parsed.repository, proc_macro2::Span::call_site());
+    let retention_lit = LitStr::new(&parsed.retention, proc_macro2::Span::call_site());
+    let owner_lit = LitStr::new(&parsed.owner, proc_macro2::Span::call_site());
 
     let privacy_read_lit = LitStr::new("public", proc_macro2::Span::call_site());
     let privacy_write_lit = LitStr::new("service", proc_macro2::Span::call_site());
@@ -134,10 +137,11 @@ then `database: crate::MY_DB`.",
             ttl: #ttl_code,
             ownership: #ownership_code,
             meta: valence::SchemaMeta {
-                retention: "365 days".to_string(),
+                retention: #retention_lit.to_string(),
                 row_count: 0,
-                owner: "system".to_string(),
+                owner: #owner_lit.to_string(),
                 description: #description_code,
+                repository: #repository_lit.to_string(),
             },
         }
     }};

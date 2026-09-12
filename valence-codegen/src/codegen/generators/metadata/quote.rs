@@ -17,6 +17,9 @@ pub(super) fn quote_schema_metadata_method(p: &SchemaMetadataPieces) -> TokenStr
     let connections = &p.connections;
     let description_code = &p.description_code;
     let description_const_code = &p.description_const_code;
+    let repository_lit = &p.repository_lit;
+    let retention_lit = &p.retention_lit;
+    let owner_lit = &p.owner_lit;
     let policies_code = &p.policies_code;
     let trait_names_code = &p.trait_names_code;
     let side_effects_code = &p.side_effects_code;
@@ -100,10 +103,11 @@ pub(super) fn quote_schema_metadata_method(p: &SchemaMetadataPieces) -> TokenStr
                         ttl: #ttl_code,
                         ownership: #ownership_code,
                         meta: valence::SchemaMeta {
-                            retention: "365 days".to_string(),
+                            retention: #retention_lit.to_string(),
                             row_count: 0,
-                            owner: "system".to_string(),
+                            owner: #owner_lit.to_string(),
                             description: #description_code,
+                            repository: #repository_lit.to_string(),
                         },
                     }
                 })

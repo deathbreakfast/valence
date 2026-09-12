@@ -268,6 +268,7 @@ impl valence::Model for TestTraitA {
         data: Self,
         valence: &valence::Valence,
     ) -> valence::Result<Self> {
+        #[allow(deprecated)]
         let before_snapshot = Self::get(id, valence).await?;
         if let Some(ref existing) = before_snapshot {
             existing.check_update_privacy(valence).await?;
@@ -338,6 +339,7 @@ impl valence::Model for TestTraitA {
         patch: serde_json::Value,
         valence: &valence::Valence,
     ) -> valence::Result<Self> {
+        #[allow(deprecated)]
         let before_snapshot = Self::get(id, valence).await?;
         let Some(ref existing) = before_snapshot else {
             return Err(
@@ -569,6 +571,7 @@ impl TestTraitA {
                 Some(existing)
             }
             None => {
+                #[allow(deprecated)]
                 let fetched = <Self as valence::Model>::get(id, valence).await?;
                 if let Some(ref existing) = fetched {
                     existing.check_update_privacy(valence).await?;
@@ -697,6 +700,7 @@ impl<'a> TestTraitAMutable<'a> {
     }
     /// Load entity from DB directly as mutable.
     pub async fn get(id: &str, valence: &'a valence::Valence) -> valence::Result<Self> {
+        #[allow(deprecated)]
         let model = <TestTraitA as valence::Model>::get(id, valence)
             .await?
             .ok_or_else(|| valence::Error::Validation(
@@ -744,20 +748,43 @@ impl<'a> TestTraitAMutable<'a> {
 }
 impl TestTraitA {
     /// Get a mutable builder for this model.
+    #[deprecated(
+        note = "use get_mutable_used with use_!(...) for declared data-use transparency"
+    )]
     pub fn get_mutable<'a>(
         &self,
         valence: &'a valence::Valence,
     ) -> TestTraitAMutable<'a> {
         TestTraitAMutable::new(self.clone(), valence)
     }
+    /// Declared mutable builder (purpose captured at get_mutable; commit uses same row).
+    pub fn get_mutable_used<'a>(
+        &self,
+        valence: &'a valence::Valence,
+        purpose: valence::DataUsePurpose,
+    ) -> TestTraitAMutable<'a> {
+        let _ = purpose;
+        #[allow(deprecated)] self.get_mutable(valence)
+    }
 }
 impl TestTraitA {
     /// Start a type-safe query
+    #[deprecated(
+        note = "use query_used with use_!(...) for declared data-use transparency"
+    )]
     pub fn query(valence: &valence::Valence) -> TestTraitAQuery<'_> {
         TestTraitAQuery {
             inner: valence::QueryCore::new("test_trait_a".to_string()),
             valence,
         }
+    }
+    /// Declared schema query builder (catalog target: Schema).
+    pub fn query_used(
+        valence: &valence::Valence,
+        purpose: valence::DataUsePurpose,
+    ) -> TestTraitAQuery<'_> {
+        let _ = purpose;
+        #[allow(deprecated)] Self::query(valence)
     }
 }
 /// Query builder for #struct_name
@@ -924,6 +951,8 @@ impl TestTraitASchema {
                         row_count: 0,
                         owner: "system".to_string(),
                         description: None,
+                        repository: "https://github.com/unified-field-dev/valence"
+                            .to_string(),
                     },
                 }
             })

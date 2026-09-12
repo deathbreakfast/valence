@@ -8,6 +8,7 @@ use crate::parse::*;
 fn test_parse_minimal_schema() {
     let input = r#"
             Foo {
+                repository: "https://github.com/unified-field-dev/valence",
                 table: "foo",
                 version: "0.1.0",
                 fields: [
@@ -27,6 +28,7 @@ fn test_parse_minimal_schema() {
 fn test_parse_connections_block() {
     let input = r#"
             Post {
+                repository: "https://github.com/unified-field-dev/valence",
                 table: "post",
                 version: "0.1.0",
                 fields: [ id: { r#type: FieldType::String, primary_key: true, required: true } ],
@@ -52,6 +54,7 @@ fn test_parse_connections_block() {
 fn test_parse_connection_target_alias() {
     let input = r#"
             Post {
+                repository: "https://github.com/unified-field-dev/valence",
                 table: "post",
                 version: "0.1.0",
                 fields: [ id: { r#type: FieldType::String, primary_key: true, required: true } ],
@@ -72,6 +75,7 @@ fn test_parse_connection_target_alias() {
 fn test_parse_rejects_unknown_key() {
     let input = r#"
             Foo {
+                repository: "https://github.com/unified-field-dev/valence",
                 table: "foo",
                 version: "0.1.0",
                 unknown_key: 1,
@@ -90,6 +94,7 @@ fn test_parse_rejects_unknown_key() {
 fn test_parse_traits_key() {
     let input = r#"
             Foo {
+                repository: "https://github.com/unified-field-dev/valence",
                 table: "foo",
                 version: "0.1.0",
                 fields: [
@@ -108,6 +113,7 @@ fn test_parse_traits_key() {
 fn test_parse_ttl_block() {
     let input = r#"
             Foo {
+                repository: "https://github.com/unified-field-dev/valence",
                 table: "foo",
                 version: "0.1.0",
                 ttl: {
@@ -129,6 +135,7 @@ fn test_parse_ttl_block() {
 fn test_parse_enum_field_type() {
     let input = r#"
             Foo {
+                repository: "https://github.com/unified-field-dev/valence",
                 table: "foo",
                 version: "0.1.0",
                 fields: [
@@ -154,6 +161,7 @@ fn test_parse_enum_field_type() {
 fn test_parse_external_enum_field_type() {
     let input = r#"
             Foo {
+                repository: "https://github.com/unified-field-dev/valence",
                 table: "foo",
                 version: "0.1.0",
                 fields: [
@@ -176,6 +184,7 @@ fn test_parse_external_enum_field_type() {
 fn test_parse_connections_optional() {
     let input = r#"
             Foo {
+                repository: "https://github.com/unified-field-dev/valence",
                 table: "foo",
                 version: "0.1.0",
                 fields: [
@@ -194,6 +203,7 @@ fn test_parse_connections_optional() {
 fn test_parse_duplicate_database() {
     let input = r#"
             Foo {
+                repository: "https://github.com/unified-field-dev/valence",
                 table: "foo",
                 version: "0.1.0",
                 database: DB_A,
@@ -212,6 +222,7 @@ fn test_parse_duplicate_database() {
 fn test_parse_ownership_mutual_exclusion() {
     let input = r#"
             Foo {
+                repository: "https://github.com/unified-field-dev/valence",
                 table: "foo",
                 version: "0.1.0",
                 ownership: { system: true, resolve: crate::Resolver },
@@ -229,6 +240,7 @@ fn test_parse_ownership_mutual_exclusion() {
 fn test_parse_ttl_requires_seconds() {
     let input = r#"
             Foo {
+                repository: "https://github.com/unified-field-dev/valence",
                 table: "foo",
                 version: "0.1.0",
                 ttl: { mode: "backend_capability" },
@@ -246,6 +258,7 @@ fn test_parse_ttl_requires_seconds() {
 fn test_parse_connection_requires_on_delete() {
     let input = r#"
             Post {
+                repository: "https://github.com/unified-field-dev/valence",
                 table: "post",
                 version: "0.1.0",
                 fields: [ id: { r#type: FieldType::String, primary_key: true, required: true } ],
@@ -263,6 +276,7 @@ fn test_parse_connection_requires_on_delete() {
 fn test_parse_missing_table() {
     let input = r#"
             Foo {
+                repository: "https://github.com/unified-field-dev/valence",
                 version: "0.1.0",
                 fields: []
             }
@@ -276,6 +290,7 @@ fn test_parse_missing_table() {
 fn defer_to_edge_parses_string_edge_happy() {
     let input = r#"
             Hist {
+                repository: "https://github.com/unified-field-dev/valence",
                 table: "hist",
                 version: "0.1.0",
                 policies: {
@@ -304,6 +319,7 @@ fn defer_to_edge_parses_string_edge_happy() {
 fn defer_to_edge_unknown_key_sad() {
     let input = r#"
             Hist {
+                repository: "https://github.com/unified-field-dev/valence",
                 table: "hist",
                 version: "0.1.0",
                 policies: {
@@ -329,6 +345,7 @@ fn defer_to_edge_unknown_key_sad() {
 fn defer_to_edge_non_string_sad() {
     let input = r#"
             Hist {
+                repository: "https://github.com/unified-field-dev/valence",
                 table: "hist",
                 version: "0.1.0",
                 policies: {
@@ -355,6 +372,7 @@ fn defer_to_edge_non_string_sad() {
 fn defer_to_edge_empty_edge_sad() {
     let input = r#"
             Hist {
+                repository: "https://github.com/unified-field-dev/valence",
                 table: "hist",
                 version: "0.1.0",
                 policies: {

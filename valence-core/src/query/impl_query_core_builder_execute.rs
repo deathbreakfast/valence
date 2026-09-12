@@ -355,4 +355,17 @@ impl QueryCore {
         }
         Ok(kept)
     }
+
+    /// Declared Unscoped execute (same as [`Self::execute`]).
+    pub async fn execute_used<T>(
+        self,
+        valence: &Valence,
+        purpose: crate::data_use::DataUsePurpose,
+    ) -> Result<Vec<T>>
+    where
+        T: DeserializeOwned + Serialize,
+    {
+        let _ = purpose;
+        self.execute(valence).await
+    }
 }

@@ -272,6 +272,16 @@ fn quote_trait_definition_bundle(p: &TraitDefinitionPieces) -> TokenStream {
                 Self { inner: core, valence }
             }
 
+            /// Declared trait query builder (catalog target: Trait).
+            pub fn query_used(
+                valence: &'a valence::Valence,
+                purpose: valence::DataUsePurpose,
+            ) -> Self {
+                let _ = purpose;
+                #[allow(deprecated)]
+                Self::query(valence)
+            }
+
             #(#query_all_where_methods_pub)*
 
             #(#query_all_order_by_methods_pub)*

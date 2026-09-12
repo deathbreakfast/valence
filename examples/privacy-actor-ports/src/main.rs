@@ -22,6 +22,7 @@ use valence::{
 // gets its own allow-list; empty/absent lists default-deny every actor except `Actor::System`.
 valence::valence_schema! {
     Note {
+        repository: "https://github.com/unified-field-dev/valence",
         table: "note",
         version: "0.1.0",
         description: "Private note owned by a single user",

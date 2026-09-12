@@ -32,7 +32,7 @@ mod tests {
 
     use valence::actor::Actor;
     use valence::deletion::{register_deletion_dispatcher, DeletionRequest};
-    use valence::{InMemoryBackend, Model, RecordId, Valence};
+    use valence::{use_, InMemoryBackend, Model, RecordId, Valence};
 
     use super::{Project, Task};
 
@@ -67,30 +67,55 @@ mod tests {
 
         // Step 2 — Create parent Project (HasMany side of connection in project_valence_schema.rs).
         let project = Project::new("alpha".to_string()).expect("new");
-        let created = Project::create(project, &valence)
-            .await
-            .expect("create project");
+        let created = Project::create_used(
+            project,
+            &valence,
+            use_!("Create the parent project for the product-model-host connection test."),
+        )
+        .await
+        .expect("create project");
         let project_id = created.id().expect("id").id();
 
         // Step 3 — Create child Task with BelongsTo RecordId pointing at the project row.
         let task =
             Task::new("ship".to_string(), RecordId::new("project", project_id)).expect("new");
-        Task::create(task, &valence).await.expect("create task");
+        Task::create_used(
+            task,
+            &valence,
+            use_!("Create a task linked to the project for cascade delete coverage."),
+        )
+        .await
+        .expect("create task");
 
         // Step 4 — Read and merge on the parent model.
-        let fetched = Project::get(project_id, &valence).await.expect("get");
+        let fetched = Project::get_used(
+            project_id,
+            &valence,
+            use_!("Reload the project after create to assert the name."),
+        )
+        .await
+        .expect("get");
         assert_eq!(fetched.as_ref().map(|p| p.name().as_str()), Some("alpha"));
 
-        let merged = Project::merge(project_id, serde_json::json!({ "name": "beta" }), &valence)
-            .await
-            .expect("merge");
+        let merged = Project::merge_used(
+            project_id,
+            serde_json::json!({ "name": "beta" }),
+            &valence,
+            use_!("Rename the project through merge in the product-model-host test."),
+        )
+        .await
+        .expect("merge");
         assert_eq!(merged.name(), "beta");
 
         // Step 5 — Delete enqueues a DeletionRequest (on_delete: Cascade in schema); capture via dispatcher hook.
         let captured = capture_dispatcher();
-        Project::delete(project_id, &valence)
-            .await
-            .expect("delete queue");
+        Project::delete_used(
+            project_id,
+            &valence,
+            use_!("Queue project deletion to exercise the cascade dispatcher hook."),
+        )
+        .await
+        .expect("delete queue");
         let (len, root_table) = {
             let reqs = captured.lock().unwrap();
             (reqs.len(), reqs[0].root_table.clone())

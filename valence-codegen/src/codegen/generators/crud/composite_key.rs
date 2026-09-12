@@ -159,6 +159,7 @@ pub(super) fn generate_composite_key_methods(
                 #(#params),*
             ) -> valence::Result<Option<Self>> {
                 let id = Self::composite_id(#(#forward_args),*);
+                #[allow(deprecated)]
                 <Self as valence::Model>::get(&id, valence).await
             }
 
@@ -168,6 +169,7 @@ pub(super) fn generate_composite_key_methods(
                 valence: &valence::Valence,
             ) -> valence::Result<Self> {
                 let id = Self::composite_id(#(#accessor_args),*);
+                #[allow(deprecated)]
                 <Self as valence::Model>::upsert(&id, data, valence).await
             }
         }

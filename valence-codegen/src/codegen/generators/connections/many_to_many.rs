@@ -33,7 +33,9 @@ pub(super) fn push_many_to_many_concrete_methods(
                     continue;
                 }
                 let id = valence::extract_id_from_record(&out_rid)?;
-                if let Some(row) = <#target_type as valence::Model>::get(&id, valence).await? {
+                #[allow(deprecated)]
+                let row = <#target_type as valence::Model>::get(&id, valence).await?;
+                if let Some(row) = row {
                     results.push(row);
                 }
             }

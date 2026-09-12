@@ -2,6 +2,7 @@ use valence::prelude::*;
 
 valence_schema! {
     Task {
+        repository: "https://github.com/unified-field-dev/valence",
         table: "hop_pair_task",
         version: "0.1.0",
         database: crate::TASK_DB,

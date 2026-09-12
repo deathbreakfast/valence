@@ -34,6 +34,7 @@ const TASK_DB: DatabaseFromEngine = Database::from_engine("cache", REDIS_ENGINE_
 // Neither schema knows the other engine exists — routing is entirely router-key driven.
 valence_schema! {
     RmbProject {
+        repository: "https://github.com/unified-field-dev/valence",
         table: "rmb_project",
         version: "0.1.0",
         description: "Project routed to the Postgres primary",
@@ -47,6 +48,7 @@ valence_schema! {
 
 valence_schema! {
     RmbTask {
+        repository: "https://github.com/unified-field-dev/valence",
         table: "rmb_task",
         version: "0.1.0",
         description: "Task routed to the Redis cache",

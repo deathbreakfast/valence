@@ -14,6 +14,7 @@ use valence::privacy_policies::common::{PUBLIC_READ, AUTHENTICATED};
 
 valence_schema! {
     OwnershipHookProbe {
+        repository: "https://github.com/unified-field-dev/valence",
         table: "ownership_hook_probe",
         database: valence::DEFAULT_SURREAL_STORAGE,
         version: "0.1.0",
@@ -49,6 +50,7 @@ use valence::privacy_policies::common::{PUBLIC_READ, AUTHENTICATED, SYSTEM_ONLY}
 
 valence_schema! {
     OwnershipHookSystem {
+        repository: "https://github.com/unified-field-dev/valence",
         table: "ownership_hook_system",
         database: valence::DEFAULT_SURREAL_STORAGE,
         version: "0.1.0",
@@ -84,6 +86,7 @@ use valence::privacy_policies::common::{PUBLIC_READ, AUTHENTICATED};
 
 valence_schema! {
     OwnershipHookResolve {
+        repository: "https://github.com/unified-field-dev/valence",
         table: "ownership_hook_resolve",
         database: valence::DEFAULT_SURREAL_STORAGE,
         version: "0.1.0",
@@ -121,6 +124,7 @@ use valence::privacy_policies::common::{PUBLIC_READ, SYSTEM_ONLY};
 
 valence_schema! {
     OwnCodegenSkipProbe {
+        repository: "https://github.com/unified-field-dev/valence",
         table: "valence_data_ownership",
         database: valence::DEFAULT_SURREAL_STORAGE,
         version: "0.1.0",

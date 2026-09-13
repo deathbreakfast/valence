@@ -1,10 +1,10 @@
-//! Test-only twin that must never appear in the UI snapshot when exclusion is on.
+//! Test twin fixture — must stay out of UI snapshot when exclude_tests is on.
 
 async fn _fixture_test_twin() {
     let _ = User::get_used(
         "id",
         &valence,
-        valence::use_!("TEST_ONLY_PURPOSE — must stay out of UI snapshot"),
+        valence::use_!("**Test:** Fixture **user** load for the data-use scan twin suite so exclude-tests snapshot coverage can assert harness purposes stay out of the operator UI. CI and developers running the suite only."),
     )
     .await;
 }

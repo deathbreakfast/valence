@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Purpose quality lint in `uf-valence-data-use-scan` (`lint_purpose`, tier-aware gap
+  codes, inventory helpers) so migration template purposes cannot re-land unnoticed.
+  Fleet call-site `use_!` strings rewritten toward stranger-readable trust narratives
+  (bold key terms; honest display vs internal use).
+
 - Declared data-use transparency: pair `*_used` Model / trait / `QueryCore` methods with
   `use_!(…)` purpose markdown (file/line captured for the catalog). Bare CRUD/query APIs
   remain available with `#[deprecated]` warnings until a later hard-deny. Schema/trait

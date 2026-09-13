@@ -34,7 +34,7 @@ mod tests {
         let created = Widget::create_used(
             widget,
             &valence,
-            valence::use_!("Create the demo widget row for the codegen-host compile check."),
+            valence::use_!(r#"When the **codegen-host** compile check runs, we **create a demo widget** so generated Model create can prove the schema built correctly. Developers running that example suite use this row."#),
         )
         .await
         .expect("create");
@@ -45,7 +45,7 @@ mod tests {
         let fetched = Widget::get_used(
             id,
             &valence,
-            valence::use_!("Reload the demo widget to confirm create persisted."),
+            valence::use_!(r#"After create, we **reload the demo widget by id** so the codegen-host suite can confirm the generated get path returned the row. Developers running that example suite use this result."#),
         )
         .await
         .expect("get");
@@ -57,7 +57,7 @@ mod tests {
             id,
             patch,
             &valence,
-            valence::use_!("Rename the demo widget through merge for the compile check."),
+            valence::use_!(r#"During the **codegen-host** compile check, we **merge a new name onto the widget** so generated merge can prove partial updates work. Developers running that example suite use this result."#),
         )
         .await
         .expect("merge");

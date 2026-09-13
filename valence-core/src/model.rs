@@ -24,10 +24,10 @@ use async_trait::async_trait;
 /// ```ignore
 /// use valence::{use_, Model};
 ///
-/// let created = Widget::create_used(widget, &valence, use_!("Seed demo widget.")).await?;
-/// let loaded = Widget::get_used(created.id(), &valence, use_!("Reload after create.")).await?;
-/// Widget::update_used(created.id(), updated, &valence, use_!("Apply edits.")).await?;
-/// Widget::delete_used(created.id(), &valence, use_!("Remove demo row.")).await?;
+/// let created = Widget::create_used(widget, &valence, use_!(r#"In the **Model trait demo**, we **create a demo widget** so later reload and update examples have a generated row to work with. Developers reading the crate docs use this example."#)).await?;
+/// let loaded = Widget::get_used(created.id(), &valence, use_!(r#"After create in the **Model trait demo**, we **reload the widget by id** so readers can confirm the declared get path returned the row. Developers reading the crate docs use this result."#)).await?;
+/// Widget::update_used(created.id(), updated, &valence, use_!(r#"In the **Model trait demo**, we **replace the widget with updated fields** so readers can see a full-row update on a generated model. Developers reading the crate docs use this result."#)).await?;
+/// Widget::delete_used(created.id(), &valence, use_!(r#"At the end of the **Model trait demo**, we **queue widget deletion** so readers can see how declared delete starts durable removal. Developers reading the crate docs use this result."#)).await?;
 /// ```
 ///
 /// See workspace `examples/codegen-host` and `examples/product-model-host`.
@@ -118,10 +118,10 @@ pub trait Model: Sized + Send + Sync {
     /// Project::delete_now_used(
     ///     "project-42",
     ///     &session_valence,
-    ///     use_!("Erase the project and its deletion DAG for the user request."),
+    ///     use_!(r#"When a user asks to **remove a project**, we **erase that project and its deletion graph immediately** so related rows are gone in the same request. The signed-in operator who requested removal uses this outcome."#),
     /// )
     /// .await?;
-    /// assert!(Project::get_used("project-42", &session_valence, use_!("Confirm gone.")).await?.is_none());
+    /// assert!(Project::get_used("project-42", &session_valence, use_!(r#"After immediate deletion, we **load the project by id again** so we can confirm the row is gone before continuing. The same request path uses this check only."#)).await?.is_none());
     /// ```
     #[deprecated(note = "use delete_now_used with use_!(...) for declared data-use transparency")]
     async fn delete_now(id: &str, valence: &Valence) -> Result<()> {

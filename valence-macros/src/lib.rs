@@ -27,6 +27,11 @@ mod codegen;
 /// Pair with `*_used` Model / trait / QueryCore methods. Op and target are inferred
 /// from the receiver method for the catalog scan.
 ///
+/// Purpose text is end-user **trust copy** for someone who has never seen the code:
+/// prefer a short narrative with **bold** key terms; do not repeat op/schema/path
+/// (the Data uses UI already shows those). See `uf-valence-data-use-scan::lint_purpose`
+/// for banlists and tier depth checks.
+///
 /// # Examples
 ///
 /// ```ignore
@@ -35,9 +40,7 @@ mod codegen;
 /// User::get_used(
 ///     id,
 ///     &valence,
-///     valence::use_!(r#"
-/// Load the user to validate the session cookie.
-/// "#),
+///     valence::use_!(r#"When your browser presents a **session cookie**, we **load the matching user account** so sign-in can continue. The application uses this only to establish who is signed in for that request—not to render a profile page by itself."#),
 /// )
 /// .await?;
 /// ```

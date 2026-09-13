@@ -196,7 +196,7 @@ fn extract_purpose_from_macro(mac: &Macro) -> Option<String> {
     if last != "use_" && last != "use" {
         return None;
     }
-    // `valence::use_!("…")` or `valence::use_!(r#"…"#)`
+    // `valence::use_!(r#"In **valence data use scan**, we **load this data** so the application can decide what to do next in this workflow. The result is used by **valence data use scan** logic and is only shown in a UI when that feature’s screens display it."#)` or `valence::use_!(r#"In **valence data use scan**, we **load this data** so the application can decide what to do next in this workflow. The result is used by **valence data use scan** logic and is only shown in a UI when that feature’s screens display it."#)`
     let tokens = mac.tokens.clone();
     if let Ok(Lit::Str(s)) = syn::parse2::<Lit>(tokens.clone()) {
         return Some(trim_purpose(s.value()));

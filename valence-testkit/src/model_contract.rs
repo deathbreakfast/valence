@@ -256,18 +256,18 @@ pub async fn run_model_contract(backend: Arc<dyn DatabaseBackend>) -> Result<()>
         .build()?;
 
     let project = Project::new("alpha".to_string()).expect("new");
-    let created = Project::create_used(project, &valence, valence::use_!("create Project in valence-testkit/src/model_contract.rs; Valence persistence for this feature path; typed store; visible to test harness.")).await?;
+    let created = Project::create_used(project, &valence, valence::use_!(r#"**Test:** Seeds a fixture **project** so the Valence model suite can exercise create and later reads against a known parent row. CI and developers running the suite only."#)).await?;
     let project_id = created.id().expect("id").id();
 
-    let fetched = Project::get_used(project_id, &valence, valence::use_!("get Project in valence-testkit/src/model_contract.rs; Valence persistence for this feature path; typed store; visible to test harness.")).await?;
+    let fetched = Project::get_used(project_id, &valence, valence::use_!(r#"**Test:** Reloads the fixture **project** by id so the Valence model suite can assert create persisted the expected name. CI and developers running the suite only."#)).await?;
     assert!(fetched.is_some());
 
     let merged =
-        Project::merge_used(project_id, serde_json::json!({ "name": "beta" }), &valence, valence::use_!("merge Project in valence-testkit/src/model_contract.rs; Valence persistence for this feature path; typed store; visible to test harness.")).await?;
+        Project::merge_used(project_id, serde_json::json!({ "name": "beta" }), &valence, valence::use_!(r#"**Test:** Merges a name patch onto the fixture **project** so the Valence model suite can assert partial update behavior. CI and developers running the suite only."#)).await?;
     assert_eq!(merged.name(), "beta");
 
     let captured = reset_deletion_capture();
-    Project::delete_used(project_id, &valence, valence::use_!("delete Project in valence-testkit/src/model_contract.rs; Valence persistence for this feature path; typed store; visible to test harness.")).await?;
+    Project::delete_used(project_id, &valence, valence::use_!(r#"**Test:** Queues deletion of the fixture **project** so the Valence model suite can assert the cascade dispatcher path. CI and developers running the suite only."#)).await?;
     assert!(!captured
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner())

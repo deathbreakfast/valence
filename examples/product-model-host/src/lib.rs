@@ -70,7 +70,7 @@ mod tests {
         let created = Project::create_used(
             project,
             &valence,
-            valence::use_!("Create the parent project for the product-model-host connection test."),
+            valence::use_!(r#"When the **product-model-host** suite builds a sample workspace, we **create the parent project** so a linked task can exercise cascade delete. Developers running that example suite use this row."#),
         )
         .await
         .expect("create project");
@@ -82,7 +82,7 @@ mod tests {
         Task::create_used(
             task,
             &valence,
-            valence::use_!("Create a task linked to the project for cascade delete coverage."),
+            valence::use_!(r#"After the sample **project** exists, we **create a linked task** so cascade delete coverage has a child connection to remove with the parent. Developers running that example suite use this row."#),
         )
         .await
         .expect("create task");
@@ -91,7 +91,7 @@ mod tests {
         let fetched = Project::get_used(
             project_id,
             &valence,
-            valence::use_!("Reload the project after create to assert the name."),
+            valence::use_!(r#"After create, we **reload the project by id** so the product-model-host suite can confirm the stored name matches what we wrote. Developers running that example suite use this result."#),
         )
         .await
         .expect("get");
@@ -101,7 +101,7 @@ mod tests {
             project_id,
             serde_json::json!({ "name": "beta" }),
             &valence,
-            valence::use_!("Rename the project through merge in the product-model-host test."),
+            valence::use_!(r#"During the **product-model-host** suite, we **merge a new name onto the project** so partial update coverage can assert the renamed row. Developers running that example suite use this result."#),
         )
         .await
         .expect("merge");
@@ -112,7 +112,7 @@ mod tests {
         Project::delete_used(
             project_id,
             &valence,
-            valence::use_!("Queue project deletion to exercise the cascade dispatcher hook."),
+            valence::use_!(r#"At the end of the **product-model-host** suite, we **queue project deletion** so the cascade dispatcher hook can capture the deletion request. Developers running that example suite use this result."#),
         )
         .await
         .expect("delete queue");

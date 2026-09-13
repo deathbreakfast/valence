@@ -93,9 +93,7 @@
 //!     let row = User::get_used(
 //!         id,
 //!         v,
-//!         valence::use_!(r#"
-//! Load the user to validate the session cookie.
-//! "#),
+//!         valence::use_!(r#"When your browser presents a **session cookie**, we **load the matching user account** so sign-in can continue. The application uses this only to establish who is signed in for that request."#),
 //!     )
 //!     .await?;
 //!     println!("session user loaded: {}", row.is_some());
@@ -113,8 +111,8 @@
 //! ```rust,ignore
 //! use valence::{use_, QueryCore};
 //!
-//! NamedQueryAll::query_used(&v, valence::use_!("List named entities for the admin picker.")).await?;
-//! QueryCore::execute_used(builder, valence::use_!("Run the Valence graph walk across registered models.")).await?;
+//! NamedQueryAll::query_used(&v, valence::use_!(r#"On the **admin picker**, we **list named entities** so an operator can choose which record to open. Only people with access to that admin surface use this list."#)).await?;
+//! QueryCore::execute_used(builder, valence::use_!(r#"When Valence runs a **graph walk** across registered models, we **execute that query** so deletion and connection tools can traverse related rows. Platform operators and automation use the result."#)).await?;
 //! ```
 //!
 //! Next: wire `uf-valence-data-use-scan::generate` from host `build.rs`,
@@ -237,8 +235,8 @@
 //! }
 //!
 //! let row = Line::new(Currency::new(CurrencyCode::Usd, -1_250))?;
-//! Line::create_used(row, &valence, valence::use_!("Seed a line item for the currency filter demo.")).await?;
-//! let hits = Line::query_used(&valence, valence::use_!("Find USD lines with negative minor amounts."))
+//! Line::create_used(row, &valence, valence::use_!(r#"For the **currency filter demo**, we **seed a line item with an amount** so later queries can find matching USD rows by code and minor units. Developers reading the crate docs use this example."#)).await?;
+//! let hits = Line::query_used(&valence, valence::use_!(r#"In the **currency filter demo**, we **find USD lines with negative minor amounts** so readers can see typed amount predicates against seeded rows. Developers reading the crate docs use this result."#))
 //!     .where_amount_code(CurrencyCode::Usd)
 //!     .where_amount_minor(IntPredicate::LessThan(0))
 //!     .await?;
@@ -284,8 +282,8 @@
 //! }
 //!
 //! let at = Utc.timestamp_opt(1_700_000_000, 0).single().unwrap();
-//! Event::create_used(Event::new(at)?, &valence, valence::use_!("Seed an event for the DateTime filter demo.")).await?;
-//! let hits = Event::query_used(&valence, valence::use_!("Find events at the seeded unix timestamp."))
+//! Event::create_used(Event::new(at)?, &valence, valence::use_!(r#"For the **DateTime filter demo**, we **seed an event at a known unix timestamp** so later equality filters have a concrete row to match. Developers reading the crate docs use this example."#)).await?;
+//! let hits = Event::query_used(&valence, valence::use_!(r#"In the **DateTime filter demo**, we **find events at the seeded unix timestamp** so readers can see chrono predicates map to stored seconds. Developers reading the crate docs use this result."#))
 //!     .where_at(DateTimePredicate::Equals(at))
 //!     .await?;
 //! assert_eq!(hits[0].at().timestamp(), 1_700_000_000);
@@ -510,10 +508,10 @@
 //! use valence::{use_, Model};
 //!
 //! // Widget is generated from schemas/widget_valence_schema.rs
-//! let created = Widget::create_used(widget, &valence, valence::use_!("Create the demo widget row.")).await?;
-//! let loaded = Widget::get_used(created.id(), &valence, valence::use_!("Reload the widget after create.")).await?;
-//! Widget::update_used(created.id(), updated, &valence, valence::use_!("Replace the widget for the CRUD demo.")).await?;
-//! Widget::delete_used(created.id(), &valence, valence::use_!("Queue widget deletion for the CRUD demo.")).await?;
+//! let created = Widget::create_used(widget, &valence, valence::use_!(r#"In the **CRUD demo**, we **create a demo widget row** so later reload and update steps have a generated model instance to work with. Developers reading the crate docs use this example."#)).await?;
+//! let loaded = Widget::get_used(created.id(), &valence, valence::use_!(r#"After create in the **CRUD demo**, we **reload the widget by id** so readers can confirm the generated get path returned the same row. Developers reading the crate docs use this result."#)).await?;
+//! Widget::update_used(created.id(), updated, &valence, valence::use_!(r#"In the **CRUD demo**, we **replace the widget with updated fields** so readers can see a full-row update on a generated model. Developers reading the crate docs use this result."#)).await?;
+//! Widget::delete_used(created.id(), &valence, valence::use_!(r#"At the end of the **CRUD demo**, we **queue widget deletion** so readers can see how generated delete starts the durable removal path. Developers reading the crate docs use this result."#)).await?;
 //! ```
 //!
 //! ### Choose a deletion mode
@@ -535,10 +533,10 @@
 //! use valence::{use_, Model};
 //!
 //! // Bounded current-request hard delete.
-//! Project::delete_now_used("small-project", &session_valence, valence::use_!("Erase a small project in-request.")).await?;
+//! Project::delete_now_used("small-project", &session_valence, valence::use_!(r#"When a **bounded project graph** fits the current request, we **erase that project immediately** so related rows are gone before the handler returns. The signed-in operator who requested removal uses this outcome."#)).await?;
 //!
 //! // Durable background path for large DAGs.
-//! Project::delete_used("large-project", &session_valence, valence::use_!("Queue large project deletion.")).await?;
+//! Project::delete_used("large-project", &session_valence, valence::use_!(r#"When a **large project graph** must survive restarts, we **queue project deletion** so a background worker can finish the durable removal run. Operators who requested teardown rely on that queued outcome."#)).await?;
 //! ```
 //!
 //! Next: [Delete now](#delete-now) for the synchronous path alone, or continue to multi-backend
@@ -557,10 +555,10 @@
 //! ```rust,ignore
 //! use valence::{use_, delete_entity_now, Model};
 //!
-//! Project::delete_now_used("small-project", &session_valence, valence::use_!("Hard-delete a bounded project DAG.")).await?;
+//! Project::delete_now_used("small-project", &session_valence, valence::use_!(r#"For a **bounded project deletion graph**, we **remove the project and its cascade targets in-request** so teardown completes before the handler returns. The operator who started teardown uses this outcome."#)).await?;
 //! // Dynamic table path:
 //! delete_entity_now("project", "small-project", &session_valence).await?;
-//! assert!(Project::get_used("small-project", &session_valence, valence::use_!("Confirm the project row is gone.")).await?.is_none());
+//! assert!(Project::get_used("small-project", &session_valence, valence::use_!(r#"After immediate deletion, we **load the project by id again** so we can confirm the row is gone before continuing teardown. The same request path uses this check only."#)).await?.is_none());
 //! ```
 //!
 //! Missing roots succeed (idempotent). [`Error::PendingDeletion`] means a queued run already owns

@@ -11,12 +11,14 @@
 //!   (via `cargo_metadata` plus a directory walk) so host SSR can ship a static
 //!   catalog. Call [`generate`] once from `build.rs` at compile time.
 //!   [Get started](#getting-started)
-//! - **Purpose extraction** — Reads `valence::use_!("…")` / `valence::use_!(r#"…"#)` arguments next to
+//! - **Purpose extraction** — Reads `valence::use_!(r#"In **valence data use scan**, we **load this data** so the application can decide what to do next in this workflow. The result is used by **valence data use scan** logic and is only shown in a UI when that feature’s screens display it."#)` / `valence::use_!(r#"In **valence data use scan**, we **load this data** so the application can decide what to do next in this workflow. The result is used by **valence data use scan** logic and is only shown in a UI when that feature’s screens display it."#)` arguments next to
 //!   each `*_used` call so the UI can show end-user trust copy.
 //!   [Get started](#getting-started)
 //! - **Target classification** — Maps receivers to Schema / Trait / Unscoped for the
 //!   valence-uf-app Data uses surfaces (schema card, trait card, Unscoped page).
 //!   [Get started](#getting-started)
+//! - **Purpose quality lint** — [`lint_purpose`] checks trust-copy banlists and
+//!   tier depth so migration templates cannot re-land. [Get started](#lint-a-purpose-string)
 //! - **Test exclusion** — When [`Config::exclude_tests_from_snapshot`] is set, omits
 //!   `tests/` paths and `*_test.rs` files from the generated UI snapshot so fixture
 //!   twins stay out of operator views. [Get started](#exclude-tests-from-the-snapshot)
@@ -68,6 +70,18 @@
 //! return [`DataUseScanError`] (host `build.rs` should fail loud, not ship an empty
 //! catalog as success).
 //!
+//! ### Lint a purpose string
+//!
+//! ```rust
+//! use valence_data_use_scan::{lint_purpose, purpose_passes, PurposeTier};
+//!
+//! let purpose = "Before we begin **enrollment** on setting up your **authenticator**, we first verify the user account **exists** by **loading it with the provided id**. **No other information** is required, so we discard it immediately.";
+//! assert!(purpose_passes(purpose, PurposeTier::S3));
+//! assert!(lint_purpose("get User in src/x.rs; Valence persistence for this feature path; typed store; visible to session actor / service path.", PurposeTier::S3).len() > 0);
+//! ```
+//!
+//! Observable outcome: empty gap list means Pass; gap codes name the failure.
+//!
 //! ### Exclude tests from the snapshot
 //!
 //! Set [`Config::exclude_tests_from_snapshot`] to `true` when product tests mirror
@@ -102,7 +116,12 @@
 mod classify;
 mod emit;
 mod exclude;
+mod inventory;
+pub mod lint_purpose;
 mod scan;
+
+pub use lint_purpose::{lint_purpose, purpose_passes, GapCode, PurposeTier};
+pub use inventory::{inventory_csv_header, inventory_csv_row, lint_scan_hits, InventoryRow};
 
 use std::path::PathBuf;
 use std::time::Instant;
@@ -227,6 +246,44 @@ impl OpKind {
 /// be written.
 pub fn generate(config: &Config) -> Result<(), DataUseScanError> {
     let started = Instant::now();
+    let hits = collect_hits(config)?;
+    let packages = discover_packages(config)?;
+
+    emit::write_snapshot(&config.out_dir, &hits)?;
+
+    let duration_ms = started.elapsed().as_millis();
+    tracing::info!(
+        target: "valence.data_use.scan",
+        crate_count = packages.len(),
+        use_count = hits.len(),
+        duration_ms = duration_ms as u64,
+        "data-use scan complete"
+    );
+
+    // Build-script directives must go to stdout for cargo.
+    #[allow(clippy::print_stdout)]
+    {
+        println!(
+            "cargo:rerun-if-changed={}",
+            config.workspace_root.join("Cargo.toml").display()
+        );
+        for package in &packages {
+            println!(
+                "cargo:rerun-if-changed={}",
+                package.path.join("Cargo.toml").display()
+            );
+        }
+    }
+
+    Ok(())
+}
+
+/// Collect every `*_used` + `use_!` hit under the workspace (no snapshot write).
+///
+/// # Errors
+///
+/// Same as [`generate`] for metadata, I/O, and parse failures.
+pub fn collect_hits(config: &Config) -> Result<Vec<ScanHit>, DataUseScanError> {
     let packages = discover_packages(config)?;
     let mut hits: Vec<ScanHit> = Vec::new();
 
@@ -258,34 +315,7 @@ pub fn generate(config: &Config) -> Result<(), DataUseScanError> {
             && a.method == b.method
             && a.purpose == b.purpose
     });
-
-    emit::write_snapshot(&config.out_dir, &hits)?;
-
-    let duration_ms = started.elapsed().as_millis();
-    tracing::info!(
-        target: "valence.data_use.scan",
-        crate_count = packages.len(),
-        use_count = hits.len(),
-        duration_ms = duration_ms as u64,
-        "data-use scan complete"
-    );
-
-    // Build-script directives must go to stdout for cargo.
-    #[allow(clippy::print_stdout)]
-    {
-        println!(
-            "cargo:rerun-if-changed={}",
-            config.workspace_root.join("Cargo.toml").display()
-        );
-        for package in &packages {
-            println!(
-                "cargo:rerun-if-changed={}",
-                package.path.join("Cargo.toml").display()
-            );
-        }
-    }
-
-    Ok(())
+    Ok(hits)
 }
 
 /// Package root discovered from Cargo metadata.
@@ -445,9 +475,9 @@ repository = "https://github.com/unified-field-dev/prod_crate"
         .unwrap();
 
         let generated = fs::read_to_string(out.join("data_uses.rs")).unwrap();
-        assert!(generated.contains("Load the user for the session cookie."));
+        assert!(generated.contains("session cookie"));
         assert!(
-            !generated.contains("TEST_ONLY_PURPOSE"),
+            !generated.contains("data-use scan twin suite"),
             "test twin purpose must be excluded from UI snapshot"
         );
         assert!(generated.contains("DataUseTarget::Schema"));
@@ -474,6 +504,6 @@ repository = "https://github.com/unified-field-dev/prod_crate"
         .unwrap();
 
         let generated = fs::read_to_string(out.join("data_uses.rs")).unwrap();
-        assert!(generated.contains("TEST_ONLY_PURPOSE"));
+        assert!(generated.contains("data-use scan twin suite"));
     }
 }

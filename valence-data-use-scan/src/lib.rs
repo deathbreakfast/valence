@@ -2,7 +2,7 @@
 //! valence-uf-app Data uses UI.
 //!
 //! Walks workspace member `.rs` sources with `syn`, pairs each `*_used` method call
-//! with a nearby `use_!(…)` purpose, and writes `data_uses.rs` under `OUT_DIR` for
+//! with a nearby `valence::use_!(…)` purpose, and writes `data_uses.rs` under `OUT_DIR` for
 //! host `build.rs` to `include!`.
 //!
 //! ## Features
@@ -11,7 +11,7 @@
 //!   (via `cargo_metadata` plus a directory walk) so host SSR can ship a static
 //!   catalog. Call [`generate`] once from `build.rs` at compile time.
 //!   [Get started](#getting-started)
-//! - **Purpose extraction** — Reads `use_!("…")` / `use_!(r#"…"#)` arguments next to
+//! - **Purpose extraction** — Reads `valence::use_!("…")` / `valence::use_!(r#"…"#)` arguments next to
 //!   each `*_used` call so the UI can show end-user trust copy.
 //!   [Get started](#getting-started)
 //! - **Target classification** — Maps receivers to Schema / Trait / Unscoped for the

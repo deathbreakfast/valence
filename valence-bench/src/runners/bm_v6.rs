@@ -28,7 +28,7 @@ pub async fn run(ctx: &RunContext) -> Result<BenchReport> {
     let mut n = 0usize;
     while Instant::now() < deadline {
         let project = Project::new(format!("bench-{n}")).expect("new");
-        Project::create(project, valence).await?;
+        Project::create_used(project, valence, valence::use_!("create Project in src/runners/bm_v6.rs; Valence persistence for this feature path; typed store; visible to test harness.")).await?;
         ok += 1;
         n += 1;
     }

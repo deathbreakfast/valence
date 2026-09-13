@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Declared data-use transparency: pair `*_used` Model / trait / `QueryCore` methods with
+  `use_!(…)` purpose markdown (file/line captured for the catalog). Bare CRUD/query APIs
+  remain available with `#[deprecated]` warnings until a later hard-deny. Schema/trait
+  `repository:` is required for View source links. `uf-valence-data-use-scan` builds the
+  snapshot consumed by valence-uf-app Data uses / Unscoped uses UI.
+
 ### Fixed
 
 - SQL / mem filters for Currency subfields (`where_{field}_code` /

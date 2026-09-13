@@ -93,7 +93,7 @@
 //!     let row = User::get_used(
 //!         id,
 //!         v,
-//!         use_!(r#"
+//!         valence::use_!(r#"
 //! Load the user to validate the session cookie.
 //! "#),
 //!     )
@@ -113,8 +113,8 @@
 //! ```rust,ignore
 //! use valence::{use_, QueryCore};
 //!
-//! NamedQueryAll::query_used(&v, use_!("List named entities for the admin picker.")).await?;
-//! QueryCore::execute_used(builder, use_!("Run the Valence graph walk across registered models.")).await?;
+//! NamedQueryAll::query_used(&v, valence::use_!("List named entities for the admin picker.")).await?;
+//! QueryCore::execute_used(builder, valence::use_!("Run the Valence graph walk across registered models.")).await?;
 //! ```
 //!
 //! Next: wire `uf-valence-data-use-scan::generate` from host `build.rs`,
@@ -221,7 +221,7 @@
 //!
 //! ```rust,ignore
 //! use valence::prelude::*;
-//! use valence::{Currency, CurrencyCode, FieldType, IntPredicate};
+//! use valence::{use_, Currency, CurrencyCode, FieldType, IntPredicate};
 //!
 //! valence_schema! {
 //!     Line {
@@ -237,8 +237,8 @@
 //! }
 //!
 //! let row = Line::new(Currency::new(CurrencyCode::Usd, -1_250))?;
-//! Line::create(row, &valence).await?;
-//! let hits = Line::query(&valence)
+//! Line::create_used(row, &valence, valence::use_!("Seed a line item for the currency filter demo.")).await?;
+//! let hits = Line::query_used(&valence, valence::use_!("Find USD lines with negative minor amounts."))
 //!     .where_amount_code(CurrencyCode::Usd)
 //!     .where_amount_minor(IntPredicate::LessThan(0))
 //!     .await?;
@@ -268,7 +268,7 @@
 //! ```rust,ignore
 //! use chrono::{TimeZone, Utc};
 //! use valence::prelude::*;
-//! use valence::{DateTimePredicate, FieldType};
+//! use valence::{use_, DateTimePredicate, FieldType};
 //!
 //! valence_schema! {
 //!     Event {
@@ -284,8 +284,8 @@
 //! }
 //!
 //! let at = Utc.timestamp_opt(1_700_000_000, 0).single().unwrap();
-//! Event::create(Event::new(at)?, &valence).await?;
-//! let hits = Event::query(&valence)
+//! Event::create_used(Event::new(at)?, &valence, valence::use_!("Seed an event for the DateTime filter demo.")).await?;
+//! let hits = Event::query_used(&valence, valence::use_!("Find events at the seeded unix timestamp."))
 //!     .where_at(DateTimePredicate::Equals(at))
 //!     .await?;
 //! assert_eq!(hits[0].at().timestamp(), 1_700_000_000);
@@ -507,13 +507,13 @@
 //! After codegen, call [`Model`] methods with a [`Valence`] runtime:
 //!
 //! ```ignore
-//! use valence::Model;
+//! use valence::{use_, Model};
 //!
 //! // Widget is generated from schemas/widget_valence_schema.rs
-//! let created = Widget::create(widget, &valence).await?;
-//! let loaded = Widget::get(created.id(), &valence).await?;
-//! Widget::update(created.id(), updated, &valence).await?;
-//! Widget::delete(created.id(), &valence).await?;
+//! let created = Widget::create_used(widget, &valence, valence::use_!("Create the demo widget row.")).await?;
+//! let loaded = Widget::get_used(created.id(), &valence, valence::use_!("Reload the widget after create.")).await?;
+//! Widget::update_used(created.id(), updated, &valence, valence::use_!("Replace the widget for the CRUD demo.")).await?;
+//! Widget::delete_used(created.id(), &valence, valence::use_!("Queue widget deletion for the CRUD demo.")).await?;
 //! ```
 //!
 //! ### Choose a deletion mode
@@ -532,13 +532,13 @@
 //!   safe because missing nodes succeed.
 //!
 //! ```rust,ignore
-//! use valence::Model;
+//! use valence::{use_, Model};
 //!
 //! // Bounded current-request hard delete.
-//! Project::delete_now("small-project", &session_valence).await?;
+//! Project::delete_now_used("small-project", &session_valence, valence::use_!("Erase a small project in-request.")).await?;
 //!
 //! // Durable background path for large DAGs.
-//! Project::delete("large-project", &session_valence).await?;
+//! Project::delete_used("large-project", &session_valence, valence::use_!("Queue large project deletion.")).await?;
 //! ```
 //!
 //! Next: [Delete now](#delete-now) for the synchronous path alone, or continue to multi-backend
@@ -555,12 +555,12 @@
 //! already `pending_deletion`.
 //!
 //! ```rust,ignore
-//! use valence::{delete_entity_now, Model};
+//! use valence::{use_, delete_entity_now, Model};
 //!
-//! Project::delete_now("small-project", &session_valence).await?;
+//! Project::delete_now_used("small-project", &session_valence, valence::use_!("Hard-delete a bounded project DAG.")).await?;
 //! // Dynamic table path:
 //! delete_entity_now("project", "small-project", &session_valence).await?;
-//! assert!(Project::get("small-project", &session_valence).await?.is_none());
+//! assert!(Project::get_used("small-project", &session_valence, valence::use_!("Confirm the project row is gone.")).await?.is_none());
 //! ```
 //!
 //! Missing roots succeed (idempotent). [`Error::PendingDeletion`] means a queued run already owns

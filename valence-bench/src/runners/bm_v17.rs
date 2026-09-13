@@ -31,13 +31,13 @@ pub async fn run(ctx: &RunContext) -> Result<BenchReport> {
     let valence = session.ensure_valence()?;
 
     let project = Project::new("sleep-bench".to_string()).expect("new");
-    let created = Project::create(project, valence).await?;
+    let created = Project::create_used(project, valence, valence::use_!("create Project in src/runners/bm_v17.rs; Valence persistence for this feature path; typed store; visible to test harness.")).await?;
     let id = created.id().expect("id").id();
 
     let mut samples = Vec::with_capacity(ctx.plan.default_ops);
     for _ in 0..ctx.plan.default_ops {
         let start = Instant::now();
-        let _ = Project::get(id, valence).await?;
+        let _ = Project::get_used(id, valence, valence::use_!("get Project in src/runners/bm_v17.rs; Valence persistence for this feature path; typed store; visible to test harness.")).await?;
         samples.push(start.elapsed().as_secs_f64() * 1000.0);
     }
 

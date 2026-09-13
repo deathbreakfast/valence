@@ -256,18 +256,18 @@ pub async fn run_model_contract(backend: Arc<dyn DatabaseBackend>) -> Result<()>
         .build()?;
 
     let project = Project::new("alpha".to_string()).expect("new");
-    let created = Project::create(project, &valence).await?;
+    let created = Project::create_used(project, &valence, valence::use_!("create Project in valence-testkit/src/model_contract.rs; Valence persistence for this feature path; typed store; visible to test harness.")).await?;
     let project_id = created.id().expect("id").id();
 
-    let fetched = Project::get(project_id, &valence).await?;
+    let fetched = Project::get_used(project_id, &valence, valence::use_!("get Project in valence-testkit/src/model_contract.rs; Valence persistence for this feature path; typed store; visible to test harness.")).await?;
     assert!(fetched.is_some());
 
     let merged =
-        Project::merge(project_id, serde_json::json!({ "name": "beta" }), &valence).await?;
+        Project::merge_used(project_id, serde_json::json!({ "name": "beta" }), &valence, valence::use_!("merge Project in valence-testkit/src/model_contract.rs; Valence persistence for this feature path; typed store; visible to test harness.")).await?;
     assert_eq!(merged.name(), "beta");
 
     let captured = reset_deletion_capture();
-    Project::delete(project_id, &valence).await?;
+    Project::delete_used(project_id, &valence, valence::use_!("delete Project in valence-testkit/src/model_contract.rs; Valence persistence for this feature path; typed store; visible to test harness.")).await?;
     assert!(!captured
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner())

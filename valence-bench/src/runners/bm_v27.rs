@@ -37,17 +37,17 @@ pub async fn run(ctx: &RunContext) -> Result<BenchReport> {
 
     for i in 0..depth {
         let project = Project::new(format!("privacy-q-{i}")).expect("new");
-        Project::create(project, valence).await?;
+        Project::create_used(project, valence, valence::use_!("create Project in src/runners/bm_v27.rs; Valence persistence for this feature path; typed store; visible to test harness.")).await?;
     }
 
     clear_privacy_bypass();
     let mut with_filter = Vec::with_capacity(ctx.sweep.query_iters);
     for _ in 0..ctx.warmup {
-        let _ = Project::query(valence).await?;
+        let _ = Project::query_used(valence, valence::use_!("query Project in src/runners/bm_v27.rs; Valence persistence for this feature path; typed store; visible to test harness.")).await?;
     }
     for _ in 0..ctx.sweep.query_iters {
         let start = Instant::now();
-        let _ = Project::query(valence).await?;
+        let _ = Project::query_used(valence, valence::use_!("query Project in src/runners/bm_v27.rs; Valence persistence for this feature path; typed store; visible to test harness.")).await?;
         with_filter.push(start.elapsed().as_secs_f64() * 1000.0);
     }
 
@@ -55,7 +55,7 @@ pub async fn run(ctx: &RunContext) -> Result<BenchReport> {
     let mut bypass = Vec::with_capacity(ctx.sweep.query_iters);
     for _ in 0..ctx.sweep.query_iters {
         let start = Instant::now();
-        let _ = Project::query(valence).await?;
+        let _ = Project::query_used(valence, valence::use_!("query Project in src/runners/bm_v27.rs; Valence persistence for this feature path; typed store; visible to test harness.")).await?;
         bypass.push(start.elapsed().as_secs_f64() * 1000.0);
     }
     clear_privacy_bypass();

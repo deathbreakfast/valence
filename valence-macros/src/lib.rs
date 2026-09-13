@@ -35,7 +35,7 @@ mod codegen;
 /// User::get_used(
 ///     id,
 ///     &valence,
-///     use_!(r#"
+///     valence::use_!(r#"
 /// Load the user to validate the session cookie.
 /// "#),
 /// )

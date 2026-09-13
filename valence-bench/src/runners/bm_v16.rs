@@ -25,7 +25,7 @@ pub async fn run(ctx: &RunContext) -> Result<BenchReport> {
     let valence = session.ensure_valence()?;
 
     let project = Project::new("privacy-bench".to_string()).expect("new");
-    let created = Project::create(project, valence).await?;
+    let created = Project::create_used(project, valence, valence::use_!("create Project in src/runners/bm_v16.rs; Valence persistence for this feature path; typed store; visible to test harness.")).await?;
     let id = created.id().expect("id").id();
 
     std::env::set_var("VALENCE_PRIVACY_BYPASS", "0");
@@ -33,7 +33,7 @@ pub async fn run(ctx: &RunContext) -> Result<BenchReport> {
     let mut with_gate = Vec::with_capacity(ctx.plan.default_ops);
     for _ in 0..ctx.plan.default_ops {
         let start = Instant::now();
-        let _ = Project::get(id, valence).await?;
+        let _ = Project::get_used(id, valence, valence::use_!("get Project in src/runners/bm_v16.rs; Valence persistence for this feature path; typed store; visible to test harness.")).await?;
         with_gate.push(start.elapsed().as_secs_f64() * 1000.0);
     }
 
@@ -42,7 +42,7 @@ pub async fn run(ctx: &RunContext) -> Result<BenchReport> {
     let mut bypass = Vec::with_capacity(ctx.plan.default_ops);
     for _ in 0..ctx.plan.default_ops {
         let start = Instant::now();
-        let _ = Project::get(id, valence).await?;
+        let _ = Project::get_used(id, valence, valence::use_!("get Project in src/runners/bm_v16.rs; Valence persistence for this feature path; typed store; visible to test harness.")).await?;
         bypass.push(start.elapsed().as_secs_f64() * 1000.0);
     }
     std::env::set_var("VALENCE_PRIVACY_BYPASS", "0");

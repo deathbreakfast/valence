@@ -123,6 +123,7 @@ pub trait Model: Sized + Send + Sync {
     /// .await?;
     /// assert!(Project::get_used("project-42", &session_valence, use_!("Confirm gone.")).await?.is_none());
     /// ```
+    #[deprecated(note = "use delete_now_used with use_!(...) for declared data-use transparency")]
     async fn delete_now(id: &str, valence: &Valence) -> Result<()> {
         crate::deletion::delete_entity_now(Self::table_name(), id, valence).await
     }
@@ -130,6 +131,7 @@ pub trait Model: Sized + Send + Sync {
     /// Declared immediate delete: same as [`Self::delete_now`], with a catalog purpose.
     async fn delete_now_used(id: &str, valence: &Valence, purpose: DataUsePurpose) -> Result<()> {
         let _ = purpose;
+        #[allow(deprecated)]
         Self::delete_now(id, valence).await
     }
 

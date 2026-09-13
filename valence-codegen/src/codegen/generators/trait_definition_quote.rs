@@ -263,6 +263,7 @@ fn quote_trait_definition_bundle(p: &TraitDefinitionPieces) -> TokenStream {
 
         #[allow(dead_code)]
         impl<'a> #query_all_struct_name<'a> {
+            #[deprecated(note = "use query_used with use_!(...) for declared data-use transparency")]
             pub fn query(valence: &'a valence::Valence) -> Self {
                 let tables = valence::TraitRegistry::global()
                     .tables_for_trait(#trait_name_lit);
@@ -332,6 +333,7 @@ fn quote_trait_definition_bundle(p: &TraitDefinitionPieces) -> TokenStream {
 
             fn into_future(self) -> Self::IntoFuture {
                 Box::pin(async move {
+                    #[allow(deprecated)]
                     self.inner.execute(self.valence).await
                 })
             }

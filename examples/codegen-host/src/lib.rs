@@ -34,7 +34,7 @@ mod tests {
         let created = Widget::create_used(
             widget,
             &valence,
-            use_!("Create the demo widget row for the codegen-host compile check."),
+            valence::use_!("Create the demo widget row for the codegen-host compile check."),
         )
         .await
         .expect("create");
@@ -45,7 +45,7 @@ mod tests {
         let fetched = Widget::get_used(
             id,
             &valence,
-            use_!("Reload the demo widget to confirm create persisted."),
+            valence::use_!("Reload the demo widget to confirm create persisted."),
         )
         .await
         .expect("get");
@@ -57,7 +57,7 @@ mod tests {
             id,
             patch,
             &valence,
-            use_!("Rename the demo widget through merge for the compile check."),
+            valence::use_!("Rename the demo widget through merge for the compile check."),
         )
         .await
         .expect("merge");

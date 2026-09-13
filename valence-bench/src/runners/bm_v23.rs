@@ -20,13 +20,13 @@ pub async fn run(ctx: &RunContext) -> Result<BenchReport> {
 
     for i in 0..ctx.sweep.prefill {
         let project = Project::new(format!("cx-{i:05}")).expect("new");
-        Project::create(project, valence).await?;
+        Project::create_used(project, valence, valence::use_!("create Project in src/runners/bm_v23.rs; Valence persistence for this feature path; typed store; visible to test harness.")).await?;
     }
 
     let mut samples = Vec::with_capacity(ctx.sweep.query_iters);
     for _ in 0..ctx.sweep.query_iters {
         let start = std::time::Instant::now();
-        let _ = Project::query(valence)
+        let _ = Project::query_used(valence, valence::use_!("query Project in src/runners/bm_v23.rs; Valence persistence for this feature path; typed store; visible to test harness."))
             .where_name(StringPredicate::StartsWith("cx-".into()))
             .order_by_name(SortDirection::Desc)
             .limit(25)

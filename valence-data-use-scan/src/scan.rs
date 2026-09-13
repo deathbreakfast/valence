@@ -196,7 +196,7 @@ fn extract_purpose_from_macro(mac: &Macro) -> Option<String> {
     if last != "use_" && last != "use" {
         return None;
     }
-    // `use_!("…")` or `use_!(r#"…"#)`
+    // `valence::use_!("…")` or `valence::use_!(r#"…"#)`
     let tokens = mac.tokens.clone();
     if let Ok(Lit::Str(s)) = syn::parse2::<Lit>(tokens.clone()) {
         return Some(trim_purpose(s.value()));

@@ -44,7 +44,7 @@ async fn run_mem_sqlite_hops(valence: &Valence) -> Result<()> {
     use cross_backend_model_host::{Project, Task};
 
     let project = Project::new("alpha".to_string()).expect("new project");
-    let created = Project::create(project, valence).await?;
+    let created = Project::create_used(project, valence, valence::use_!("create Project in valence-testkit/src/hop_contract.rs; Valence persistence for this feature path; typed store; visible to test harness.")).await?;
     let project_id = created.id().expect("project id").id().to_string();
 
     let task = Task::new(
@@ -52,7 +52,7 @@ async fn run_mem_sqlite_hops(valence: &Valence) -> Result<()> {
         RecordId::new("xb_project", &project_id),
     )
     .expect("new task");
-    let task_row = Task::create(task, valence).await?;
+    let task_row = Task::create_used(task, valence, valence::use_!("create Task in valence-testkit/src/hop_contract.rs; Valence persistence for this feature path; typed store; visible to test harness.")).await?;
     let task_id = task_row.id().expect("task id").id().to_string();
 
     let loaded_project = task_row.get_project(valence).await?;
@@ -62,7 +62,7 @@ async fn run_mem_sqlite_hops(valence: &Valence) -> Result<()> {
     assert_eq!(tasks.len(), 1);
     assert_eq!(tasks[0].id().expect("id").id(), task_id);
 
-    let projects = Project::query(valence)
+    let projects = Project::query_used(valence, valence::use_!("query Project in valence-testkit/src/hop_contract.rs; Valence persistence for this feature path; typed store; visible to test harness."))
         .where_tasks_has_results(|q| {
             q.where_string(
                 "title".to_string(),
@@ -77,7 +77,7 @@ async fn run_mem_sqlite_hops(valence: &Valence) -> Result<()> {
         assert_eq!(projects[0].id().expect("id").id(), project_id);
     }
 
-    let hop_tasks = Project::query(valence)
+    let hop_tasks = Project::query_used(valence, valence::use_!("query Project in valence-testkit/src/hop_contract.rs; Valence persistence for this feature path; typed store; visible to test harness."))
         .where_name(valence_core::StringPredicate::Equals("alpha".into()))
         .query_tasks()
         .await?;
@@ -99,8 +99,8 @@ async fn run_mem_mem_hops(valence: &Valence) -> Result<()> {
     use product_model_host::Project;
 
     let project = Project::new("solo".to_string()).expect("new");
-    let created = Project::create(project, valence).await?;
-    assert!(Project::get(created.id().expect("id").id(), valence)
+    let created = Project::create_used(project, valence, valence::use_!("create Project in valence-testkit/src/hop_contract.rs; Valence persistence for this feature path; typed store; visible to test harness.")).await?;
+    assert!(Project::get_used(created.id().expect("id").id(), valence, valence::use_!("get Project in valence-testkit/src/hop_contract.rs; Valence persistence for this feature path; typed store; visible to test harness."))
         .await?
         .is_some());
     Ok(())

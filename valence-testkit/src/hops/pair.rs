@@ -87,7 +87,7 @@ fn pair_available(pair: HopPair, wire: Option<&WireBackendOptions>) -> bool {
 
 async fn seed_and_assert_hops(valence: &Valence, pair: HopPair) -> Result<()> {
     let project = Project::new("hop-pair".to_string()).expect("new project");
-    let created = Project::create(project, valence).await?;
+    let created = Project::create_used(project, valence, valence::use_!("create Project in src/hops/pair.rs; Valence persistence for this feature path; typed store; visible to test harness.")).await?;
     let project_id = created.id().expect("project id").id().to_string();
 
     let task = Task::new(
@@ -95,7 +95,7 @@ async fn seed_and_assert_hops(valence: &Valence, pair: HopPair) -> Result<()> {
         RecordId::new("hop_pair_project", &project_id),
     )
     .expect("new task");
-    let task_row = Task::create(task, valence).await?;
+    let task_row = Task::create_used(task, valence, valence::use_!("create Task in src/hops/pair.rs; Valence persistence for this feature path; typed store; visible to test harness.")).await?;
     let task_id = task_row.id().expect("task id").id().to_string();
 
     let loaded_project = task_row.get_project(valence).await?;
@@ -119,7 +119,7 @@ async fn seed_and_assert_hops(valence: &Valence, pair: HopPair) -> Result<()> {
         return Ok(());
     }
 
-    let projects = Project::query(valence)
+    let projects = Project::query_used(valence, valence::use_!("query Project in src/hops/pair.rs; Valence persistence for this feature path; typed store; visible to test harness."))
         .where_tasks_has_results(|q| {
             q.where_string(
                 "title".to_string(),
@@ -134,7 +134,7 @@ async fn seed_and_assert_hops(valence: &Valence, pair: HopPair) -> Result<()> {
     );
     assert_eq!(projects[0].id().expect("id").id(), project_id);
 
-    let miss = Project::query(valence)
+    let miss = Project::query_used(valence, valence::use_!("query Project in src/hops/pair.rs; Valence persistence for this feature path; typed store; visible to test harness."))
         .where_tasks_has_results(|q| {
             q.where_string(
                 "title".to_string(),

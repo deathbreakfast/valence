@@ -70,7 +70,7 @@ mod tests {
         let created = Project::create_used(
             project,
             &valence,
-            use_!("Create the parent project for the product-model-host connection test."),
+            valence::use_!("Create the parent project for the product-model-host connection test."),
         )
         .await
         .expect("create project");
@@ -82,7 +82,7 @@ mod tests {
         Task::create_used(
             task,
             &valence,
-            use_!("Create a task linked to the project for cascade delete coverage."),
+            valence::use_!("Create a task linked to the project for cascade delete coverage."),
         )
         .await
         .expect("create task");
@@ -91,7 +91,7 @@ mod tests {
         let fetched = Project::get_used(
             project_id,
             &valence,
-            use_!("Reload the project after create to assert the name."),
+            valence::use_!("Reload the project after create to assert the name."),
         )
         .await
         .expect("get");
@@ -101,7 +101,7 @@ mod tests {
             project_id,
             serde_json::json!({ "name": "beta" }),
             &valence,
-            use_!("Rename the project through merge in the product-model-host test."),
+            valence::use_!("Rename the project through merge in the product-model-host test."),
         )
         .await
         .expect("merge");
@@ -112,7 +112,7 @@ mod tests {
         Project::delete_used(
             project_id,
             &valence,
-            use_!("Queue project deletion to exercise the cascade dispatcher hook."),
+            valence::use_!("Queue project deletion to exercise the cascade dispatcher hook."),
         )
         .await
         .expect("delete queue");

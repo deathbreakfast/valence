@@ -167,6 +167,8 @@ pub struct ScanHit {
     pub line: u32,
     /// Cargo package name that owns the file.
     pub crate_name: String,
+    /// Package `repository` from Cargo.toml (View source for Unscoped rows).
+    pub repository: String,
     /// Schema / Trait / Unscoped classification.
     pub target: TargetKind,
     /// CRUD-shaped op bucket for UI tabs.
@@ -290,6 +292,8 @@ pub fn generate(config: &Config) -> Result<(), DataUseScanError> {
 struct PackageInfo {
     name: String,
     path: PathBuf,
+    /// From `[package].repository` (workspace inheritance resolved by cargo_metadata).
+    repository: String,
 }
 
 fn discover_packages(config: &Config) -> Result<Vec<PackageInfo>, DataUseScanError> {
@@ -320,6 +324,7 @@ fn discover_packages(config: &Config) -> Result<Vec<PackageInfo>, DataUseScanErr
         packages.push(PackageInfo {
             name: pkg.name.to_string(),
             path,
+            repository: pkg.repository.clone().unwrap_or_default(),
         });
     }
     Ok(packages)
@@ -357,7 +362,7 @@ fn scan_package(config: &Config, package: &PackageInfo) -> Result<Vec<ScanHit>, 
         let rel = relative_to_workspace(config, path);
         let found = scan_file(path, &package.name, &rel)?;
         for item in found {
-            hits.push(hit_from_found(item));
+            hits.push(hit_from_found(item, &package.repository));
         }
     }
     Ok(hits)
@@ -370,7 +375,7 @@ fn relative_to_workspace(config: &Config, path: &std::path::Path) -> String {
         .replace('\\', "/")
 }
 
-fn hit_from_found(found: FoundUse) -> ScanHit {
+fn hit_from_found(found: FoundUse, repository: &str) -> ScanHit {
     let op = classify_method(&found.method);
     let target = classify_target(&found.receiver, &found.method);
     ScanHit {
@@ -378,6 +383,7 @@ fn hit_from_found(found: FoundUse) -> ScanHit {
         file: found.file,
         line: found.line,
         crate_name: found.crate_name,
+        repository: repository.to_string(),
         target,
         op,
         method: found.method,
@@ -408,6 +414,7 @@ members = ["prod_crate"]
 name = "prod_crate"
 version = "0.1.0"
 edition = "2021"
+repository = "https://github.com/unified-field-dev/prod_crate"
 "#,
         )
         .unwrap();
@@ -446,6 +453,10 @@ edition = "2021"
         assert!(generated.contains("DataUseTarget::Schema"));
         assert!(generated.contains("DataUseTarget::Trait"));
         assert!(generated.contains("DataUseTarget::Unscoped"));
+        assert!(
+            generated.contains("https://github.com/unified-field-dev/prod_crate"),
+            "snapshot must carry package repository for Unscoped View source"
+        );
     }
 
     #[test]

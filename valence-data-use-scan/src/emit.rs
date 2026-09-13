@@ -31,6 +31,7 @@ fn render_snapshot(hits: &[ScanHit]) -> String {
     code.push_str("    pub file: &'static str,\n");
     code.push_str("    pub line: u32,\n");
     code.push_str("    pub crate_name: &'static str,\n");
+    code.push_str("    pub repository: &'static str,\n");
     code.push_str("    pub target: DataUseTarget,\n");
     code.push_str("    pub op: DataOp,\n");
     code.push_str("    pub method: &'static str,\n");
@@ -63,6 +64,10 @@ fn render_snapshot(hits: &[ScanHit]) -> String {
         code.push_str(&format!(
             "        crate_name: {},\n",
             escape_str_lit(&hit.crate_name)
+        ));
+        code.push_str(&format!(
+            "        repository: {},\n",
+            escape_str_lit(&hit.repository)
         ));
         code.push_str(&format!(
             "        target: {},\n",

@@ -9,3 +9,4 @@ profiling/
 
 # Local Sentrux quality-gate config (dev artifact; not part of upstream)
 .sentrux/
+valence-data-use-scan/purpose_inventory.csv

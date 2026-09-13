@@ -29,6 +29,7 @@ product-model-host = { path = "../examples/product-model-host" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "time"] }
+valence = { workspace = true, features = ["mem"] }
 valence-core = { workspace = true, features = ["instrumentation"] }
 valence-backend-mem = { workspace = true }
 valence-backend-redis = { workspace = true, optional = true }

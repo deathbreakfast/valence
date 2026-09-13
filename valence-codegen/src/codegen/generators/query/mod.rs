@@ -122,6 +122,7 @@ pub fn generate_query_builder(
 
             fn into_future(self) -> Self::IntoFuture {
                 Box::pin(async move {
+                    #[allow(deprecated)]
                     self.inner.execute(self.valence).await
                 })
             }

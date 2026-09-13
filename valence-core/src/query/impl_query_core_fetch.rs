@@ -77,7 +77,10 @@ impl QueryCore {
 
         // Rows come from `execute_compiled_query` as JSON where Thing-shaped `id` values are
         // strings like `"counter:singleton"` — deserialize as `String`, then strip to id-only.
-        let raw: Vec<IdOnlyRecord> = query.execute(valence).await?;
+        let raw: Vec<IdOnlyRecord> = {
+            #[allow(deprecated)]
+            query.execute(valence).await?
+        };
         let records: Vec<IdOnlyRecord> = raw
             .into_iter()
             .map(|r| IdOnlyRecord {

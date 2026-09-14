@@ -15,7 +15,6 @@ impl QueryCore {
     /// # Errors
     ///
     /// Returns an error when the requested operation cannot be completed.
-    #[deprecated(note = "use execute_used with valence::use_!(...) for declared data-use transparency")]
     #[tracing::instrument(
         name = "valence.query.execute",
         skip(self, valence),
@@ -203,10 +202,7 @@ impl QueryCore {
         self.limit = None;
         self.offset = None;
 
-        let rows: Vec<serde_json::Value> = {
-            #[allow(deprecated)]
-            self.execute(valence).await?
-        };
+        let rows: Vec<serde_json::Value> = self.execute(valence).await?;
         let mut seen = std::collections::HashSet::new();
         let mut results = Vec::with_capacity(rows.len());
         for row in rows {
@@ -358,19 +354,5 @@ impl QueryCore {
             }
         }
         Ok(kept)
-    }
-
-    /// Declared Unscoped execute (same as [`Self::execute`]).
-    pub async fn execute_used<T>(
-        self,
-        valence: &Valence,
-        purpose: crate::data_use::DataUsePurpose,
-    ) -> Result<Vec<T>>
-    where
-        T: DeserializeOwned + Serialize,
-    {
-        let _ = purpose;
-        #[allow(deprecated)]
-        self.execute(valence).await
     }
 }

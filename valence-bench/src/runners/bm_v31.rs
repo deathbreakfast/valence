@@ -80,6 +80,8 @@ fn public_cascade_root() -> &'static SchemaMetadata {
             row_count: 0,
             owner: "t".into(),
             description: None,
+
+            repository: "https://github.com/unified-field-dev/valence".to_string(),
         },
     });
     Box::leak(Box::new(SchemaMetadata::from_schema(schema)))
@@ -120,6 +122,8 @@ fn public_child() -> &'static SchemaMetadata {
             row_count: 0,
             owner: "t".into(),
             description: None,
+
+            repository: "https://github.com/unified-field-dev/valence".to_string(),
         },
     });
     Box::leak(Box::new(SchemaMetadata::from_schema(schema)))

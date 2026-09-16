@@ -34,6 +34,7 @@ pub(super) fn push_has_many_trait_target_method(
         ) -> valence::Result<Vec<#target_model>> {
             let id = valence::connection::id_from_model(self)?;
             let parent_rid = valence::RecordId::new(#self_table_lit, &id);
+            #[allow(deprecated)]
             #target_query_all::query(valence)
                 .#where_method_name(valence::RecordPredicate::Equals(parent_rid))
                 .await

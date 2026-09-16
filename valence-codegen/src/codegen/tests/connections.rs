@@ -14,6 +14,7 @@ use valence::prelude::*;
 
 valence_schema! {
     Project {
+        repository: "https://github.com/unified-field-dev/valence",
         table: "project",
         version: "0.1.0",
         description: "Project with explicit connections",
@@ -70,6 +71,7 @@ use valence::prelude::*;
 
 valence_schema! {
     UserCounter {
+        repository: "https://github.com/unified-field-dev/valence",
         table: "user_counter",
         version: "0.1.0",
         description: "Per-user counter",
@@ -139,6 +141,7 @@ use valence::prelude::*;
 
 valence_schema! {
     TestUser {
+        repository: "https://github.com/unified-field-dev/valence",
         table: "test_user",
         version: "0.1.0",
         description: "User with HasMany posts",
@@ -189,6 +192,7 @@ use valence::prelude::*;
 
 valence_schema! {
     TestArticle {
+        repository: "https://github.com/unified-field-dev/valence",
         table: "test_article",
         version: "0.1.0",
         description: "Article with ManyToMany tags",
@@ -240,6 +244,7 @@ use valence::prelude::*;
 
 valence_schema! {
     Task {
+        repository: "https://github.com/unified-field-dev/valence",
         table: "task",
         version: "0.1.0",
         fields: [
@@ -276,6 +281,7 @@ use valence::prelude::*;
 
 valence_schema! {
     InferredConn {
+        repository: "https://github.com/unified-field-dev/valence",
         table: "inferred_conn",
         version: "0.1.0",
         fields: [
@@ -303,6 +309,7 @@ use valence::prelude::*;
 
 valence_schema! {
     User {
+        repository: "https://github.com/unified-field-dev/valence",
         table: "user",
         version: "0.1.0",
         fields: [
@@ -341,6 +348,7 @@ use valence::prelude::*;
 
 valence_schema! {
     Article {
+        repository: "https://github.com/unified-field-dev/valence",
         table: "article",
         version: "0.1.0",
         fields: [

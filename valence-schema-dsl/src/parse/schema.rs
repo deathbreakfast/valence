@@ -26,6 +26,12 @@ pub struct ParsedSchema {
     pub table_name: String,
     pub version: String,
     pub description: Option<String>,
+    /// Canonical Git repository URL (required).
+    pub repository: String,
+    /// Retention label from `meta:` (default `"365 days"` when omitted).
+    pub retention: String,
+    /// Owner label from `meta:` (default `"system"` when omitted).
+    pub owner: String,
     /// Optional `database:` — any Rust expression of type `&'static dyn DatabaseEvaluator`.
     pub database: Option<Expr>,
     pub ttl: Option<ParsedTtlPolicy>,
@@ -60,6 +66,10 @@ pub enum SchemaItem {
     Table(TableConfig),
     Version(VersionConfig),
     Description(DescriptionConfig),
+    /// Top-level `repository: "https://…"`.
+    Repository(RepositoryConfig),
+    /// Nested `meta: { repository, retention?, owner?, description? }`.
+    Meta(MetaConfig),
     Ttl(TtlConfig),
     /// Legacy `privacy:` block (parsed, ignored when building [`ParsedSchema`]).
     #[allow(dead_code)]
@@ -101,6 +111,8 @@ impl Parse for SchemaItem {
             "table" => Ok(SchemaItem::Table(input.parse()?)),
             "version" => Ok(SchemaItem::Version(input.parse()?)),
             "description" => Ok(SchemaItem::Description(input.parse()?)),
+            "repository" => Ok(SchemaItem::Repository(input.parse()?)),
+            "meta" => Ok(SchemaItem::Meta(input.parse()?)),
             "ttl" => Ok(SchemaItem::Ttl(input.parse()?)),
             "privacy" => Ok(SchemaItem::Privacy(input.parse()?)),
             "policies" => Ok(SchemaItem::Policies(input.parse()?)),
@@ -169,6 +181,61 @@ impl Parse for DescriptionConfig {
     }
 }
 
+pub struct RepositoryConfig {
+    pub value: LitStr,
+}
+
+impl Parse for RepositoryConfig {
+    fn parse(input: ParseStream) -> Result<Self> {
+        Ok(RepositoryConfig {
+            value: input.parse()?,
+        })
+    }
+}
+
+/// Nested `meta: { repository: "…", retention?: "…", owner?: "…", description?: "…" }`.
+pub struct MetaConfig {
+    _brace: token::Brace,
+    pub items: Punctuated<MetaItem, Token![,]>,
+}
+
+pub enum MetaItem {
+    Repository(LitStr),
+    Retention(LitStr),
+    Owner(LitStr),
+    Description(LitStr),
+}
+
+impl Parse for MetaItem {
+    fn parse(input: ParseStream) -> Result<Self> {
+        let key: Ident = input.parse()?;
+        input.parse::<Token![:]>()?;
+        let value: LitStr = input.parse()?;
+        match key.to_string().as_str() {
+            "repository" => Ok(MetaItem::Repository(value)),
+            "retention" => Ok(MetaItem::Retention(value)),
+            "owner" => Ok(MetaItem::Owner(value)),
+            "description" => Ok(MetaItem::Description(value)),
+            _ => Err(syn::Error::new(
+                key.span(),
+                format!(
+                    "Unknown meta key: {key} (expected `repository`, `retention`, `owner`, or `description`)"
+                ),
+            )),
+        }
+    }
+}
+
+impl Parse for MetaConfig {
+    fn parse(input: ParseStream) -> Result<Self> {
+        let content;
+        Ok(MetaConfig {
+            _brace: braced!(content in input),
+            items: content.parse_terminated(MetaItem::parse, Token![,])?,
+        })
+    }
+}
+
 /// Side effects configuration: `side_effects: [TypeName1, TypeName2]`
 pub struct SideEffectsConfig {
     _bracket: token::Bracket,
@@ -207,6 +274,10 @@ impl SchemaSpec {
         let mut table_name = None;
         let mut version = None;
         let mut description = None;
+        let mut repository_top: Option<String> = None;
+        let mut meta_repository: Option<String> = None;
+        let mut retention = "365 days".to_string();
+        let mut owner = "system".to_string();
         let mut ttl = None;
         let mut policies = None;
         let mut fields = Vec::new();
@@ -223,6 +294,37 @@ impl SchemaSpec {
                 SchemaItem::Table(t) => table_name = Some(t.value.value()),
                 SchemaItem::Version(v) => version = Some(v.value.value()),
                 SchemaItem::Description(d) => description = Some(d.value.value()),
+                SchemaItem::Repository(r) => {
+                    if repository_top.is_some() {
+                        return Err(syn::Error::new(
+                            self.name.span(),
+                            "duplicate `repository:` in valence_schema!",
+                        ));
+                    }
+                    repository_top = Some(r.value.value());
+                }
+                SchemaItem::Meta(m) => {
+                    for mi in &m.items {
+                        match mi {
+                            MetaItem::Repository(v) => {
+                                if meta_repository.is_some() {
+                                    return Err(syn::Error::new(
+                                        self.name.span(),
+                                        "duplicate `repository` in meta: block",
+                                    ));
+                                }
+                                meta_repository = Some(v.value());
+                            }
+                            MetaItem::Retention(v) => retention = v.value(),
+                            MetaItem::Owner(v) => owner = v.value(),
+                            MetaItem::Description(v) => {
+                                if description.is_none() {
+                                    description = Some(v.value());
+                                }
+                            }
+                        }
+                    }
+                }
                 SchemaItem::Ttl(t) => ttl = Some(parse_ttl_config(t)?),
                 SchemaItem::Policies(p) => policies = Some(parse_policies_config(p)?),
                 SchemaItem::Fields(f) => fields = parse_fields(f)?,
@@ -264,11 +366,28 @@ impl SchemaSpec {
         let table_name =
             table_name.ok_or_else(|| syn::Error::new(self.name.span(), "Missing 'table' field"))?;
         let version = version.unwrap_or_else(|| "1.0.0".to_string());
+        let repository = meta_repository
+            .or(repository_top)
+            .ok_or_else(|| {
+                syn::Error::new(
+                    self.name.span(),
+                    "Missing required `repository` (top-level `repository: \"…\"` or `meta: { repository: \"…\" }`)",
+                )
+            })?;
+        if repository.trim().is_empty() {
+            return Err(syn::Error::new(
+                self.name.span(),
+                "`repository` must be a non-empty Git URL",
+            ));
+        }
 
         Ok(ParsedSchema {
             table_name,
             version,
             description,
+            repository,
+            retention,
+            owner,
             database,
             ttl,
             policies,

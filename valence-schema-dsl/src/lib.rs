@@ -16,6 +16,7 @@
 //! let tokens: proc_macro2::TokenStream = syn::parse_str(
 //!     r#"
 //!     Counter {
+//!         repository: "https://github.com/unified-field-dev/valence",
 //!         table: "counter",
 //!         version: "0.1.0",
 //!         fields: [
@@ -38,6 +39,7 @@
 //! let src = r#"
 //!     valence_schema! {
 //!         Widget {
+//!             repository: "https://github.com/unified-field-dev/valence",
 //!             table: "widget",
 //!             version: "0.1.0",
 //!             fields: [

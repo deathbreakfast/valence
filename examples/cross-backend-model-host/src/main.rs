@@ -42,14 +42,15 @@ async fn main() -> valence::Result<()> {
     );
 
     // Step 3 — Create rows on their respective backends (connection stores cross-table RecordId).
-    let created = Project::create(Project::new("alpha".into())?, &valence).await?;
+    let created = Project::create_used(Project::new("alpha".into())?, &valence, valence::use_!(r"When this **cross-backend demo** sets up a sample workspace, we **create the project** so later steps can attach tasks stored on another backend. Developers running the example use this row.")).await?;
     let project_id = created.id().expect("project id").id().to_string();
-    let task = Task::create(
+    let task = Task::create_used(
         Task::new(
             "first task".into(),
             RecordId::new("xb_project", &project_id),
         )?,
         &valence,
+        valence::use_!(r"After the demo **project** exists, we **create a linked task** on the archive backend so hop navigation can prove the connection across stores. Developers running the example use this row."),
     )
     .await?;
 
@@ -60,7 +61,7 @@ async fn main() -> valence::Result<()> {
     assert_eq!(tasks.len(), 1);
 
     // Step 5 — Same-backend filter query (Project lives entirely on mem).
-    let by_name = Project::query(&valence)
+    let by_name = Project::query_used(&valence, valence::use_!(r"During the **cross-backend demo**, we **find the project by name** so we can confirm the in-memory filter returned the row we just created. Developers running the example use this result."))
         .where_name(StringPredicate::Equals("alpha".into()))
         .await?;
     assert_eq!(by_name.len(), 1);
@@ -68,19 +69,19 @@ async fn main() -> valence::Result<()> {
 
     // Step 6 — Nested HasMany EXISTS + hop query API shape.
     // Limitation (0.1.x): mem↔sqlite nested EXISTS may return empty — navigation (step 4) is the lesson.
-    let nested = Project::query(&valence)
+    let nested = Project::query_used(&valence, valence::use_!(r"During the **cross-backend demo**, we **search projects that have matching tasks** so nested HasMany filters can be exercised across backends. Developers running the example use this result."))
         .where_tasks_has_results(|q| {
             q.where_string("title".into(), StringPredicate::Equals("first task".into()))
         })
         .await?;
-    let hop_tasks = Project::query(&valence)
+    let hop_tasks = Project::query_used(&valence, valence::use_!(r"During the **cross-backend demo**, we **follow the project into its tasks** so hop queries can load children stored on another backend. Developers running the example use this result."))
         .where_name(StringPredicate::Equals("alpha".into()))
         .query_tasks()
         .await?;
     if nested.is_empty() || hop_tasks.is_empty() {
         eprintln!(
             "note: nested HasMany query across mem↔sqlite returned empty; \
-             BelongsTo/HasMany navigation and Project::query(where_name) succeeded"
+             BelongsTo/HasMany navigation and same-backend name query succeeded"
         );
     } else {
         assert_eq!(nested.len(), 1);

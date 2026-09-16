@@ -19,6 +19,7 @@ pub const DEMO_DB: DatabaseFromEngine = Database::from_engine("default", SURREAL
 
 valence_schema! {
     DemoItem {
+        repository: "https://github.com/unified-field-dev/valence",
         table: "demo_item",
         version: "0.1.0",
         database: DEMO_DB,

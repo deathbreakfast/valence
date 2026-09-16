@@ -146,6 +146,8 @@ pub struct SchemaMeta {
     pub owner: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
+    /// Canonical Git repository URL for View source links (required in DSL).
+    pub repository: String,
 }
 
 /// Complete runtime schema produced from `valence_schema!`.

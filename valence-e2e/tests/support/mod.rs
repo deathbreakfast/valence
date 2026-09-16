@@ -15,6 +15,7 @@ pub const E2E_INVENTORY_DB: DatabaseFromEngine =
 
 valence_schema! {
     E2eInventorySmoke {
+        repository: "https://github.com/unified-field-dev/valence",
         table: "e2e_inventory_smoke",
         version: "0.1.0",
         database: E2E_INVENTORY_DB,

@@ -34,6 +34,8 @@ pub struct TraitPolicies {
 #[derive(Debug, Clone)]
 pub struct TraitDefinition {
     pub name: &'static str,
+    /// Canonical Git repository URL for View source links (required in DSL).
+    pub repository: &'static str,
     pub fields: &'static [TraitFieldDef],
     pub connection_names: &'static [&'static str],
     pub policies: Option<&'static TraitPolicies>,

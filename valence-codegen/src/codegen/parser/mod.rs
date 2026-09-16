@@ -14,6 +14,7 @@ pub use lower::{lower_parsed_schema, lower_parsed_trait};
 #[derive(Debug, Clone)]
 pub struct ParsedTraitDef {
     pub name: String,
+    pub repository: String,
     pub fields: Vec<valence_core::SchemaField>,
     pub connections: Vec<SchemaConnection>,
 }

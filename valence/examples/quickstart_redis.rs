@@ -24,6 +24,7 @@ const COUNTER_DB: DatabaseFromEngine = Database::from_engine("default", REDIS_EN
 
 valence_schema! {
     Counter {
+        repository: "https://github.com/unified-field-dev/valence",
         table: "counter",
         version: "0.1.0",
         description: "Simple counter",

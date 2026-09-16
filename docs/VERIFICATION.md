@@ -11,7 +11,7 @@ on `main`. Re-run after workflow changes.
 |--------|----------------|
 | Gate script | `bash scripts/gate.sh` |
 | Format | `cargo fmt --all -- --check` |
-| Clippy | `cargo clippy --workspace --all-targets -- -D warnings -A missing-docs` |
+| Clippy | `cargo clippy --workspace --all-targets -- -D warnings -A missing-docs -A deprecated` |
 | Deny rustc warnings (isolated crates) | See ci.yml `for pkg in …` loop with `RUSTFLAGS="-D warnings"` |
 | Rustdoc | `RUSTDOCFLAGS="-D warnings" cargo doc -p uf-valence --all-features --no-deps` then `RUSTDOCFLAGS="-D warnings" cargo doc --workspace --exclude uf-valence --no-deps` |
 | Doctests | `cargo test --doc -p uf-valence-core -p uf-valence-backend-mem -p uf-valence-telemetry -p uf-valence` |

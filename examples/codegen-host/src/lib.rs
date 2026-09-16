@@ -14,7 +14,7 @@ valence::include_generated_models!();
 mod tests {
     use std::sync::Arc;
 
-    use valence::{Actor, InMemoryBackend, Model, Valence};
+    use valence::{use_, Actor, InMemoryBackend, Model, Valence};
 
     use super::Widget;
 
@@ -31,17 +31,36 @@ mod tests {
 
         // Step 2 — Create: `Widget` is generated from schemas/widget_valence_schema.rs via build.rs.
         let widget = Widget::new("demo".to_string()).expect("new");
-        let created = Widget::create(widget, &valence).await.expect("create");
+        let created = Widget::create_used(
+            widget,
+            &valence,
+            valence::use_!(r"When the **codegen-host** compile check runs, we **create a demo widget** so generated Model create can prove the schema built correctly. Developers running that example suite use this row."),
+        )
+        .await
+        .expect("create");
         assert_eq!(created.name(), "demo");
         let id = created.id().expect("id").id();
 
         // Step 3 — Read back the persisted row.
-        let fetched = Widget::get(id, &valence).await.expect("get");
+        let fetched = Widget::get_used(
+            id,
+            &valence,
+            valence::use_!(r"After create, we **reload the demo widget by id** so the codegen-host suite can confirm the generated get path returned the row. Developers running that example suite use this result."),
+        )
+        .await
+        .expect("get");
         assert!(fetched.is_some());
 
         // Step 4 — Partial update via JSON merge patch.
         let patch = serde_json::json!({ "name": "updated" });
-        let merged = Widget::merge(id, patch, &valence).await.expect("merge");
+        let merged = Widget::merge_used(
+            id,
+            patch,
+            &valence,
+            valence::use_!(r"During the **codegen-host** compile check, we **merge a new name onto the widget** so generated merge can prove partial updates work. Developers running that example suite use this result."),
+        )
+        .await
+        .expect("merge");
         assert_eq!(merged.name(), "updated");
     }
 }

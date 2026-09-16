@@ -91,6 +91,7 @@ mod tests {
         let mut registry = TraitRegistry::new();
         let def: &'static TraitDefinition = Box::leak(Box::new(TraitDefinition {
             name: "Named",
+            repository: "https://github.com/unified-field-dev/valence",
             fields: &[],
             connection_names: &[],
             policies: None,

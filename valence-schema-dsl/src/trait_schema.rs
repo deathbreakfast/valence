@@ -15,13 +15,15 @@ use syn::{
 
 use crate::parse::{
     parse_connections, parse_fields_public, parse_policies_config, ConnectionsConfig, FieldsConfig,
-    ParsedConnection, ParsedField, ParsedPolicies, PoliciesConfig,
+    ParsedConnection, ParsedField, ParsedPolicies, PoliciesConfig, RepositoryConfig,
 };
 
 /// Lowered trait DSL consumed by macros and codegen.
 #[derive(Debug, Clone)]
 pub struct ParsedTraitSchema {
     pub name: String,
+    /// Canonical Git repository URL (required).
+    pub repository: String,
     pub fields: Vec<ParsedField>,
     /// Full connection metadata (codegen trait merge).
     pub connections: Vec<ParsedConnection>,
@@ -61,6 +63,7 @@ pub enum TraitSchemaItem {
     Fields(FieldsConfig),
     Connections(ConnectionsConfig),
     Policies(PoliciesConfig),
+    Repository(RepositoryConfig),
 }
 
 impl Parse for TraitSchemaItem {
@@ -72,10 +75,11 @@ impl Parse for TraitSchemaItem {
             "fields" => Ok(TraitSchemaItem::Fields(input.parse()?)),
             "connections" => Ok(TraitSchemaItem::Connections(input.parse()?)),
             "policies" => Ok(TraitSchemaItem::Policies(input.parse()?)),
+            "repository" => Ok(TraitSchemaItem::Repository(input.parse()?)),
             _ => Err(syn::Error::new(
                 key.span(),
                 format!(
-                    "Unknown trait schema key: {key} (expected `fields`, `connections`, or `policies`)"
+                    "Unknown trait schema key: {key} (expected `fields`, `connections`, `policies`, or `repository`)"
                 ),
             )),
         }
@@ -88,6 +92,7 @@ impl TraitSchemaSpec {
         let mut fields = Vec::new();
         let mut connections = Vec::new();
         let mut policies = None;
+        let mut repository = None;
 
         for item in &self.items {
             match item {
@@ -100,11 +105,34 @@ impl TraitSchemaSpec {
                 TraitSchemaItem::Policies(p) => {
                     policies = Some(parse_policies_config(p)?);
                 }
+                TraitSchemaItem::Repository(r) => {
+                    if repository.is_some() {
+                        return Err(syn::Error::new(
+                            self.name.span(),
+                            "duplicate `repository:` in valence_trait_schema!",
+                        ));
+                    }
+                    repository = Some(r.value.value());
+                }
             }
+        }
+
+        let repository = repository.ok_or_else(|| {
+            syn::Error::new(
+                self.name.span(),
+                "Missing required `repository: \"…\"` in valence_trait_schema!",
+            )
+        })?;
+        if repository.trim().is_empty() {
+            return Err(syn::Error::new(
+                self.name.span(),
+                "`repository` must be a non-empty Git URL",
+            ));
         }
 
         Ok(ParsedTraitSchema {
             name: self.name.to_string(),
+            repository,
             fields,
             connections,
             policies,
@@ -118,13 +146,14 @@ mod tests {
 
     #[test]
     fn test_parse_minimal_trait() {
-        let input = r"
+        let input = r#"
             Named {
+                repository: "https://github.com/unified-field-dev/valence",
                 fields: [
                     name: { r#type: FieldType::String, required: true },
                 ],
             }
-        ";
+        "#;
         let spec = syn::parse_str::<TraitSchemaSpec>(input).expect("parse");
         let parsed = spec.to_parsed().expect("to_parsed");
         assert_eq!(parsed.name, "Named");
@@ -140,6 +169,7 @@ mod tests {
     fn test_parse_trait_with_connections() {
         let input = r#"
             HasFiles {
+                repository: "https://github.com/unified-field-dev/valence",
                 fields: [],
                 connections: [
                     files: { table: "file", cardinality: HasMany, reverse_field: "parent", on_delete: Cascade },
@@ -159,6 +189,7 @@ mod tests {
     fn test_parse_trait_with_fields_and_connections() {
         let input = r#"
             HasOwner {
+                repository: "https://github.com/unified-field-dev/valence",
                 fields: [
                     owner: { r#type: FieldType::Record("user"), required: true },
                 ],
@@ -181,8 +212,9 @@ mod tests {
 
     #[test]
     fn test_parse_trait_with_policies() {
-        let input = r"
+        let input = r#"
             Secured {
+                repository: "https://github.com/unified-field-dev/valence",
                 fields: [
                     name: { r#type: FieldType::String, required: true },
                 ],
@@ -191,7 +223,7 @@ mod tests {
                     create: { allow: [AUTHENTICATED], block: [BLOCK_ALL] },
                 },
             }
-        ";
+        "#;
         let spec = syn::parse_str::<TraitSchemaSpec>(input).expect("parse");
         let parsed = spec.to_parsed().expect("to_parsed");
         assert_eq!(parsed.name, "Secured");
@@ -215,6 +247,7 @@ mod tests {
     fn test_parse_trait_with_fields_connections_and_policies() {
         let input = r#"
             HasOwnerSecured {
+                repository: "https://github.com/unified-field-dev/valence",
                 fields: [
                     owner: { r#type: FieldType::Record("user"), required: true },
                 ],

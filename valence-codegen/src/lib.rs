@@ -326,6 +326,7 @@ mod build_defaults_tests {
     const MINIMAL_SCHEMA: &str = r#"
 valence_schema! {
     Widget {
+        repository: "https://github.com/unified-field-dev/valence",
         table: "widget",
         version: "0.1.0",
         fields: [

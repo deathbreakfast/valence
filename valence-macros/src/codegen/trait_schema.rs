@@ -26,6 +26,7 @@ pub fn expand(input: TokenStream) -> TokenStream {
 
 fn expand_parsed(parsed: &valence_schema_dsl::ParsedTraitSchema) -> TokenStream2 {
     let trait_name_lit = LitStr::new(&parsed.name, proc_macro2::Span::call_site());
+    let repository_lit = LitStr::new(&parsed.repository, proc_macro2::Span::call_site());
 
     let field_defs: Vec<TokenStream2> = parsed
         .fields
@@ -66,6 +67,7 @@ fn expand_parsed(parsed: &valence_schema_dsl::ParsedTraitSchema) -> TokenStream2
                     #policies_code
                     valence::TraitDefinition {
                         name: #trait_name_lit,
+                        repository: #repository_lit,
                         fields: fields.as_slice(),
                         connection_names: conn_names.as_slice(),
                         policies: __trait_policies,

@@ -30,11 +30,22 @@ pub fn generate_query_builder(
     Ok(quote! {
         impl #struct_name {
             /// Start a type-safe query
+            #[deprecated(note = "use query_used with use_!(...) for declared data-use transparency")]
             pub fn query(valence: &valence::Valence) -> #query_name<'_> {
                 #query_name {
                     inner: valence::QueryCore::new(#table_name_lit.to_string()),
                     valence,
                 }
+            }
+
+            /// Declared schema query builder (catalog target: Schema).
+            pub fn query_used(
+                valence: &valence::Valence,
+                purpose: valence::DataUsePurpose,
+            ) -> #query_name<'_> {
+                let _ = purpose;
+                #[allow(deprecated)]
+                Self::query(valence)
             }
         }
 
@@ -111,6 +122,7 @@ pub fn generate_query_builder(
 
             fn into_future(self) -> Self::IntoFuture {
                 Box::pin(async move {
+                    #[allow(deprecated)]
                     self.inner.execute(self.valence).await
                 })
             }

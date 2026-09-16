@@ -14,6 +14,7 @@ use valence::prelude::*;
 
 valence_schema! {
     Post {
+        repository: "https://github.com/unified-field-dev/valence",
         table: "post",
         version: "0.1.0",
         fields: [
@@ -48,6 +49,7 @@ use valence::prelude::*;
 
 valence_schema! {
     OrphanFk {
+        repository: "https://github.com/unified-field-dev/valence",
         table: "orphan_fk",
         version: "0.1.0",
         fields: [
@@ -84,6 +86,7 @@ use valence::prelude::*;
 
 valence_schema! {
     MissingFk {
+        repository: "https://github.com/unified-field-dev/valence",
         table: "missing_fk",
         version: "0.1.0",
         fields: [
@@ -124,6 +127,7 @@ use valence::prelude::*;
 
 valence_schema! {
     ValidLinked {
+        repository: "https://github.com/unified-field-dev/valence",
         table: "valid_linked",
         version: "0.1.0",
         fields: [

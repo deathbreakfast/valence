@@ -262,7 +262,10 @@ impl OwnershipService {
             )
             .order_by("transferred_at".to_string(), SortDirection::Desc)
             .limit(limit);
-        let rows: Vec<Value> = q.execute(&sys).await?;
+        let rows: Vec<Value> = {
+            #[allow(deprecated)]
+            q.execute(&sys).await?
+        };
         Ok(rows)
     }
 }

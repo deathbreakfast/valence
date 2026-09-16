@@ -53,6 +53,8 @@ fn leak_ttl_schema(table: &str, seconds: u64) -> &'static Schema {
             row_count: 0,
             owner: "system".to_string(),
             description: None,
+
+            repository: "https://github.com/unified-field-dev/valence".to_string(),
         },
     }))
 }

@@ -22,6 +22,37 @@ use proc_macro::TokenStream;
 
 mod codegen;
 
+/// Declares a data-use purpose (markdown) with call-site `file!` / `line!`.
+///
+/// Pair with `*_used` Model / trait / QueryCore methods. Op and target are inferred
+/// from the receiver method for the catalog scan.
+///
+/// Purpose text is end-user **trust copy** for someone who has never seen the code:
+/// prefer a short narrative with **bold** key terms; do not repeat op/schema/path
+/// (the Data uses UI already shows those). See `uf-valence-data-use-scan::lint_purpose`
+/// for banlists and tier depth checks.
+///
+/// # Examples
+///
+/// ```ignore
+/// use valence::{use_, Model};
+///
+/// User::get_used(
+///     id,
+///     &valence,
+///     valence::use_!(r#"When your browser presents a **session cookie**, we **load the matching user account** so sign-in can continue. The application uses this only to establish who is signed in for that request—not to render a profile page by itself."#),
+/// )
+/// .await?;
+/// ```
+#[proc_macro]
+pub fn use_(input: TokenStream) -> TokenStream {
+    let purpose = syn::parse_macro_input!(input as syn::Expr);
+    quote::quote! {
+        ::valence::DataUsePurpose::new(#purpose, ::core::file!(), ::core::line!())
+    }
+    .into()
+}
+
 /// Defines a Valence model schema at compile time.
 ///
 /// Parses the braced DSL, builds a `valence::Schema`, and registers
@@ -34,6 +65,7 @@ mod codegen;
 /// |-------|----------|-------------|
 /// | `table` | yes | Physical / registry table name |
 /// | `version` | yes | Schema version string |
+/// | `repository` | yes | Git HTTPS root for View source links on declared data uses |
 /// | `fields` | yes | Named field list (`r#type`, `primary_key`, `required`, …). See field-type notes below. |
 /// | `description` | no | Human-readable summary |
 /// | `database` | no | Path to a `const`/`static` `DatabaseEvaluator`; defaults to `DEFAULT_IN_MEMORY` |
@@ -66,6 +98,7 @@ mod codegen;
 ///
 /// valence_schema! {
 ///     Counter {
+///         repository: "https://github.com/unified-field-dev/valence",
 ///         table: "counter",
 ///         version: "0.1.0",
 ///         database: COUNTER_DB,
@@ -88,6 +121,7 @@ mod codegen;
 ///
 /// valence_schema! {
 ///     Counter {
+///         repository: "https://github.com/unified-field-dev/valence",
 ///         table: "counter",
 ///         version: "0.1.0",
 ///         description: "Simple counter",
@@ -155,6 +189,7 @@ pub fn valence_schema(input: TokenStream) -> TokenStream {
 ///
 /// valence_trait_schema! {
 ///     Owned {
+///         repository: "https://github.com/unified-field-dev/valence",
 ///         fields: [
 ///             owner: {
 ///                 r#type: FieldType::Record("user"),
@@ -173,6 +208,7 @@ pub fn valence_schema(input: TokenStream) -> TokenStream {
 ///
 /// valence_schema! {
 ///     Person {
+///         repository: "https://github.com/unified-field-dev/valence",
 ///         table: "person",
 ///         version: "0.1.0",
 ///         traits: [Owned],

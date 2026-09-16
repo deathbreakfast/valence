@@ -48,6 +48,8 @@ fn base_schema(name: &str, policies: SchemaPolicies, fields: Vec<SchemaField>) -
             row_count: 0,
             owner: "system".to_string(),
             description: None,
+
+            repository: "https://github.com/unified-field-dev/valence".to_string(),
         },
     })
 }
@@ -205,6 +207,8 @@ fn history_defer_schema(table: &str, parent_table: &str) -> &'static SchemaMetad
             row_count: 0,
             owner: "system".to_string(),
             description: None,
+
+            repository: "https://github.com/unified-field-dev/valence".to_string(),
         },
     }))
 }
@@ -493,6 +497,8 @@ async fn defer_cycle_denies_sad() {
             row_count: 0,
             owner: "system".into(),
             description: None,
+
+            repository: "https://github.com/unified-field-dev/valence".to_string(),
         },
     });
     let b_schema = leak_schema(Schema {
@@ -538,6 +544,8 @@ async fn defer_cycle_denies_sad() {
             row_count: 0,
             owner: "system".into(),
             description: None,
+
+            repository: "https://github.com/unified-field-dev/valence".to_string(),
         },
     });
     let a_meta = meta(a_schema);
@@ -1011,6 +1019,8 @@ async fn validate_unknown_edge_errors() {
             row_count: 0,
             owner: "system".into(),
             description: None,
+
+            repository: "https://github.com/unified-field-dev/valence".to_string(),
         },
     });
     let m = meta(schema);

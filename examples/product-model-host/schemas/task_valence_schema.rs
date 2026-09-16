@@ -2,6 +2,7 @@ use valence::prelude::*;
 
 valence_schema! {
     Task {
+        repository: "https://github.com/unified-field-dev/valence",
         table: "task",
         version: "0.1.0",
         policies: {

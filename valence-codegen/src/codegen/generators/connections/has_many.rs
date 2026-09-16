@@ -27,6 +27,7 @@ pub(super) fn push_has_many_method_for_connection(
         /// Navigate the `#conn_name` connection (HasMany). Loads related records, runs read privacy.
         pub async fn #get_method_name(&self, valence: &valence::Valence) -> valence::Result<Vec<#target_type>> {
             let id = valence::connection::id_from_model(self)?;
+            #[allow(deprecated)]
             #target_type::query(valence)
                 .#where_method_name(valence::RecordPredicate::Equals(
                     valence::RecordId::new(#self_table_lit, &id),

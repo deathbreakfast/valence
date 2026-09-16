@@ -2,6 +2,7 @@ use valence::prelude::*;
 
 valence_schema! {
     TypedProbe {
+        repository: "https://github.com/unified-field-dev/valence",
         table: "typed_probe",
         version: "0.1.0",
         policies: {

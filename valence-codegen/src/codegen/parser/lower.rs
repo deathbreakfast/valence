@@ -62,10 +62,11 @@ pub fn lower_parsed_schema(parsed: &ParsedSchema) -> Schema {
         ttl: parsed.ttl.as_ref().map(lower_ttl),
         ownership: parsed.ownership.as_ref().map(lower_ownership),
         meta: SchemaMeta {
-            retention: "365 days".to_string(),
+            retention: parsed.retention.clone(),
             row_count: 0,
-            owner: "system".to_string(),
+            owner: parsed.owner.clone(),
             description: parsed.description.clone(),
+            repository: parsed.repository.clone(),
         },
     }
 }
@@ -76,6 +77,7 @@ pub fn lower_parsed_trait(parsed: &ParsedTraitSchema) -> ParsedTraitDef {
     let connections = lower_connections(&parsed.connections, "__trait__");
     ParsedTraitDef {
         name: parsed.name.clone(),
+        repository: parsed.repository.clone(),
         fields,
         connections,
     }

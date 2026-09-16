@@ -13,6 +13,7 @@ use valence::prelude::*;
 
 valence_schema! {
     TestCheckpoint {
+        repository: "https://github.com/unified-field-dev/valence",
         table: "test_checkpoint",
         version: "0.1.0",
         description: "Test entity with composite key",
@@ -86,6 +87,7 @@ use valence::prelude::*;
 
 valence_schema! {
     TestPartialKey {
+        repository: "https://github.com/unified-field-dev/valence",
         table: "test_partial_key",
         version: "0.1.0",
 
@@ -127,6 +129,7 @@ use valence::prelude::*;
 
 valence_schema! {
     BadComposite {
+        repository: "https://github.com/unified-field-dev/valence",
         table: "bad_composite",
         version: "0.1.0",
 
@@ -161,6 +164,7 @@ use valence::prelude::*;
 
 valence_schema! {
     BadPkComposite {
+        repository: "https://github.com/unified-field-dev/valence",
         table: "bad_pk_composite",
         version: "0.1.0",
 

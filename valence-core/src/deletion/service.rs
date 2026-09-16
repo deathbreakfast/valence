@@ -83,6 +83,7 @@ impl DeletionService {
         v: &Valence,
     ) -> Result<Vec<Value>> {
         let sys = system_valence(v);
+        #[allow(deprecated)]
         QueryCore::new("valence_deletion_run".to_string())
             .where_string(
                 "root_table".to_string(),
@@ -106,6 +107,7 @@ impl DeletionService {
     /// Returns an error when the requested operation cannot be completed.
     pub async fn list_runs_for_schema(schema_table: &str, v: &Valence) -> Result<Vec<Value>> {
         let sys = system_valence(v);
+        #[allow(deprecated)]
         QueryCore::new("valence_deletion_run".to_string())
             .where_string(
                 "root_table".to_string(),
@@ -161,6 +163,7 @@ impl DeletionService {
     /// Returns an error when the requested operation cannot be completed.
     pub async fn list_runs_recent(limit: u32, v: &Valence) -> Result<Vec<Value>> {
         let sys = system_valence(v);
+        #[allow(deprecated)]
         QueryCore::new("valence_deletion_run".to_string())
             .order_by("requested_at".to_string(), SortDirection::Desc)
             .limit(limit)

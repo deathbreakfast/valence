@@ -19,10 +19,11 @@ pub(super) fn model_delete_method_tokens(cx: &CrudEmitCtx<'_>) -> TokenStream {
                     <Self as valence::Model>::table_name(),
                     id,
                 );
-                let before_json = valence::QueryCore::get_record_json(
+                let before_json = valence::QueryCore::get_record_json_used(
                     <Self as valence::Model>::table_name(),
                     &bare,
                     valence,
+                    valence::use_!(r#"When a model **deletes a row immediately**, we **load that row first** so Delete privacy and delete side effects can run against the pre-delete state. The same request path performing removal uses this load."#),
                 )
                 .await?;
                 let Some(before_json) = before_json else {

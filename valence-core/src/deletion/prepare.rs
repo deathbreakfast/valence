@@ -1,5 +1,6 @@
 //! Shared deletion preflight for queued and synchronous paths.
 
+use crate::data_use::DataUsePurpose;
 use crate::deletion::dag::{
     assert_safe_bare_thing_id, table_skips_pending_deletion_filter, DeletionDag,
 };
@@ -86,7 +87,18 @@ pub async fn prepare_deletion(
     let bare_id = normalize_record_id_for_deletion(table, id);
     assert_safe_bare_thing_id(&bare_id)?;
 
-    let Some(existing) = QueryCore::get_record_json(table, &bare_id, valence).await? else {
+    let Some(existing) = QueryCore::get_record_json_used(
+        table,
+        &bare_id,
+        valence,
+        DataUsePurpose::new(
+            r#"When someone requests **record deletion**, we **load that row** so Valence can confirm it exists, check Delete privacy, and decide queued versus immediate removal. The actor requesting deletion relies on this gate."#,
+            file!(),
+            line!(),
+        ),
+    )
+    .await?
+    else {
         return Ok(PreparedDeletion::Missing);
     };
 

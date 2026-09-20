@@ -9,6 +9,7 @@ use valence_core::error::Result;
 use valence_core::evaluator::{DatabaseEvaluator, DEFAULT_IN_MEMORY};
 use valence_core::privacy::{PrivacyEvaluator, PrivacyOperation, PrivacyRule};
 use valence_core::privacy_policies::common;
+use valence_core::data_use::DataUsePurpose;
 use valence_core::query::QueryCore;
 use valence_core::runtime::Valence;
 use valence_core::schema::{SchemaMetadata, SchemaRegistry};
@@ -109,7 +110,7 @@ pub async fn run_admin_contract(backend: Arc<dyn DatabaseBackend>) -> Result<()>
     // makes queue_delete_entity a no-op; reset it so the delete dispatch fires.
     OwnershipService::ensure_active_ownership("smoke", "s1", OwnerRef::system(), &v).await?;
 
-    let row = QueryCore::get_record_json("smoke", "s1", &v)
+    let row = QueryCore::get_record_json_used("smoke", "s1", &v, DataUsePurpose::new(r#"**Test:** Reloads fixture rows by id so the Valence suite can assert presence, absence, or field state after deletion and privacy scenarios. CI and developers running the suite only."#, file!(), line!()))
         .await?
         .expect("seeded row");
     assert!(
@@ -117,7 +118,7 @@ pub async fn run_admin_contract(backend: Arc<dyn DatabaseBackend>) -> Result<()>
         "seeded smoke row missing id key: {row}"
     );
 
-    let ids = QueryCore::latest_ids("smoke", 5, &v).await?;
+    let ids = QueryCore::latest_ids_used("smoke", 5, &v, DataUsePurpose::new(r#"**Test:** Lists recent fixture record ids so the Valence admin-contract suite can assert QueryCore listing helpers. CI and developers running the suite only."#, file!(), line!())).await?;
     assert_eq!(ids.len(), 1);
     assert_eq!(ids[0].id, "s1");
 

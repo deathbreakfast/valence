@@ -42,16 +42,26 @@ async fn main() {
     println!("schemas={schemas:?} traits={traits:?}");
 
     // Step 4 — Point read via QueryCore (JSON entity, privacy-aware path).
-    let row = QueryCore::get_record_json("smoke", "demo", &valence)
-        .await
-        .expect("read")
-        .expect("row exists");
+    let row = QueryCore::get_record_json_used(
+        "smoke",
+        "demo",
+        &valence,
+        valence::use_!(r#"When this **admin-runtime-host** demo explores registries, we **load the smoke row as JSON** so developers can see a QueryCore admin read without a UI. Developers running the example use this result."#),
+    )
+    .await
+    .expect("read")
+    .expect("row exists");
     println!("entity={row}");
 
     // Step 5 — Listing helper for admin UIs / tooling.
-    let ids = QueryCore::latest_ids("smoke", 10, &valence)
-        .await
-        .expect("latest_ids");
+    let ids = QueryCore::latest_ids_used(
+        "smoke",
+        10,
+        &valence,
+        valence::use_!(r#"When this **admin-runtime-host** demo explores registries, we **list recent smoke ids** so developers can see the admin listing helper without a UI. Developers running the example use this result."#),
+    )
+    .await
+    .expect("latest_ids");
     println!("latest_ids={ids:?}");
 
     println!("admin-runtime-host: OK");

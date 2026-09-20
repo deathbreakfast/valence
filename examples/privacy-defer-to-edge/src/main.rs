@@ -97,9 +97,14 @@ async fn main() -> valence::Result<()> {
     let hist_schema = SchemaRegistry::global()
         .get_schema("defer_demo_history")
         .expect("history schema registered");
-    let hist_raw = QueryCore::get_record_json("defer_demo_history", "h1", &sys)
-        .await?
-        .expect("history row");
+    let hist_raw = QueryCore::get_record_json_used(
+        "defer_demo_history",
+        "h1",
+        &sys,
+        valence::use_!(r#"When this **defer-to-edge** demo checks privacy, we **load the history satellite row** so owner allow and stranger deny can be evaluated against seeded data. Developers running the example use this result."#),
+    )
+    .await?
+    .expect("history row");
 
     let alice = sys.with_actor(Actor::User {
         user_id: "alice".into(),

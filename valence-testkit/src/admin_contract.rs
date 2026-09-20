@@ -4,12 +4,12 @@ use std::sync::{Arc, OnceLock};
 
 use valence_core::actor::Actor;
 use valence_core::admin_entity_delete::queue_delete_entity;
+use valence_core::data_use::DataUsePurpose;
 use valence_core::deletion::DeletionService;
 use valence_core::error::Result;
 use valence_core::evaluator::{DatabaseEvaluator, DEFAULT_IN_MEMORY};
 use valence_core::privacy::{PrivacyEvaluator, PrivacyOperation, PrivacyRule};
 use valence_core::privacy_policies::common;
-use valence_core::data_use::DataUsePurpose;
 use valence_core::query::QueryCore;
 use valence_core::runtime::Valence;
 use valence_core::schema::{SchemaMetadata, SchemaRegistry};

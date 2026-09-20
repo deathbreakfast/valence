@@ -55,9 +55,19 @@ async fn main() -> valence::Result<()> {
     .await?;
 
     // Step 4 — BelongsTo / HasMany navigation across backends (hard guarantee for this layout).
-    let project = task.get_project(&valence).await?;
+    let project = task
+        .get_project_used(
+            &valence,
+            valence::use_!(r#"**Test:** Follows the demo **task→project** link so cross-backend hop navigation can be asserted. Developers running the example use this result."#),
+        )
+        .await?;
     assert_eq!(project.name(), "alpha");
-    let tasks = Task::get_from_project(&project, &valence).await?;
+    let tasks = Task::get_from_project_used(
+        &project,
+        &valence,
+        valence::use_!(r#"**Test:** Lists demo **tasks for a project** so cross-backend HasMany reverse navigation can be asserted. Developers running the example use this result."#),
+    )
+    .await?;
     assert_eq!(tasks.len(), 1);
 
     // Step 5 — Same-backend filter query (Project lives entirely on mem).

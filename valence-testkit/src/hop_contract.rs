@@ -55,10 +55,20 @@ async fn run_mem_sqlite_hops(valence: &Valence) -> Result<()> {
     let task_row = Task::create_used(task, valence, valence::use_!(r"**Test:** Seeds a fixture **task** linked to a project so hop and cascade suites have a child row to navigate. CI and developers running the suite only.")).await?;
     let task_id = task_row.id().expect("task id").id().to_string();
 
-    let loaded_project = task_row.get_project(valence).await?;
+    let loaded_project = task_row
+        .get_project_used(
+            valence,
+            valence::use_!(r#"**Test:** Follows the fixture **task→project** link so hop suites can assert BelongsTo navigation. CI and developers running the suite only."#),
+        )
+        .await?;
     assert_eq!(loaded_project.name(), "alpha");
 
-    let tasks = Task::get_from_project(&loaded_project, valence).await?;
+    let tasks = Task::get_from_project_used(
+        &loaded_project,
+        valence,
+        valence::use_!(r#"**Test:** Lists fixture **tasks for a project** so hop suites can assert HasMany reverse navigation. CI and developers running the suite only."#),
+    )
+    .await?;
     assert_eq!(tasks.len(), 1);
     assert_eq!(tasks[0].id().expect("id").id(), task_id);
 

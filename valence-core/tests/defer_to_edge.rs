@@ -6,12 +6,12 @@ use std::sync::Arc;
 
 use valence_backend_mem::InMemoryBackend;
 use valence_core::actor::Actor;
+use valence_core::data_use::DataUsePurpose;
 use valence_core::error::Error;
 use valence_core::evaluator::DEFAULT_IN_MEMORY;
 use valence_core::privacy::{PrivacyEvaluator, DEFER_TO_EDGE_MAX_DEPTH};
 use valence_core::privacy_policies::common::{AUTHENTICATED, PUBLIC_READ, SYSTEM_ONLY};
 use valence_core::privacy_policies::owner::OWNER_BY_USER_FIELD;
-use valence_core::data_use::DataUsePurpose;
 use valence_core::query::QueryCore;
 use valence_core::schema::{SchemaMetadata, SchemaRegistry};
 use valence_core::schema_api::{

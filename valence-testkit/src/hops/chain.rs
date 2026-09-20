@@ -185,7 +185,12 @@ async fn seed_depth3(valence: &Valence, triple: HopTriple) -> Result<()> {
         "hop triple {}: expected seeded project",
         triple.slug()
     );
-    let tasks = Task::get_from_project(&projects[0], valence).await?;
+    let tasks = Task::get_from_project_used(
+        &projects[0],
+        valence,
+        valence::use_!(r#"**Test:** Lists fixture **tasks for a project** so hop-chain suites can assert reverse navigation. CI and developers running the suite only."#),
+    )
+    .await?;
     assert_eq!(
         tasks.len(),
         1,
@@ -240,7 +245,12 @@ async fn seed_depth4(valence: &Valence, quad: HopQuad) -> Result<()> {
         "hop quad {}: expected project after depth3",
         quad.slug()
     );
-    let tasks = Task::get_from_project(&projects[0], valence).await?;
+    let tasks = Task::get_from_project_used(
+        &projects[0],
+        valence,
+        valence::use_!(r#"**Test:** Lists fixture **tasks for a project** so hop-chain depth-4 suites can assert reverse navigation. CI and developers running the suite only."#),
+    )
+    .await?;
     assert!(
         !tasks.is_empty(),
         "hop quad {}: expected task via reverse nav",

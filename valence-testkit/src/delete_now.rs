@@ -4,6 +4,7 @@ use std::sync::Arc;
 
 use serde_json::json;
 use valence_core::actor::Actor;
+use valence_core::data_use::DataUsePurpose;
 use valence_core::deletion::dag::DeletionAction;
 use valence_core::deletion::{
     apply_deletion_node, delete_entity_now, prepare_deletion, DeletionMode, PreparedDeletion,
@@ -11,7 +12,6 @@ use valence_core::deletion::{
 use valence_core::evaluator::{DatabaseEvaluator, DEFAULT_IN_MEMORY};
 use valence_core::privacy::PrivacyRule;
 use valence_core::privacy_policies::common::{PUBLIC_READ, SYSTEM_ONLY};
-use valence_core::data_use::DataUsePurpose;
 use valence_core::query::QueryCore;
 use valence_core::router::DatabaseRouter;
 use valence_core::router_key::router_key;

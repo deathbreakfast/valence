@@ -11,6 +11,7 @@ use serde_json::json;
 use valence_backend_mem::InMemoryBackend;
 use valence_core::actor::Actor;
 use valence_core::compiled_query::CompiledQuery;
+use valence_core::data_use::DataUsePurpose;
 use valence_core::deletion::dag::{DeletionAction, DeletionDag};
 use valence_core::deletion::{
     delete_entity_now, normalize_record_id_for_deletion, prepare_deletion,
@@ -22,7 +23,6 @@ use valence_core::owner_ref::OwnerRef;
 use valence_core::ownership::OwnershipService;
 use valence_core::privacy::PrivacyRule;
 use valence_core::privacy_policies::common::{AUTHENTICATED, PUBLIC_READ, SYSTEM_ONLY};
-use valence_core::data_use::DataUsePurpose;
 use valence_core::query::QueryCore;
 use valence_core::read_cache;
 use valence_core::record_id::RecordId;
@@ -437,7 +437,18 @@ async fn delete_now_cascades_children_and_removes_root() {
         .unwrap();
     let from = RecordId::new("dn_root", "p1");
     let to = RecordId::new("dn_peer", "t1");
-    v.relate_edge("dn_root_peer", &from, &to).await.unwrap();
+    v.relate_edge_used(
+        "dn_root_peer",
+        &from,
+        &to,
+        DataUsePurpose::new(
+            r#"**Test:** Creates a fixture ManyToMany edge so delete_now can prove RemoveEdge clears links. CI and developers running the suite only."#,
+            file!(),
+            line!(),
+        ),
+    )
+    .await
+    .unwrap();
 
     delete_entity_now("dn_root", "p1", &v)
         .await
@@ -587,7 +598,18 @@ async fn delete_now_uses_dag_execution_order() {
         .unwrap();
     let from = RecordId::new("dn_root", "ord1");
     let to = RecordId::new("dn_peer", "ot1");
-    v.relate_edge("dn_root_peer", &from, &to).await.unwrap();
+    v.relate_edge_used(
+        "dn_root_peer",
+        &from,
+        &to,
+        DataUsePurpose::new(
+            r#"**Test:** Creates a fixture ManyToMany edge so delete_now can prove RemoveEdge clears links. CI and developers running the suite only."#,
+            file!(),
+            line!(),
+        ),
+    )
+    .await
+    .unwrap();
 
     let PreparedDeletion::Ready { dag, .. } =
         prepare_deletion("dn_root", "ord1", DeletionMode::Now, &v)

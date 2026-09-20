@@ -40,6 +40,9 @@ impl ScoreTracker {
         &self.user
     }
     /// Navigate the `#from_field` connection. Loads full target, runs read privacy.
+    #[deprecated(
+        note = "use the *_used twin with use_!(...) for declared data-use transparency"
+    )]
     pub async fn get_user(
         &self,
         valence: &valence::Valence,
@@ -51,21 +54,67 @@ impl ScoreTracker {
             format!("{} {} not found", "user", id),
         ))
     }
+    /// Navigate the `#from_field` connection with a declared data use.
+    pub async fn get_user_used(
+        &self,
+        valence: &valence::Valence,
+        purpose: valence::DataUsePurpose,
+    ) -> valence::Result<crate::generated::User> {
+        let id = valence::connection::extract_id_from_record(&self.user)?;
+        let row = <crate::generated::User as valence::Model>::get_used(
+                &id,
+                valence,
+                purpose,
+            )
+            .await?;
+        row.ok_or_else(|| valence::Error::NotFound(
+            format!("{} {} not found", "user", id),
+        ))
+    }
     /// Reverse: all records pointing to this target (by reference)
+    #[deprecated(
+        note = "use the *_used twin with use_!(...) for declared data-use transparency"
+    )]
     pub async fn get_from_user(
         target: &crate::generated::User,
         valence: &valence::Valence,
     ) -> valence::Result<Vec<ScoreTracker>> {
         let id = valence::connection::id_from_model(target)?;
-        Self::get_from_user_id(&id, valence).await
+        #[allow(deprecated)] Self::get_from_user_id(&id, valence).await
+    }
+    /// Reverse: all records pointing to this target (by reference), with a declared data use.
+    pub async fn get_from_user_used(
+        target: &crate::generated::User,
+        valence: &valence::Valence,
+        purpose: valence::DataUsePurpose,
+    ) -> valence::Result<Vec<ScoreTracker>> {
+        let id = valence::connection::id_from_model(target)?;
+        Self::get_from_user_id_used(&id, valence, purpose).await
     }
     /// Reverse: all records pointing to this target (by ID)
+    #[deprecated(
+        note = "use the *_used twin with use_!(...) for declared data-use transparency"
+    )]
     pub async fn get_from_user_id(
         target_id: &str,
         valence: &valence::Valence,
     ) -> valence::Result<Vec<ScoreTracker>> {
         #[allow(deprecated)]
         ScoreTracker::query(valence)
+            .where_user(
+                valence::RecordPredicate::Equals(
+                    valence::RecordId::new("user", target_id),
+                ),
+            )
+            .await
+    }
+    /// Reverse: all records pointing to this target (by ID), with a declared data use.
+    pub async fn get_from_user_id_used(
+        target_id: &str,
+        valence: &valence::Valence,
+        purpose: valence::DataUsePurpose,
+    ) -> valence::Result<Vec<ScoreTracker>> {
+        ScoreTracker::query_used(valence, purpose)
             .where_user(
                 valence::RecordPredicate::Equals(
                     valence::RecordId::new("user", target_id),
@@ -797,9 +846,25 @@ impl<'a> ScoreTrackerMutable<'a> {
         }
     }
     /// Load entity from DB directly as mutable.
+    #[deprecated(
+        note = "use get_used with use_!(...) for declared data-use transparency"
+    )]
     pub async fn get(id: &str, valence: &'a valence::Valence) -> valence::Result<Self> {
         #[allow(deprecated)]
         let model = <ScoreTracker as valence::Model>::get(id, valence)
+            .await?
+            .ok_or_else(|| valence::Error::Validation(
+                format!("Entity not found: {}:{}", "score_tracker", id),
+            ))?;
+        Ok(Self::new(model, valence))
+    }
+    /// Load entity from DB directly as mutable with a declared data use.
+    pub async fn get_used(
+        id: &str,
+        valence: &'a valence::Valence,
+        purpose: valence::DataUsePurpose,
+    ) -> valence::Result<Self> {
+        let model = <ScoreTracker as valence::Model>::get_used(id, valence, purpose)
             .await?
             .ok_or_else(|| valence::Error::Validation(
                 format!("Entity not found: {}:{}", "score_tracker", id),
@@ -954,8 +1019,17 @@ impl<'a> ScoreTrackerQuery<'a> {
         self.inner = self.inner.order_by("value".to_string(), direction);
         self
     }
+    #[deprecated(
+        note = "use the *_used twin with use_!(...) for declared data-use transparency"
+    )]
     pub async fn distinct_id(self) -> valence::Result<Vec<String>> {
-        self.inner.distinct_values("id", self.valence).await
+        #[allow(deprecated)] self.inner.distinct_values("id", self.valence).await
+    }
+    pub async fn distinct_id_used(
+        self,
+        purpose: valence::DataUsePurpose,
+    ) -> valence::Result<Vec<String>> {
+        self.inner.distinct_values_used("id", self.valence, purpose).await
     }
     /// OR-combine another query's conditions with this one.
     /// Returns rows matching *either* set of WHERE conditions.

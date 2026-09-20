@@ -20,15 +20,31 @@ pub(super) fn push_has_many_method_for_connection(
     let target_type = connection_target_type(conn);
 
     let get_method_name = format_ident!("get_{}", conn_name);
+    let get_method_used = format_ident!("get_{}_used", conn_name);
     let where_method_name = format_ident!("where_{}", reverse_field);
     let self_table_lit = schema.table_name.as_str();
 
     methods.push(quote! {
         /// Navigate the `#conn_name` connection (HasMany). Loads related records, runs read privacy.
+        #[deprecated(note = "use the *_used twin with use_!(...) for declared data-use transparency")]
         pub async fn #get_method_name(&self, valence: &valence::Valence) -> valence::Result<Vec<#target_type>> {
             let id = valence::connection::id_from_model(self)?;
             #[allow(deprecated)]
             #target_type::query(valence)
+                .#where_method_name(valence::RecordPredicate::Equals(
+                    valence::RecordId::new(#self_table_lit, &id),
+                ))
+                .await
+        }
+
+        /// Navigate the `#conn_name` connection (HasMany) with a declared data use.
+        pub async fn #get_method_used(
+            &self,
+            valence: &valence::Valence,
+            purpose: valence::DataUsePurpose,
+        ) -> valence::Result<Vec<#target_type>> {
+            let id = valence::connection::id_from_model(self)?;
+            #target_type::query_used(valence, purpose)
                 .#where_method_name(valence::RecordPredicate::Equals(
                     valence::RecordId::new(#self_table_lit, &id),
                 ))

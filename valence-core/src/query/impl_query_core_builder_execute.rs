@@ -195,6 +195,7 @@ impl QueryCore {
     /// # Errors
     ///
     /// Returns an error when the requested operation cannot be completed.
+    #[deprecated(note = "use distinct_values_used with use_!(...) for declared data-use transparency")]
     pub async fn distinct_values(mut self, field: &str, valence: &Valence) -> Result<Vec<String>> {
         crate::safe_ident::assert_safe_ident(field)?;
         self.projection = None;
@@ -226,6 +227,22 @@ impl QueryCore {
             }
         }
         Ok(results)
+    }
+
+    /// Declared Unscoped distinct-values query (same as [`Self::distinct_values`]).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the requested operation cannot be completed.
+    pub async fn distinct_values_used(
+        self,
+        field: &str,
+        valence: &Valence,
+        purpose: crate::data_use::DataUsePurpose,
+    ) -> Result<Vec<String>> {
+        let _ = purpose;
+        #[allow(deprecated)]
+        self.distinct_values(field, valence).await
     }
 
     async fn post_filter_connection_privacy<T>(

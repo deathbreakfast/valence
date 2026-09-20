@@ -133,6 +133,9 @@ impl Valence {
     /// # Errors
     ///
     /// Returns an error when the requested operation cannot be completed.
+    #[deprecated(
+        note = "use get_many_to_many_target_record_ids_used with use_!(...) for declared data-use transparency"
+    )]
     pub async fn get_many_to_many_target_record_ids(
         &self,
         from: &RecordId,
@@ -140,6 +143,23 @@ impl Valence {
     ) -> Result<Vec<RecordId>> {
         let backend = self.active_backend()?;
         backend.get_edge_targets(from, edge_table).await
+    }
+
+    /// Declared Unscoped M2M edge-target id read (same as [`Self::get_many_to_many_target_record_ids`]).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the requested operation cannot be completed.
+    pub async fn get_many_to_many_target_record_ids_used(
+        &self,
+        from: &RecordId,
+        edge_table: &str,
+        purpose: crate::data_use::DataUsePurpose,
+    ) -> Result<Vec<RecordId>> {
+        let _ = purpose;
+        #[allow(deprecated)]
+        self.get_many_to_many_target_record_ids(from, edge_table)
+            .await
     }
 
     /// Create a graph edge between two records in `edge_table`.
@@ -151,6 +171,7 @@ impl Valence {
     /// # Errors
     ///
     /// Returns an error when the requested operation cannot be completed.
+    #[deprecated(note = "use relate_edge_used with use_!(...) for declared data-use transparency")]
     pub async fn relate_edge(
         &self,
         edge_table: &str,
@@ -159,6 +180,23 @@ impl Valence {
     ) -> Result<()> {
         let backend = self.active_backend()?;
         backend.relate_edge(from, edge_table, to).await
+    }
+
+    /// Declared Unscoped edge create (same as [`Self::relate_edge`]).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the requested operation cannot be completed.
+    pub async fn relate_edge_used(
+        &self,
+        edge_table: &str,
+        from: &RecordId,
+        to: &RecordId,
+        purpose: crate::data_use::DataUsePurpose,
+    ) -> Result<()> {
+        let _ = purpose;
+        #[allow(deprecated)]
+        self.relate_edge(edge_table, from, to).await
     }
 
     /// Delete a graph edge between two records in `edge_table`.
@@ -170,6 +208,9 @@ impl Valence {
     /// # Errors
     ///
     /// Returns an error when the requested operation cannot be completed.
+    #[deprecated(
+        note = "use unrelate_edge_used with use_!(...) for declared data-use transparency"
+    )]
     pub async fn unrelate_edge(
         &self,
         edge_table: &str,
@@ -178,6 +219,23 @@ impl Valence {
     ) -> Result<()> {
         let backend = self.active_backend()?;
         backend.unrelate_edge(from, edge_table, to).await
+    }
+
+    /// Declared Unscoped edge delete (same as [`Self::unrelate_edge`]).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the requested operation cannot be completed.
+    pub async fn unrelate_edge_used(
+        &self,
+        edge_table: &str,
+        from: &RecordId,
+        to: &RecordId,
+        purpose: crate::data_use::DataUsePurpose,
+    ) -> Result<()> {
+        let _ = purpose;
+        #[allow(deprecated)]
+        self.unrelate_edge(edge_table, from, to).await
     }
 
     /// # Errors

@@ -699,9 +699,25 @@ impl<'a> TestTraitAMutable<'a> {
         }
     }
     /// Load entity from DB directly as mutable.
+    #[deprecated(
+        note = "use get_used with use_!(...) for declared data-use transparency"
+    )]
     pub async fn get(id: &str, valence: &'a valence::Valence) -> valence::Result<Self> {
         #[allow(deprecated)]
         let model = <TestTraitA as valence::Model>::get(id, valence)
+            .await?
+            .ok_or_else(|| valence::Error::Validation(
+                format!("Entity not found: {}:{}", "test_trait_a", id),
+            ))?;
+        Ok(Self::new(model, valence))
+    }
+    /// Load entity from DB directly as mutable with a declared data use.
+    pub async fn get_used(
+        id: &str,
+        valence: &'a valence::Valence,
+        purpose: valence::DataUsePurpose,
+    ) -> valence::Result<Self> {
+        let model = <TestTraitA as valence::Model>::get_used(id, valence, purpose)
             .await?
             .ok_or_else(|| valence::Error::Validation(
                 format!("Entity not found: {}:{}", "test_trait_a", id),
@@ -830,11 +846,29 @@ impl<'a> TestTraitAQuery<'a> {
         self.inner = self.inner.order_by("name".to_string(), direction);
         self
     }
+    #[deprecated(
+        note = "use the *_used twin with use_!(...) for declared data-use transparency"
+    )]
     pub async fn distinct_id(self) -> valence::Result<Vec<String>> {
-        self.inner.distinct_values("id", self.valence).await
+        #[allow(deprecated)] self.inner.distinct_values("id", self.valence).await
     }
+    pub async fn distinct_id_used(
+        self,
+        purpose: valence::DataUsePurpose,
+    ) -> valence::Result<Vec<String>> {
+        self.inner.distinct_values_used("id", self.valence, purpose).await
+    }
+    #[deprecated(
+        note = "use the *_used twin with use_!(...) for declared data-use transparency"
+    )]
     pub async fn distinct_name(self) -> valence::Result<Vec<String>> {
-        self.inner.distinct_values("name", self.valence).await
+        #[allow(deprecated)] self.inner.distinct_values("name", self.valence).await
+    }
+    pub async fn distinct_name_used(
+        self,
+        purpose: valence::DataUsePurpose,
+    ) -> valence::Result<Vec<String>> {
+        self.inner.distinct_values_used("name", self.valence, purpose).await
     }
     /// OR-combine another query's conditions with this one.
     /// Returns rows matching *either* set of WHERE conditions.

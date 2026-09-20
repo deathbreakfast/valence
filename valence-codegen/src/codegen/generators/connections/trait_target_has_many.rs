@@ -20,6 +20,7 @@ pub(super) fn push_has_many_trait_target_method(
 
     let conn_name = &conn.from_field;
     let get_method_name = format_ident!("get_{}", conn_name);
+    let get_method_used = format_ident!("get_{}_used", conn_name);
     let where_method_name = format_ident!("where_{}", reverse_field);
     let target_query_all = format_ident!("{}QueryAll", target_trait);
     let target_model = format_ident!("{}Model", target_trait);
@@ -28,6 +29,7 @@ pub(super) fn push_has_many_trait_target_method(
     methods.push(quote! {
         /// Navigate the `#conn_name` connection (HasMany trait target).
         /// Returns rows from all trait implementor tables for this source.
+        #[deprecated(note = "use the *_used twin with use_!(...) for declared data-use transparency")]
         pub async fn #get_method_name(
             &self,
             valence: &valence::Valence,
@@ -36,6 +38,19 @@ pub(super) fn push_has_many_trait_target_method(
             let parent_rid = valence::RecordId::new(#self_table_lit, &id);
             #[allow(deprecated)]
             #target_query_all::query(valence)
+                .#where_method_name(valence::RecordPredicate::Equals(parent_rid))
+                .await
+        }
+
+        /// Navigate the `#conn_name` connection (HasMany trait target) with a declared data use.
+        pub async fn #get_method_used(
+            &self,
+            valence: &valence::Valence,
+            purpose: valence::DataUsePurpose,
+        ) -> valence::Result<Vec<#target_model>> {
+            let id = valence::connection::id_from_model(self)?;
+            let parent_rid = valence::RecordId::new(#self_table_lit, &id);
+            #target_query_all::query_used(valence, purpose)
                 .#where_method_name(valence::RecordPredicate::Equals(parent_rid))
                 .await
         }

@@ -106,13 +106,26 @@
 //! trait parse or codegen. Bare `Model::get` / `create` / … remain available but are
 //! deprecated (warn-only in v1).
 //!
-//! ## Variant: trait and Unscoped
+//! ## Variant: trait, Unscoped, and connection loads
 //!
 //! ```rust,ignore
 //! use valence::{use_, QueryCore};
 //!
 //! NamedQueryAll::query_used(&v, valence::use_!(r#"On the **admin picker**, we **list named entities** so an operator can choose which record to open. Only people with access to that admin surface use this list."#)).await?;
 //! QueryCore::execute_used(builder, valence::use_!(r#"When Valence runs a **graph walk** across registered models, we **execute that query** so deletion and connection tools can traverse related rows. Platform operators and automation use the result."#)).await?;
+//!
+//! // HasOne edge load — purpose on the navigator that starts the fetch
+//! let profile = user.get_profile_used(
+//!     &v,
+//!     valence::use_!(r#"On your **account page**, we **follow the profile link** from your user record so we can **show your display name**. Only you see this page for your account."#),
+//! ).await?;
+//!
+//! // ManyToMany relate
+//! permission.relate_to_owner_record_used(
+//!     &principal_id,
+//!     &v,
+//!     valence::use_!(r#"When an admin **grants ownership**, we **write the owner edge** so Gauge can enforce who may approve later requests. Operators see the updated owners on the permission detail."#),
+//! ).await?;
 //! ```
 //!
 //! Next: wire `uf-valence-data-use-scan::generate` from host `build.rs`,

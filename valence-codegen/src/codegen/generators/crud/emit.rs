@@ -67,9 +67,23 @@ fn emit_mutable_builder_and_composite(cx: &CrudEmitCtx<'_>) -> TokenStream {
             }
 
             /// Load entity from DB directly as mutable.
+            #[deprecated(note = "use get_used with use_!(...) for declared data-use transparency")]
             pub async fn get(id: &str, valence: &'a valence::Valence) -> valence::Result<Self> {
                 #[allow(deprecated)]
                 let model = <#struct_name as valence::Model>::get(id, valence).await?
+                    .ok_or_else(|| valence::Error::Validation(
+                        format!("Entity not found: {}:{}", #table_name_lit, id)
+                    ))?;
+                Ok(Self::new(model, valence))
+            }
+
+            /// Load entity from DB directly as mutable with a declared data use.
+            pub async fn get_used(
+                id: &str,
+                valence: &'a valence::Valence,
+                purpose: valence::DataUsePurpose,
+            ) -> valence::Result<Self> {
+                let model = <#struct_name as valence::Model>::get_used(id, valence, purpose).await?
                     .ok_or_else(|| valence::Error::Validation(
                         format!("Entity not found: {}:{}", #table_name_lit, id)
                     ))?;

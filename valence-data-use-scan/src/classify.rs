@@ -10,7 +10,16 @@ pub fn classify_method(method: &str) -> OpKind {
         "create" => OpKind::Create,
         "update" | "merge" | "upsert" | "upsert_by_composite_key" | "commit" => OpKind::Update,
         "delete" | "delete_now" => OpKind::Delete,
-        // get, query, get_mutable, execute, get_entity, get_record*, latest_ids, …
+        // M2M / Valence edge mutates
+        b if b.starts_with("relate_to")
+            || b.starts_with("unrelate_from")
+            || b.starts_with("relate_edge")
+            || b.starts_with("unrelate_edge") =>
+        {
+            OpKind::Update
+        }
+        // get, query, get_mutable, execute, get_entity, get_record*, latest_ids,
+        // get_user / get_from_* / get_*_record_ids, …
         _ => OpKind::Read,
     }
 }
@@ -78,10 +87,20 @@ mod tests {
         assert_eq!(classify_method("query_used"), OpKind::Read);
         assert_eq!(classify_method("get_mutable_used"), OpKind::Read);
         assert_eq!(classify_method("execute_used"), OpKind::Read);
+        assert_eq!(classify_method("get_user_used"), OpKind::Read);
+        assert_eq!(classify_method("get_from_user_id_used"), OpKind::Read);
+        assert_eq!(classify_method("get_owners_record_ids_used"), OpKind::Read);
         assert_eq!(classify_method("create_used"), OpKind::Create);
         assert_eq!(classify_method("merge_used"), OpKind::Update);
         assert_eq!(classify_method("upsert_used"), OpKind::Update);
         assert_eq!(classify_method("delete_now_used"), OpKind::Delete);
+        assert_eq!(
+            classify_method("relate_to_owner_record_used"),
+            OpKind::Update
+        );
+        assert_eq!(classify_method("unrelate_from_tag_used"), OpKind::Update);
+        assert_eq!(classify_method("relate_edge_used"), OpKind::Update);
+        assert_eq!(classify_method("unrelate_edge_used"), OpKind::Update);
     }
 
     #[test]

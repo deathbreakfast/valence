@@ -4,11 +4,11 @@ use std::sync::Arc;
 
 use serde_json::json;
 use valence_core::actor::Actor;
+use valence_core::data_use::DataUsePurpose;
 use valence_core::deletion::dag::{DeletionDag, DeletionNode};
 use valence_core::deletion::{apply_deletion_dag, delete_entity_now};
 use valence_core::evaluator::{Database, DatabaseEvaluator, DEFAULT_IN_MEMORY};
 use valence_core::privacy_policies::common::PUBLIC_READ;
-use valence_core::data_use::DataUsePurpose;
 use valence_core::query::QueryCore;
 use valence_core::record_id::RecordId;
 use valence_core::router::DatabaseRouter;
@@ -295,7 +295,16 @@ pub async fn run_on_delete_remove_edge(valence: &Valence) -> Result<(), String> 
     let from = RecordId::new("od_edge_parent", &pid);
     let to = RecordId::new("od_edge_peer", &tid);
     valence
-        .relate_edge("od_edge_link", &from, &to)
+        .relate_edge_used(
+            "od_edge_link",
+            &from,
+            &to,
+            DataUsePurpose::new(
+                r#"**Test:** Creates a fixture edge so on_delete RemoveEdge can clear links. CI and developers running the suite only."#,
+                file!(),
+                line!(),
+            ),
+        )
         .await
         .map_err(|e| e.to_string())?;
 

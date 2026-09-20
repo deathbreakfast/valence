@@ -125,10 +125,22 @@ pub(super) fn collect_field_query_methods(
                 ));
         if is_string_like {
             let distinct_method_name = format_ident!("distinct_{}", field_name_str);
+            let distinct_method_used = format_ident!("distinct_{}_used", field_name_str);
             let field_name_lit = LitStr::new(field_name_str, proc_macro2::Span::call_site());
             distinct_methods.push(quote! {
+                #[deprecated(note = "use the *_used twin with use_!(...) for declared data-use transparency")]
                 pub async fn #distinct_method_name(self) -> valence::Result<Vec<String>> {
+                    #[allow(deprecated)]
                     self.inner.distinct_values(#field_name_lit, self.valence).await
+                }
+
+                pub async fn #distinct_method_used(
+                    self,
+                    purpose: valence::DataUsePurpose,
+                ) -> valence::Result<Vec<String>> {
+                    self.inner
+                        .distinct_values_used(#field_name_lit, self.valence, purpose)
+                        .await
                 }
             });
         }

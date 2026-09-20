@@ -106,10 +106,32 @@ async fn apply_remove_edge(
         .backend_for_table(table)
         .or_else(|_| valence.active_backend())?;
     for to in backend.get_edge_targets(&endpoint, edge_table).await? {
-        valence.unrelate_edge(edge_table, &endpoint, &to).await?;
+        valence
+            .unrelate_edge_used(
+                edge_table,
+                &endpoint,
+                &to,
+                crate::data_use::DataUsePurpose::new(
+                    "When Valence **applies a deletion plan**, we **remove outgoing graph edges** for this record so related links do not outlive the deleted row. This step runs only inside the deletion engine.",
+                    file!(),
+                    line!(),
+                ),
+            )
+            .await?;
     }
     for from in backend.get_edge_sources(&endpoint, edge_table).await? {
-        valence.unrelate_edge(edge_table, &from, &endpoint).await?;
+        valence
+            .unrelate_edge_used(
+                edge_table,
+                &from,
+                &endpoint,
+                crate::data_use::DataUsePurpose::new(
+                    "When Valence **applies a deletion plan**, we **remove incoming graph edges** for this record so related links do not outlive the deleted row. This step runs only inside the deletion engine.",
+                    file!(),
+                    line!(),
+                ),
+            )
+            .await?;
     }
     Ok(())
 }

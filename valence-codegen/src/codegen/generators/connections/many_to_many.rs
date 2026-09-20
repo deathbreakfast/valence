@@ -17,13 +17,19 @@ pub(super) fn push_many_to_many_concrete_methods(
     let target_type = connection_target_type(conn);
 
     let get_method_name = format_ident!("get_{}", conn_name);
+    let get_method_used = format_ident!("get_{}_used", conn_name);
     let edge_table_lit = edge_table.as_str();
     let to_table_lit = conn.to_table.as_str();
+    let deprecation = quote! {
+        #[deprecated(note = "use the *_used twin with use_!(...) for declared data-use transparency")]
+    };
 
     methods.push(quote! {
         /// Navigate the `#conn_name` connection (ManyToMany). Loads related records via edge table, runs read privacy.
+        #deprecation
         pub async fn #get_method_name(&self, valence: &valence::Valence) -> valence::Result<Vec<#target_type>> {
             let from_rid = self.id().ok_or_else(|| valence::Error::Validation("Record has no id".into()))?;
+            #[allow(deprecated)]
             let ids = valence
                 .get_many_to_many_target_record_ids(&from_rid, #edge_table_lit)
                 .await?;
@@ -41,26 +47,83 @@ pub(super) fn push_many_to_many_concrete_methods(
             }
             Ok(results)
         }
+
+        /// Navigate the `#conn_name` connection (ManyToMany) with a declared data use.
+        pub async fn #get_method_used(
+            &self,
+            valence: &valence::Valence,
+            purpose: valence::DataUsePurpose,
+        ) -> valence::Result<Vec<#target_type>> {
+            let from_rid = self.id().ok_or_else(|| valence::Error::Validation("Record has no id".into()))?;
+            let ids = valence
+                .get_many_to_many_target_record_ids_used(&from_rid, #edge_table_lit, purpose)
+                .await?;
+            let mut results = Vec::new();
+            for out_rid in ids {
+                if out_rid.table() != #to_table_lit {
+                    continue;
+                }
+                let id = valence::extract_id_from_record(&out_rid)?;
+                let row = <#target_type as valence::Model>::get_used(&id, valence, purpose).await?;
+                if let Some(row) = row {
+                    results.push(row);
+                }
+            }
+            Ok(results)
+        }
     });
 
     let singular = conn_name.strip_suffix('s').unwrap_or(conn_name);
     let relate_name = format_ident!("relate_to_{}", singular);
+    let relate_name_used = format_ident!("relate_to_{}_used", singular);
     let unrelate_name = format_ident!("unrelate_from_{}", singular);
+    let unrelate_name_used = format_ident!("unrelate_from_{}_used", singular);
 
     methods.push(quote! {
         /// Create a ManyToMany edge between this record and the target.
+        #deprecation
         pub async fn #relate_name(&self, target: &#target_type, valence: &valence::Valence) -> valence::Result<()> {
             let from_rid = self.id().ok_or_else(|| valence::Error::Validation("Record has no id".into()))?;
             let to_rid = target.id().ok_or_else(|| valence::Error::Validation("Target has no id".into()))?;
+            #[allow(deprecated)]
             valence.relate_edge(#edge_table_lit, &from_rid, &to_rid).await
         }
-    });
-    methods.push(quote! {
+
+        /// Create a ManyToMany edge with a declared data use.
+        pub async fn #relate_name_used(
+            &self,
+            target: &#target_type,
+            valence: &valence::Valence,
+            purpose: valence::DataUsePurpose,
+        ) -> valence::Result<()> {
+            let from_rid = self.id().ok_or_else(|| valence::Error::Validation("Record has no id".into()))?;
+            let to_rid = target.id().ok_or_else(|| valence::Error::Validation("Target has no id".into()))?;
+            valence
+                .relate_edge_used(#edge_table_lit, &from_rid, &to_rid, purpose)
+                .await
+        }
+
         /// Remove the ManyToMany edge between this record and the target.
+        #deprecation
         pub async fn #unrelate_name(&self, target: &#target_type, valence: &valence::Valence) -> valence::Result<()> {
             let from_rid = self.id().ok_or_else(|| valence::Error::Validation("Record has no id".into()))?;
             let to_rid = target.id().ok_or_else(|| valence::Error::Validation("Target has no id".into()))?;
+            #[allow(deprecated)]
             valence.unrelate_edge(#edge_table_lit, &from_rid, &to_rid).await
+        }
+
+        /// Remove a ManyToMany edge with a declared data use.
+        pub async fn #unrelate_name_used(
+            &self,
+            target: &#target_type,
+            valence: &valence::Valence,
+            purpose: valence::DataUsePurpose,
+        ) -> valence::Result<()> {
+            let from_rid = self.id().ok_or_else(|| valence::Error::Validation("Record has no id".into()))?;
+            let to_rid = target.id().ok_or_else(|| valence::Error::Validation("Target has no id".into()))?;
+            valence
+                .unrelate_edge_used(#edge_table_lit, &from_rid, &to_rid, purpose)
+                .await
         }
     });
 }
@@ -74,12 +137,17 @@ pub(super) fn push_many_to_many_trait_target_methods(
     };
     let conn_name = &conn.from_field;
     let get_method_name = format_ident!("get_{}_record_ids", conn_name);
+    let get_method_used = format_ident!("get_{}_record_ids_used", conn_name);
     let edge_table_lit = edge_table.as_str();
     let target_trait_lit = conn.target_trait.as_deref().unwrap_or_default();
+    let deprecation = quote! {
+        #[deprecated(note = "use the *_used twin with use_!(...) for declared data-use transparency")]
+    };
 
     methods.push(quote! {
         /// Navigate the `#conn_name` connection (ManyToMany trait target).
         /// Returns target [`valence::RecordId`] values so callers can resolve concrete models by table.
+        #deprecation
         pub async fn #get_method_name(&self, valence: &valence::Valence) -> valence::Result<Vec<valence::RecordId>> {
             let from_rid = self.id().ok_or_else(|| valence::Error::Validation("Record has no id".into()))?;
             let allowed_tables = valence::TraitRegistry::global()
@@ -87,7 +155,29 @@ pub(super) fn push_many_to_many_trait_target_methods(
                 .into_iter()
                 .map(str::to_string)
                 .collect::<std::collections::HashSet<_>>();
+            #[allow(deprecated)]
             let ids = valence.get_many_to_many_target_record_ids(&from_rid, #edge_table_lit).await?;
+            Ok(ids
+                .into_iter()
+                .filter(|rid| allowed_tables.contains(rid.table()))
+                .collect())
+        }
+
+        /// Navigate the `#conn_name` connection (ManyToMany trait target) with a declared data use.
+        pub async fn #get_method_used(
+            &self,
+            valence: &valence::Valence,
+            purpose: valence::DataUsePurpose,
+        ) -> valence::Result<Vec<valence::RecordId>> {
+            let from_rid = self.id().ok_or_else(|| valence::Error::Validation("Record has no id".into()))?;
+            let allowed_tables = valence::TraitRegistry::global()
+                .tables_for_trait(#target_trait_lit)
+                .into_iter()
+                .map(str::to_string)
+                .collect::<std::collections::HashSet<_>>();
+            let ids = valence
+                .get_many_to_many_target_record_ids_used(&from_rid, #edge_table_lit, purpose)
+                .await?;
             Ok(ids
                 .into_iter()
                 .filter(|rid| allowed_tables.contains(rid.table()))
@@ -97,10 +187,13 @@ pub(super) fn push_many_to_many_trait_target_methods(
 
     let singular = conn_name.strip_suffix('s').unwrap_or(conn_name);
     let relate_name = format_ident!("relate_to_{}_record", singular);
+    let relate_name_used = format_ident!("relate_to_{}_record_used", singular);
     let unrelate_name = format_ident!("unrelate_from_{}_record", singular);
+    let unrelate_name_used = format_ident!("unrelate_from_{}_record_used", singular);
 
     methods.push(quote! {
         /// Create a ManyToMany edge between this record and a trait target record.
+        #deprecation
         pub async fn #relate_name(&self, target: &valence::RecordId, valence: &valence::Valence) -> valence::Result<()> {
             let from_rid = self.id().ok_or_else(|| valence::Error::Validation("Record has no id".into()))?;
             let allowed_tables = valence::TraitRegistry::global().tables_for_trait(#target_trait_lit);
@@ -111,14 +204,51 @@ pub(super) fn push_many_to_many_trait_target_methods(
                     #target_trait_lit
                 )));
             }
+            #[allow(deprecated)]
             valence.relate_edge(#edge_table_lit, &from_rid, target).await
         }
-    });
-    methods.push(quote! {
+
+        /// Create a ManyToMany edge to a trait target with a declared data use.
+        pub async fn #relate_name_used(
+            &self,
+            target: &valence::RecordId,
+            valence: &valence::Valence,
+            purpose: valence::DataUsePurpose,
+        ) -> valence::Result<()> {
+            let from_rid = self.id().ok_or_else(|| valence::Error::Validation("Record has no id".into()))?;
+            let allowed_tables = valence::TraitRegistry::global().tables_for_trait(#target_trait_lit);
+            if !allowed_tables.iter().any(|table| *table == target.table()) {
+                let _ = purpose;
+                return Err(valence::Error::Validation(format!(
+                    "Target table '{}' does not implement trait '{}'",
+                    target.table(),
+                    #target_trait_lit
+                )));
+            }
+            valence
+                .relate_edge_used(#edge_table_lit, &from_rid, target, purpose)
+                .await
+        }
+
         /// Remove the ManyToMany edge between this record and a trait target record.
+        #deprecation
         pub async fn #unrelate_name(&self, target: &valence::RecordId, valence: &valence::Valence) -> valence::Result<()> {
             let from_rid = self.id().ok_or_else(|| valence::Error::Validation("Record has no id".into()))?;
+            #[allow(deprecated)]
             valence.unrelate_edge(#edge_table_lit, &from_rid, target).await
+        }
+
+        /// Remove a ManyToMany edge from a trait target with a declared data use.
+        pub async fn #unrelate_name_used(
+            &self,
+            target: &valence::RecordId,
+            valence: &valence::Valence,
+            purpose: valence::DataUsePurpose,
+        ) -> valence::Result<()> {
+            let from_rid = self.id().ok_or_else(|| valence::Error::Validation("Record has no id".into()))?;
+            valence
+                .unrelate_edge_used(#edge_table_lit, &from_rid, target, purpose)
+                .await
         }
     });
 }

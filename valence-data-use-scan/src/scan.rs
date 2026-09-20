@@ -19,24 +19,11 @@ pub struct FoundUse {
     pub method: String,
 }
 
-const USED_METHODS: &[&str] = &[
-    "get_used",
-    "create_used",
-    "update_used",
-    "delete_used",
-    "delete_now_used",
-    "upsert_used",
-    "merge_used",
-    "query_used",
-    "get_mutable_used",
-    "execute_used",
-    "get_entity_used",
-    "get_record_json_used",
-    "get_record_used",
-    "latest_ids_used",
-    "get_by_composite_key_used",
-    "upsert_by_composite_key_used",
-];
+/// True when `method` is a declared data-use twin (`*_used`).
+#[must_use]
+pub fn is_used_method(method: &str) -> bool {
+    method.ends_with("_used") && method.len() > "_used".len()
+}
 
 /// Parse `path` and collect `*_used` call sites.
 pub fn scan_file(
@@ -73,7 +60,7 @@ struct UseVisitor {
 impl<'ast> Visit<'ast> for UseVisitor {
     fn visit_expr_method_call(&mut self, node: &'ast ExprMethodCall) {
         let method = node.method.to_string();
-        if USED_METHODS.contains(&method.as_str()) {
+        if is_used_method(&method) {
             if let Some(purpose) = extract_purpose_from_args(&node.args) {
                 let receiver = expr_type_name(&node.receiver);
                 let line = line_for_span(&self.source, node.span());
@@ -92,7 +79,7 @@ impl<'ast> Visit<'ast> for UseVisitor {
 
     fn visit_expr_call(&mut self, node: &'ast ExprCall) {
         if let Some((receiver, method)) = path_call_receiver_method(&node.func) {
-            if USED_METHODS.contains(&method.as_str()) {
+            if is_used_method(&method) {
                 if let Some(purpose) = extract_purpose_from_args(&node.args) {
                     let line = line_for_span(&self.source, node.span());
                     self.hits.push(FoundUse {
@@ -254,4 +241,52 @@ fn line_for_span(source: &str, span: proc_macro2::Span) -> u32 {
     // Last resort: count newlines up to a needle from Display (unreliable) — keep 1.
     let _ = source;
     1
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Write;
+
+    #[test]
+    fn is_used_method_accepts_suffix() {
+        assert!(is_used_method("get_used"));
+        assert!(is_used_method("get_user_used"));
+        assert!(is_used_method("relate_to_owner_record_used"));
+        assert!(!is_used_method("get"));
+        assert!(!is_used_method("_used"));
+        assert!(!is_used_method("used"));
+    }
+
+    #[test]
+    fn scan_picks_dynamic_connection_used() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("conn.rs");
+        let mut f = std::fs::File::create(&path).expect("create");
+        let src = concat!(
+            "fn load(user: &User, v: &Valence) {\n",
+            "    let _ = user.get_user_used(v, valence::use_!(r#\"Load related user for catalog test.\"#));\n",
+            "}\n",
+        );
+        f.write_all(src.as_bytes()).expect("write");
+        let hits = scan_file(&path, "demo", "conn.rs").expect("scan");
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].method, "get_user_used");
+        assert!(hits[0].purpose.contains("Load related user"));
+    }
+
+    #[test]
+    fn scan_skips_used_without_purpose() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("bare.rs");
+        let mut f = std::fs::File::create(&path).expect("create");
+        let src = concat!(
+            "fn load(user: &User, v: &Valence) {\n",
+            "    let _ = user.get_user_used(v, some_other_arg);\n",
+            "}\n",
+        );
+        f.write_all(src.as_bytes()).expect("write");
+        let hits = scan_file(&path, "demo", "bare.rs").expect("scan");
+        assert!(hits.is_empty());
+    }
 }

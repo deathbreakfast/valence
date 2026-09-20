@@ -18,6 +18,7 @@ impl QueryCore {
     /// # Errors
     ///
     /// Returns an error when the requested operation cannot be completed.
+    #[deprecated(note = "use get_id_only_used with use_!(...) for declared data-use transparency")]
     pub async fn get_id_only(
         table: impl Into<String>,
         id: impl AsRef<str>,
@@ -35,6 +36,22 @@ impl QueryCore {
             })),
             None => Ok(None),
         }
+    }
+
+    /// Declared Unscoped id-only read (same as [`Self::get_id_only`]).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the requested operation cannot be completed.
+    pub async fn get_id_only_used(
+        table: impl Into<String>,
+        id: impl AsRef<str>,
+        valence: &Valence,
+        purpose: crate::data_use::DataUsePurpose,
+    ) -> Result<Option<IdOnlyRecord>> {
+        let _ = purpose;
+        #[allow(deprecated)]
+        Self::get_id_only(table, id, valence).await
     }
 
     /// Get a record by ID and return it as `serde_json::Value`.

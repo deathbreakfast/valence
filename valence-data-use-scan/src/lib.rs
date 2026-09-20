@@ -22,6 +22,9 @@
 //! - **Test exclusion** — When [`Config::exclude_tests_from_snapshot`] is set, omits
 //!   `tests/` paths and `*_test.rs` files from the generated UI snapshot so fixture
 //!   twins stay out of operator views. [Get started](#exclude-tests-from-the-snapshot)
+//! - **Connection hops** — Classifies forward `get_*_used` / `relate_to_*_used` hops
+//!   and optionally bakes peer schema via [`Config::connection_edges`] for Referenced
+//!   Reads / Updates in valence-uf-app. [Get started](#attribute-connection-hops)
 //!
 //! ## Getting started
 //!
@@ -52,6 +55,7 @@
 //!         workspace_root,
 //!         out_dir: PathBuf::from(std::env::var("OUT_DIR").unwrap()),
 //!         exclude_tests_from_snapshot: true,
+//!         connection_edges: vec![],
 //!     })?;
 //!     Ok(())
 //! }
@@ -97,14 +101,43 @@
 //!         workspace_root: PathBuf::from("."),
 //!         out_dir: PathBuf::from("out"),
 //!         exclude_tests_from_snapshot: true,
+//!         connection_edges: vec![],
 //!     })
 //!     .expect("data-use scan");
 //!     println!("excluded tests from DATA_USES snapshot");
 //! }
 //! ```
 //!
+//! ### Attribute connection hops
+//!
+//! Forward connection loads (`get_{field}_used`) and edge mutates (`relate_to_*` /
+//! `unrelate_from_*`) carry an optional hop. Pass [`Config::connection_edges`] to
+//! bake `referenced_schema` at generate time (e2e / unit determinism). Product hosts
+//! may leave edges empty and resolve peers at SSR from `SchemaRegistry`.
+//!
+//! ```rust,no_run
+//! use std::path::PathBuf;
+//! use valence_data_use_scan::{generate, Config, ConnectionEdge};
+//!
+//! fn main() {
+//!     generate(&Config {
+//!         workspace_root: PathBuf::from("."),
+//!         out_dir: PathBuf::from("out"),
+//!         exclude_tests_from_snapshot: true,
+//!         connection_edges: vec![ConnectionEdge {
+//!             from_table: "todo".into(),
+//!             from_field: "owner".into(),
+//!             to_table: "user".into(),
+//!         }],
+//!     })
+//!     .expect("data-use scan");
+//!     println!("baked peer attribution for todo.owner → user");
+//! }
+//! ```
+//!
 //! Next: browse schema / trait / Unscoped Data uses in `valence-app` after mounting
-//! `/valence` routes.
+//! `/valence` routes. Schema pages also show **Referenced Reads** / **Referenced
+//! Updates** when a peer was loaded or edge-updated via a connection.
 //!
 //! ## Examples
 //!
@@ -126,7 +159,9 @@ pub use lint_purpose::{lint_purpose, purpose_passes, GapCode, PurposeTier};
 use std::path::PathBuf;
 use std::time::Instant;
 
-use classify::{classify_method, classify_target};
+use classify::{
+    classify_connection_hop, classify_method, classify_target, hop_field_matches_connection,
+};
 use exclude::should_exclude_path;
 use scan::{scan_file, FoundUse};
 
@@ -173,6 +208,38 @@ pub struct Config {
     pub out_dir: PathBuf,
     /// When true, omit `tests/` paths and `*_test.rs` files from the UI snapshot.
     pub exclude_tests_from_snapshot: bool,
+    /// Optional connection edges used to bake [`ScanHit::referenced_schema`] at
+    /// generate time. Empty in product hosts that resolve peers at SSR.
+    pub connection_edges: Vec<ConnectionEdge>,
+}
+
+/// One schema connection edge for peer bake (`from_table.from_field` → `to_table`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ConnectionEdge {
+    /// Initiating schema table name (snake_case).
+    pub from_table: String,
+    /// Connection `from_field` / codegen connection name.
+    pub from_field: String,
+    /// Peer schema table name (snake_case).
+    pub to_table: String,
+}
+
+/// Kind of connection hop attributed for Referenced Reads / Updates.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ConnectionHopKind {
+    /// Forward `get_{field}_used` / `get_{field}_record_ids_used`.
+    ForwardGet,
+    /// `relate_to_*_used` / `unrelate_from_*_used`.
+    Relate,
+}
+
+/// Parsed connection hop from a `*_used` method name (no rustc types).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ConnectionHop {
+    /// Connection field token extracted from the method name.
+    pub field: String,
+    /// Forward load vs edge mutate.
+    pub kind: ConnectionHopKind,
 }
 
 /// One catalog row written into the generated snapshot.
@@ -194,6 +261,12 @@ pub struct ScanHit {
     pub op: OpKind,
     /// Method name (`get_used`, `query_used`, …).
     pub method: String,
+    /// Connection field when this call is a forward hop or edge mutate.
+    pub connection_field: Option<String>,
+    /// Hop kind when [`Self::connection_field`] is set.
+    pub connection_kind: Option<ConnectionHopKind>,
+    /// Peer schema baked from [`Config::connection_edges`], when resolvable.
+    pub referenced_schema: Option<String>,
 }
 
 /// Target classification mirrored in the generated snapshot.
@@ -392,7 +465,7 @@ fn scan_package(config: &Config, package: &PackageInfo) -> Result<Vec<ScanHit>, 
         let rel = relative_to_workspace(config, path);
         let found = scan_file(path, &package.name, &rel)?;
         for item in found {
-            hits.push(hit_from_found(item, &package.repository));
+            hits.push(hit_from_found(item, &package.repository, &config.connection_edges));
         }
     }
     Ok(hits)
@@ -405,9 +478,16 @@ fn relative_to_workspace(config: &Config, path: &std::path::Path) -> String {
         .replace('\\', "/")
 }
 
-fn hit_from_found(found: FoundUse, repository: &str) -> ScanHit {
+fn hit_from_found(found: FoundUse, repository: &str, edges: &[ConnectionEdge]) -> ScanHit {
     let op = classify_method(&found.method);
     let target = classify_target(&found.receiver, &found.method);
+    let hop = classify_connection_hop(&found.method);
+    let referenced_schema = match (&target, &hop) {
+        (TargetKind::Schema(from_table), Some(hop)) => {
+            bake_referenced_schema(from_table, hop, edges)
+        }
+        _ => None,
+    };
     ScanHit {
         purpose: found.purpose,
         file: found.file,
@@ -417,7 +497,23 @@ fn hit_from_found(found: FoundUse, repository: &str) -> ScanHit {
         target,
         op,
         method: found.method,
+        connection_field: hop.as_ref().map(|h| h.field.clone()),
+        connection_kind: hop.map(|h| h.kind),
+        referenced_schema,
     }
+}
+
+fn bake_referenced_schema(
+    from_table: &str,
+    hop: &ConnectionHop,
+    edges: &[ConnectionEdge],
+) -> Option<String> {
+    edges
+        .iter()
+        .find(|e| {
+            e.from_table == from_table && hop_field_matches_connection(&hop.field, &e.from_field)
+        })
+        .map(|e| e.to_table.clone())
 }
 
 #[cfg(test)]
@@ -471,6 +567,7 @@ repository = "https://github.com/unified-field-dev/prod_crate"
             workspace_root: dir.path().to_path_buf(),
             out_dir: out.clone(),
             exclude_tests_from_snapshot: true,
+            connection_edges: vec![],
         })
         .unwrap();
 
@@ -500,10 +597,91 @@ repository = "https://github.com/unified-field-dev/prod_crate"
             workspace_root: dir.path().to_path_buf(),
             out_dir: out.clone(),
             exclude_tests_from_snapshot: false,
+            connection_edges: vec![],
         })
         .unwrap();
 
         let generated = fs::read_to_string(out.join("data_uses.rs")).unwrap();
         assert!(generated.contains("data-use scan twin suite"));
+    }
+
+    #[test]
+    fn generate_bakes_referenced_schema_from_edges() {
+        let dir = tempdir().unwrap();
+        write_fixture_workspace(dir.path());
+        // Append a connection hop call site to prod lib.
+        let lib = dir.path().join("prod_crate/src/lib.rs");
+        let mut body = fs::read_to_string(&lib).unwrap();
+        body.push_str(
+            r##"
+async fn _hop() {
+    let _ = Todo::get_owner_used(
+        &valence,
+        valence::use_!(r#"**Test:** Fixture hop owner load for peer bake."#),
+    )
+    .await;
+}
+"##,
+        );
+        fs::write(&lib, body).unwrap();
+        let out = dir.path().join("out");
+        fs::create_dir_all(&out).unwrap();
+
+        generate(&Config {
+            workspace_root: dir.path().to_path_buf(),
+            out_dir: out.clone(),
+            exclude_tests_from_snapshot: true,
+            connection_edges: vec![ConnectionEdge {
+                from_table: "todo".into(),
+                from_field: "owner".into(),
+                to_table: "user".into(),
+            }],
+        })
+        .unwrap();
+
+        let generated = fs::read_to_string(out.join("data_uses.rs")).unwrap();
+        assert!(
+            generated.contains("referenced_schema: Some(\"user\")"),
+            "expected baked peer user, got:\n{generated}"
+        );
+        assert!(generated.contains("connection_field: Some(\"owner\")"));
+        assert!(generated.contains("ConnectionKind::ForwardGet"));
+    }
+
+    #[test]
+    fn generate_leaves_referenced_none_without_matching_edge() {
+        let dir = tempdir().unwrap();
+        write_fixture_workspace(dir.path());
+        let lib = dir.path().join("prod_crate/src/lib.rs");
+        let mut body = fs::read_to_string(&lib).unwrap();
+        body.push_str(
+            r##"
+async fn _hop() {
+    let _ = Todo::get_owner_used(
+        &valence,
+        valence::use_!(r#"**Test:** Fixture hop without matching edge."#),
+    )
+    .await;
+}
+"##,
+        );
+        fs::write(&lib, body).unwrap();
+        let out = dir.path().join("out");
+        fs::create_dir_all(&out).unwrap();
+
+        generate(&Config {
+            workspace_root: dir.path().to_path_buf(),
+            out_dir: out.clone(),
+            exclude_tests_from_snapshot: true,
+            connection_edges: vec![],
+        })
+        .unwrap();
+
+        let generated = fs::read_to_string(out.join("data_uses.rs")).unwrap();
+        assert!(generated.contains("connection_field: Some(\"owner\")"));
+        assert!(
+            generated.contains("referenced_schema: None"),
+            "without edges, peer must stay None"
+        );
     }
 }

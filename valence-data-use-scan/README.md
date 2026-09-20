@@ -13,6 +13,8 @@ Data uses UI.
   ops UI surfaces.
 - **Test exclusion** — Optional omit of `tests/` paths from the UI snapshot via
   `Config::exclude_tests_from_snapshot`.
+- **Connection hops** — Classifies forward loads / edge mutates and optionally
+  bakes peer schema via `Config::connection_edges` for Referenced Reads/Updates.
 
 ## Getting started
 
@@ -33,6 +35,7 @@ fn main() -> Result<(), valence_data_use_scan::DataUseScanError> {
         workspace_root,
         out_dir: PathBuf::from(std::env::var("OUT_DIR").unwrap()),
         exclude_tests_from_snapshot: true,
+        connection_edges: vec![],
     })
 }
 ```

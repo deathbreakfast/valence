@@ -1,6 +1,6 @@
 //! Method → op and receiver → target classification.
 
-use crate::{OpKind, TargetKind};
+use crate::{ConnectionHop, ConnectionHopKind, OpKind, TargetKind};
 
 /// Map a `*_used` method name to a UI op bucket.
 #[must_use]
@@ -56,6 +56,84 @@ fn is_unscoped_receiver(receiver: &str) -> bool {
         leaf,
         "QueryCore" | "DatabaseBackend" | "DynDatabaseBackend" | "Backend" | "Valence" | "Self"
     )
+}
+
+/// Detect a forward connection load or edge mutate from a `*_used` method name.
+///
+/// Reverse helpers (`get_from_*`) return [`None`] — they load the receiver schema,
+/// not the peer. Unscoped `relate_edge` / `unrelate_edge` also return [`None`].
+#[must_use]
+pub fn classify_connection_hop(method: &str) -> Option<ConnectionHop> {
+    let base = method.strip_suffix("_used")?;
+    if base == method || base.is_empty() {
+        return None;
+    }
+
+    // Reverse navigators load the initiating schema — not peer-referenced.
+    if base.starts_with("get_from_") {
+        return None;
+    }
+
+    if let Some(rest) = base.strip_prefix("relate_to_") {
+        return relate_field(rest).map(|field| ConnectionHop {
+            field,
+            kind: ConnectionHopKind::Relate,
+        });
+    }
+    if let Some(rest) = base.strip_prefix("unrelate_from_") {
+        return relate_field(rest).map(|field| ConnectionHop {
+            field,
+            kind: ConnectionHopKind::Relate,
+        });
+    }
+
+    // Forward connection gets: get_{field}_used / get_{field}_record_ids_used.
+    // Exclude bare get / get_mutable / get_entity / get_record*.
+    let Some(rest) = base.strip_prefix("get_") else {
+        return None;
+    };
+    if rest.is_empty()
+        || rest == "mutable"
+        || rest.starts_with("entity")
+        || rest == "record"
+        || rest.starts_with("record_")
+    {
+        return None;
+    }
+    let field = rest
+        .strip_suffix("_record_ids")
+        .unwrap_or(rest)
+        .to_string();
+    if field.is_empty() {
+        return None;
+    }
+    Some(ConnectionHop {
+        field,
+        kind: ConnectionHopKind::ForwardGet,
+    })
+}
+
+fn relate_field(rest: &str) -> Option<String> {
+    // `relate_edge` / `unrelate_edge` land here only if prefixed wrongly; guard anyway.
+    if rest.is_empty() || rest == "edge" || rest.starts_with("edge_") {
+        return None;
+    }
+    let field = rest.strip_suffix("_record").unwrap_or(rest);
+    if field.is_empty() {
+        return None;
+    }
+    Some(field.to_string())
+}
+
+/// Match a hop field to a schema connection `from_field` (exact or M2M singular).
+#[must_use]
+pub fn hop_field_matches_connection(hop_field: &str, from_field: &str) -> bool {
+    if hop_field == from_field {
+        return true;
+    }
+    // M2M relate_to_{singular} vs connection name often plural (`tags` / `tag`).
+    let singular = from_field.strip_suffix('s').unwrap_or(from_field);
+    hop_field == singular
 }
 
 /// Convert `UserSession` → `user_session`.
@@ -121,5 +199,50 @@ mod tests {
             classify_target("crate::models::UserSession", "get_used"),
             TargetKind::Schema("user_session".into())
         );
+    }
+
+    #[test]
+    fn hop_forward_get_owner() {
+        let hop = classify_connection_hop("get_owner_used").expect("hop");
+        assert_eq!(hop.kind, ConnectionHopKind::ForwardGet);
+        assert_eq!(hop.field, "owner");
+    }
+
+    #[test]
+    fn hop_forward_get_record_ids() {
+        let hop = classify_connection_hop("get_tags_record_ids_used").expect("hop");
+        assert_eq!(hop.kind, ConnectionHopKind::ForwardGet);
+        assert_eq!(hop.field, "tags");
+    }
+
+    #[test]
+    fn hop_relate_and_unrelate() {
+        let relate = classify_connection_hop("relate_to_tag_used").expect("relate");
+        assert_eq!(relate.kind, ConnectionHopKind::Relate);
+        assert_eq!(relate.field, "tag");
+        let unrelate = classify_connection_hop("unrelate_from_tag_used").expect("unrelate");
+        assert_eq!(unrelate.kind, ConnectionHopKind::Relate);
+        assert_eq!(unrelate.field, "tag");
+        let record = classify_connection_hop("relate_to_owner_record_used").expect("record");
+        assert_eq!(record.field, "owner");
+    }
+
+    #[test]
+    fn hop_excludes_plain_get_and_reverse() {
+        assert!(classify_connection_hop("get_used").is_none());
+        assert!(classify_connection_hop("get_mutable_used").is_none());
+        assert!(classify_connection_hop("get_from_owner_id_used").is_none());
+        assert!(classify_connection_hop("get_from_owner_used").is_none());
+        assert!(classify_connection_hop("relate_edge_used").is_none());
+        assert!(classify_connection_hop("unrelate_edge_used").is_none());
+        assert!(classify_connection_hop("update_used").is_none());
+        assert!(classify_connection_hop("query_used").is_none());
+    }
+
+    #[test]
+    fn hop_field_matches_plural_connection() {
+        assert!(hop_field_matches_connection("tags", "tags"));
+        assert!(hop_field_matches_connection("tag", "tags"));
+        assert!(!hop_field_matches_connection("owner", "tags"));
     }
 }

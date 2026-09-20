@@ -89,9 +89,7 @@ pub fn classify_connection_hop(method: &str) -> Option<ConnectionHop> {
 
     // Forward connection gets: get_{field}_used / get_{field}_record_ids_used.
     // Exclude bare get / get_mutable / get_entity / get_record*.
-    let Some(rest) = base.strip_prefix("get_") else {
-        return None;
-    };
+    let rest = base.strip_prefix("get_")?;
     if rest.is_empty()
         || rest == "mutable"
         || rest.starts_with("entity")
@@ -100,10 +98,7 @@ pub fn classify_connection_hop(method: &str) -> Option<ConnectionHop> {
     {
         return None;
     }
-    let field = rest
-        .strip_suffix("_record_ids")
-        .unwrap_or(rest)
-        .to_string();
+    let field = rest.strip_suffix("_record_ids").unwrap_or(rest).to_string();
     if field.is_empty() {
         return None;
     }

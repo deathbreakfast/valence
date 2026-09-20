@@ -465,7 +465,11 @@ fn scan_package(config: &Config, package: &PackageInfo) -> Result<Vec<ScanHit>, 
         let rel = relative_to_workspace(config, path);
         let found = scan_file(path, &package.name, &rel)?;
         for item in found {
-            hits.push(hit_from_found(item, &package.repository, &config.connection_edges));
+            hits.push(hit_from_found(
+                item,
+                &package.repository,
+                &config.connection_edges,
+            ));
         }
     }
     Ok(hits)

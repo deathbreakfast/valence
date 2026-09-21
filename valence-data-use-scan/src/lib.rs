@@ -110,10 +110,13 @@
 //!
 //! ### Attribute connection hops
 //!
-//! Forward connection loads (`get_{field}_used`) and edge mutates (`relate_to_*` /
-//! `unrelate_from_*`) carry an optional hop. Pass [`Config::connection_edges`] to
-//! bake `referenced_schema` at generate time (e2e / unit determinism). Product hosts
-//! may leave edges empty and resolve peers at SSR from `SchemaRegistry`.
+//! Connection hop attribution lets the Valence ops UI show inbound loads and
+//! edge mutates on the **peer** schema's Data uses page (Referenced Reads /
+//! Updates). The scan attaches an optional hop from method names
+//! (`get_{field}_used`, `relate_to_*` / `unrelate_from_*`). Pass
+//! [`Config::connection_edges`] to bake `referenced_schema` at generate time
+//! (e2e / unit determinism). Product hosts may leave edges empty and resolve
+//! peers at SSR from `SchemaRegistry`.
 //!
 //! ```rust,no_run
 //! use std::path::PathBuf;

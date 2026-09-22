@@ -1,0 +1,6 @@
+[advisories]
+# RUSTSEC-2023-0071 (rsa): Marvin Attack timing sidechannel, no fixed upgrade
+# available upstream. The rest are transitive via the optional surreal backend
+# (surrealmx/rust_decimal -> surrealdb-core); no safe upgrade path yet.
+# Re-check the surreal-backend ones when bumping surrealdb.
+ignore = ["RUSTSEC-2023-0071", "RUSTSEC-2023-0089", "RUSTSEC-2026-0235"]

@@ -1,4 +1,4 @@
-//! Syn walk for `*_used` method calls and nearby `use_!` purposes.
+//! Syn walk for declared Valence data-use method calls and nearby `use_!` purposes.
 
 use std::path::Path;
 
@@ -8,7 +8,7 @@ use syn::{Expr, ExprCall, ExprMethodCall, ExprPath, Item, Lit, Macro, Stmt};
 
 use crate::DataUseScanError;
 
-/// A single discovered `*_used` call with purpose text.
+/// A single discovered declared data-use call with purpose text.
 #[derive(Debug, Clone)]
 pub struct FoundUse {
     pub purpose: String,
@@ -19,26 +19,50 @@ pub struct FoundUse {
     pub method: String,
 }
 
-const USED_METHODS: &[&str] = &[
-    "get_used",
-    "create_used",
-    "update_used",
-    "delete_used",
-    "delete_now_used",
-    "upsert_used",
-    "merge_used",
-    "query_used",
-    "get_mutable_used",
-    "execute_used",
-    "get_entity_used",
-    "get_record_json_used",
-    "get_record_used",
-    "latest_ids_used",
-    "get_by_composite_key_used",
-    "upsert_by_composite_key_used",
-];
+/// True when `method` is a Valence declared data-use entry point (purpose-required API).
+///
+/// Catalog rows are further gated by a nearby `use_!` / `DataUsePurpose` argument.
+#[must_use]
+pub fn is_declared_data_use_method(method: &str) -> bool {
+    match method {
+        "get"
+        | "create"
+        | "update"
+        | "delete"
+        | "delete_now"
+        | "upsert"
+        | "merge"
+        | "query"
+        | "execute"
+        | "distinct_values"
+        | "get_id_only"
+        | "get_record_json"
+        | "latest_ids"
+        | "get_entity"
+        | "get_mutable"
+        | "get_by_composite_key"
+        | "upsert_by_composite_key"
+        | "get_many_to_many_target_record_ids"
+        | "relate_edge"
+        | "unrelate_edge"
+        | "get_record"
+        | "create_record"
+        | "update_record"
+        | "merge_record"
+        | "upsert_record"
+        | "delete_record" => true,
+        m if m.starts_with("get_")
+            || m.starts_with("relate_to_")
+            || m.starts_with("unrelate_from_")
+            || m.starts_with("distinct_") =>
+        {
+            true
+        }
+        _ => false,
+    }
+}
 
-/// Parse `path` and collect `*_used` call sites.
+/// Parse `path` and collect declared data-use call sites.
 pub fn scan_file(
     path: &Path,
     crate_name: &str,
@@ -73,7 +97,7 @@ struct UseVisitor {
 impl<'ast> Visit<'ast> for UseVisitor {
     fn visit_expr_method_call(&mut self, node: &'ast ExprMethodCall) {
         let method = node.method.to_string();
-        if USED_METHODS.contains(&method.as_str()) {
+        if is_declared_data_use_method(&method) {
             if let Some(purpose) = extract_purpose_from_args(&node.args) {
                 let receiver = expr_type_name(&node.receiver);
                 let line = line_for_span(&self.source, node.span());
@@ -92,7 +116,7 @@ impl<'ast> Visit<'ast> for UseVisitor {
 
     fn visit_expr_call(&mut self, node: &'ast ExprCall) {
         if let Some((receiver, method)) = path_call_receiver_method(&node.func) {
-            if USED_METHODS.contains(&method.as_str()) {
+            if is_declared_data_use_method(&method) {
                 if let Some(purpose) = extract_purpose_from_args(&node.args) {
                     let line = line_for_span(&self.source, node.span());
                     self.hits.push(FoundUse {
@@ -254,4 +278,53 @@ fn line_for_span(source: &str, span: proc_macro2::Span) -> u32 {
     // Last resort: count newlines up to a needle from Display (unreliable) — keep 1.
     let _ = source;
     1
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Write;
+
+    #[test]
+    fn is_declared_accepts_primary_names() {
+        assert!(is_declared_data_use_method("get"));
+        assert!(is_declared_data_use_method("get_user"));
+        assert!(is_declared_data_use_method("relate_to_owner_record"));
+        assert!(is_declared_data_use_method("query"));
+        assert!(!is_declared_data_use_method("build"));
+        assert!(!is_declared_data_use_method("commit"));
+        assert!(!is_declared_data_use_method("where_name_eq"));
+    }
+
+    #[test]
+    fn scan_picks_dynamic_connection() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("conn.rs");
+        let mut f = std::fs::File::create(&path).expect("create");
+        let src = concat!(
+            "fn load(user: &User, v: &Valence) {\n",
+            "    let _ = user.get_user(v, valence::use_!(r#\"Load related user for catalog test.\"#));\n",
+            "}\n",
+        );
+        f.write_all(src.as_bytes()).expect("write");
+        let hits = scan_file(&path, "demo", "conn.rs").expect("scan");
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].method, "get_user");
+        assert!(hits[0].purpose.contains("Load related user"));
+    }
+
+    #[test]
+    fn scan_skips_without_purpose() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("bare.rs");
+        let mut f = std::fs::File::create(&path).expect("create");
+        let src = concat!(
+            "fn load(user: &User, v: &Valence) {\n",
+            "    let _ = user.get_user(v, some_other_arg);\n",
+            "}\n",
+        );
+        f.write_all(src.as_bytes()).expect("write");
+        let hits = scan_file(&path, "demo", "bare.rs").expect("scan");
+        assert!(hits.is_empty());
+    }
 }

@@ -28,7 +28,7 @@ pub async fn run(ctx: &RunContext) -> Result<BenchReport> {
     let mut n = 0usize;
     while Instant::now() < deadline {
         let project = Project::new(format!("bench-{n}")).expect("new");
-        Project::create_used(project, valence, valence::use_!(r"**Test:** Seeds fixture **projects** for a Valence bench runner so throughput timing has rows to create under load. Benchmark operators running the suite only.")).await?;
+        Project::create(project, valence, valence::use_!(r"**Test:** Seeds fixture **projects** for a Valence bench runner so throughput timing has rows to create under load. Benchmark operators running the suite only.")).await?;
         ok += 1;
         n += 1;
     }

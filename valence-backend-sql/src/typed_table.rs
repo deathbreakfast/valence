@@ -852,6 +852,103 @@ pub async fn update_record_typed_postgres(
     Ok(row_from_columns(&layout.table, id, out))
 }
 
+/// Sparse atomic partial-column write (SQLite): only patch keys present in
+/// `layout.fields` go into the `SET` list, and the full post-write row comes back
+/// from the same statement via `RETURNING *` — no internal fetch that a concurrent
+/// writer could race against.
+pub async fn merge_record_typed_sqlite(
+    pool: &sqlx::SqlitePool,
+    layout: &StorageLayout,
+    id: &str,
+    patch: Value,
+    ensured: &WriteEnsureCache,
+) -> Result<Value> {
+    ensure_layout_for_write_sqlite(pool, layout, ensured).await?;
+    let (_, fields) = split_record_fields(patch);
+    let data: Vec<&LayoutField> = layout
+        .fields
+        .iter()
+        .filter(|f| f.name != "id" && fields.contains_key(&f.name))
+        .collect();
+    if data.is_empty() {
+        return get_record_typed_sqlite(pool, &layout.table, id)
+            .await?
+            .ok_or_else(|| Error::NotFound(format!("{}:{id}", layout.table)));
+    }
+    let sets = data
+        .iter()
+        .map(|f| format!("{} = ?", quote_sql_ident(&f.name)))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let q = format!(
+        "UPDATE {} SET {sets} WHERE {} = ? RETURNING *",
+        quote_sql_ident(&layout.table),
+        quote_sql_ident("id")
+    );
+    let mut query = sqlx::query(&q);
+    for f in &data {
+        let val = fields.get(&f.name).cloned().unwrap_or(Value::Null);
+        query = bind_sqlite(query, f.storage, &val)?;
+    }
+    query = query.bind(id);
+    let row = query
+        .fetch_optional(pool)
+        .await
+        .map_err(|e| Error::database(e.to_string()))?;
+    let Some(row) = row else {
+        return Err(Error::NotFound(format!("{}:{id}", layout.table)));
+    };
+    Ok(row_from_sqlx_sqlite(&layout.table, layout, &row))
+}
+
+/// Sparse atomic partial-column write (Postgres): see [`merge_record_typed_sqlite`].
+pub async fn merge_record_typed_postgres(
+    pool: &sqlx::PgPool,
+    layout: &StorageLayout,
+    id: &str,
+    patch: Value,
+    ensured: &WriteEnsureCache,
+) -> Result<Value> {
+    ensure_layout_for_write_postgres(pool, layout, ensured).await?;
+    let (_, fields) = split_record_fields(patch);
+    let data: Vec<&LayoutField> = layout
+        .fields
+        .iter()
+        .filter(|f| f.name != "id" && fields.contains_key(&f.name))
+        .collect();
+    if data.is_empty() {
+        return get_record_typed_postgres(pool, &layout.table, id)
+            .await?
+            .ok_or_else(|| Error::NotFound(format!("{}:{id}", layout.table)));
+    }
+    let sets = data
+        .iter()
+        .enumerate()
+        .map(|(i, f)| format!("{} = ${}", quote_sql_ident(&f.name), i + 1))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let id_ph = data.len() + 1;
+    let q = format!(
+        "UPDATE {} SET {sets} WHERE {} = ${id_ph} RETURNING *",
+        quote_sql_ident(&layout.table),
+        quote_sql_ident("id")
+    );
+    let mut query = sqlx::query(&q);
+    for f in &data {
+        let val = fields.get(&f.name).cloned().unwrap_or(Value::Null);
+        query = bind_postgres(query, f.storage, &val)?;
+    }
+    query = query.bind(id);
+    let row = query
+        .fetch_optional(pool)
+        .await
+        .map_err(|e| Error::database(e.to_string()))?;
+    let Some(row) = row else {
+        return Err(Error::NotFound(format!("{}:{id}", layout.table)));
+    };
+    Ok(row_from_sqlx_postgres(&layout.table, layout, &row))
+}
+
 /// Map a sqlx SQLite row with arbitrary columns into Valence JSON (SELECT *).
 ///
 /// SQLite type affinity lets `try_get::<String>` succeed for INTEGER columns

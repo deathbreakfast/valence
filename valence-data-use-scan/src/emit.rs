@@ -3,7 +3,7 @@
 use std::fs;
 use std::path::Path;
 
-use crate::{DataUseScanError, OpKind, ScanHit, TargetKind};
+use crate::{ConnectionHopKind, DataUseScanError, OpKind, ScanHit, TargetKind};
 
 /// Write the include file consumed by valence-uf-app (and other hosts).
 pub fn write_snapshot(out_dir: &Path, hits: &[ScanHit]) -> Result<(), DataUseScanError> {
@@ -35,6 +35,9 @@ fn render_snapshot(hits: &[ScanHit]) -> String {
     code.push_str("    pub target: DataUseTarget,\n");
     code.push_str("    pub op: DataOp,\n");
     code.push_str("    pub method: &'static str,\n");
+    code.push_str("    pub connection_field: Option<&'static str>,\n");
+    code.push_str("    pub connection_kind: Option<ConnectionKind>,\n");
+    code.push_str("    pub referenced_schema: Option<&'static str>,\n");
     code.push_str("}\n\n");
     code.push_str("/// Target classification for a declared use.\n");
     code.push_str("#[derive(Debug, Clone, PartialEq, Eq)]\n");
@@ -50,6 +53,12 @@ fn render_snapshot(hits: &[ScanHit]) -> String {
     code.push_str("    Create,\n");
     code.push_str("    Update,\n");
     code.push_str("    Delete,\n");
+    code.push_str("}\n\n");
+    code.push_str("/// Connection hop kind for Referenced Reads / Updates attribution.\n");
+    code.push_str("#[derive(Debug, Clone, Copy, PartialEq, Eq)]\n");
+    code.push_str("pub enum ConnectionKind {\n");
+    code.push_str("    ForwardGet,\n");
+    code.push_str("    Relate,\n");
     code.push_str("}\n\n");
     code.push_str("/// Static catalog of production data uses (tests excluded when configured).\n");
     code.push_str("pub static DATA_USES: &[DataUseEntry] = &[\n");
@@ -78,6 +87,18 @@ fn render_snapshot(hits: &[ScanHit]) -> String {
             "        method: {},\n",
             escape_str_lit(&hit.method)
         ));
+        code.push_str(&format!(
+            "        connection_field: {},\n",
+            render_opt_str(hit.connection_field.as_deref())
+        ));
+        code.push_str(&format!(
+            "        connection_kind: {},\n",
+            render_opt_kind(hit.connection_kind)
+        ));
+        code.push_str(&format!(
+            "        referenced_schema: {},\n",
+            render_opt_str(hit.referenced_schema.as_deref())
+        ));
         code.push_str("    },\n");
     }
     code.push_str("];\n");
@@ -98,6 +119,21 @@ fn render_op(op: OpKind) -> String {
         OpKind::Create => "DataOp::Create".into(),
         OpKind::Update => "DataOp::Update".into(),
         OpKind::Delete => "DataOp::Delete".into(),
+    }
+}
+
+fn render_opt_str(value: Option<&str>) -> String {
+    match value {
+        Some(s) => format!("Some({})", escape_str_lit(s)),
+        None => "None".into(),
+    }
+}
+
+fn render_opt_kind(kind: Option<ConnectionHopKind>) -> String {
+    match kind {
+        Some(ConnectionHopKind::ForwardGet) => "Some(ConnectionKind::ForwardGet)".into(),
+        Some(ConnectionHopKind::Relate) => "Some(ConnectionKind::Relate)".into(),
+        None => "None".into(),
     }
 }
 

@@ -1,4 +1,4 @@
-//! Declared data-use types for Valence transparency (`use_!` / `*_used`).
+//! Declared data-use types for Valence transparency (`use_!` + purpose-required APIs).
 
 mod purpose;
 mod source_link;
@@ -6,7 +6,7 @@ mod source_link;
 pub use purpose::DataUsePurpose;
 pub use source_link::{SourceLink, SourceLinkConfig};
 
-/// CRUD-shaped operation inferred from a `*_used` method name.
+/// CRUD-shaped operation inferred from a declared data-use method name.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum DataOp {
@@ -50,7 +50,7 @@ pub struct DataUse {
     pub crate_name: String,
     pub target: DataUseTarget,
     pub op: DataOp,
-    /// Method name that was scanned (`get_used`, `query_used`, …).
+    /// Method name that was scanned (`get`, `query`, …).
     pub method: String,
     /// Optional trait name when this row is shown on a schema page via fan-out.
     #[serde(default, skip_serializing_if = "Option::is_none")]

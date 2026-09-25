@@ -26,6 +26,18 @@ export CARGO_BUILD_JOBS=1
 export CARGO_INCREMENTAL=0
 ```
 
+### uf-valence-data-use-scan (connection hops / Referenced attribution)
+
+Feature slice for connection hop classify, edge bake, and snapshot emit. Covered by
+`--workspace` above; re-run the package alone when iterating on Referenced Reads:
+
+```bash
+cargo test -p uf-valence-data-use-scan --lib
+```
+
+Includes hop classify (`get_owner` / `relate_to_*` / reverse exclusions) and
+`Config::connection_edges` bake of `referenced_schema`.
+
 Skip extended jobs (`package-dry-run`, `examples`, `e2e`, `coverage`, `bench-smoke`,
 `codegen-runtime`, `core-skeleton`) unless you are running a maintainer campaign.
 

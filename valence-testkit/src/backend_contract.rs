@@ -67,6 +67,16 @@ async fn update_merge_upsert(backend: &dyn DatabaseBackend) -> Result<()> {
             .merge_record(CONTRACT_TABLE, "c1", serde_json::json!({"score": 2}))
             .await?;
         assert_eq!(merged.get("score").and_then(|v| v.as_i64()), Some(2));
+        // A merge must return the COMPLETE row, not just the patched keys — fields
+        // never named in the patch (here, "name") must still be present and
+        // untouched. This is the invariant valence-backend-hybrid's write-through
+        // mirror cache depends on: it trusts merge_record's return value as
+        // authoritative and caches it whole.
+        assert_eq!(
+            merged.get("name").and_then(|v| v.as_str()),
+            Some("beta"),
+            "merge_record must return unpatched fields unchanged, not drop them"
+        );
     }
 
     let upserted = backend

@@ -87,7 +87,7 @@ fn pair_available(pair: HopPair, wire: Option<&WireBackendOptions>) -> bool {
 
 async fn seed_and_assert_hops(valence: &Valence, pair: HopPair) -> Result<()> {
     let project = Project::new("hop-pair".to_string()).expect("new project");
-    let created = Project::create_used(project, valence, valence::use_!(r"**Test:** Seeds a fixture **project** so the Valence model suite can exercise create and later reads against a known parent row. CI and developers running the suite only.")).await?;
+    let created = Project::create(project, valence, valence::use_!(r"**Test:** Seeds a fixture **project** so the Valence model suite can exercise create and later reads against a known parent row. CI and developers running the suite only.")).await?;
     let project_id = created.id().expect("project id").id().to_string();
 
     let task = Task::new(
@@ -95,13 +95,23 @@ async fn seed_and_assert_hops(valence: &Valence, pair: HopPair) -> Result<()> {
         RecordId::new("hop_pair_project", &project_id),
     )
     .expect("new task");
-    let task_row = Task::create_used(task, valence, valence::use_!(r"**Test:** Seeds a fixture **task** linked to a project so hop and cascade suites have a child row to navigate. CI and developers running the suite only.")).await?;
+    let task_row = Task::create(task, valence, valence::use_!(r"**Test:** Seeds a fixture **task** linked to a project so hop and cascade suites have a child row to navigate. CI and developers running the suite only.")).await?;
     let task_id = task_row.id().expect("task id").id().to_string();
 
-    let loaded_project = task_row.get_project(valence).await?;
+    let loaded_project = task_row
+        .get_project(
+            valence,
+            valence::use_!(r"**Test:** Follows the fixture **task→project** link so hop-pair suites can assert BelongsTo navigation. CI and developers running the suite only."),
+        )
+        .await?;
     assert_eq!(loaded_project.name(), "hop-pair");
 
-    let tasks = Task::get_from_project(&loaded_project, valence).await?;
+    let tasks = Task::get_from_project(
+        &loaded_project,
+        valence,
+        valence::use_!(r"**Test:** Lists fixture **tasks for a project** so hop-pair suites can assert HasMany reverse navigation. CI and developers running the suite only."),
+    )
+    .await?;
     assert_eq!(
         tasks.len(),
         1,
@@ -119,7 +129,7 @@ async fn seed_and_assert_hops(valence: &Valence, pair: HopPair) -> Result<()> {
         return Ok(());
     }
 
-    let projects = Project::query_used(valence, valence::use_!(r"**Test:** Queries fixture **projects** with filters so the Valence model suite can assert predicate and page results. CI and developers running the suite only."))
+    let projects = Project::query(valence, valence::use_!(r"**Test:** Queries fixture **projects** with filters so the Valence model suite can assert predicate and page results. CI and developers running the suite only."))
         .where_tasks_has_results(|q| {
             q.where_string(
                 "title".to_string(),
@@ -134,7 +144,7 @@ async fn seed_and_assert_hops(valence: &Valence, pair: HopPair) -> Result<()> {
     );
     assert_eq!(projects[0].id().expect("id").id(), project_id);
 
-    let miss = Project::query_used(valence, valence::use_!(r"**Test:** Queries fixture **projects** with filters so the Valence model suite can assert predicate and page results. CI and developers running the suite only."))
+    let miss = Project::query(valence, valence::use_!(r"**Test:** Queries fixture **projects** with filters so the Valence model suite can assert predicate and page results. CI and developers running the suite only."))
         .where_tasks_has_results(|q| {
             q.where_string(
                 "title".to_string(),

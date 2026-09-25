@@ -54,11 +54,11 @@ async fn model_crud(session: &mut BootstrapSession, mode: RunMode) -> Result<(),
     std::env::set_var("VALENCE_OWNERSHIP_UNIFIED_FETCH", "0");
     let valence = session.ensure_valence().map_err(|e| e.to_string())?;
     let project = Project::new("catalog-smoke".to_string()).map_err(|e| e.to_string())?;
-    let created = Project::create_used(project, valence, valence::use_!(r"**Test:** Seeds a fixture **project** so the Valence model suite can exercise create and later reads against a known parent row. CI and developers running the suite only."))
+    let created = Project::create(project, valence, valence::use_!(r"**Test:** Seeds a fixture **project** so the Valence model suite can exercise create and later reads against a known parent row. CI and developers running the suite only."))
         .await
         .map_err(|e| e.to_string())?;
     let project_id = created.id().ok_or("missing project id")?.id();
-    let fetched = Project::get_used(project_id, valence, valence::use_!(r"**Test:** Reloads the fixture **project** by id so the Valence model suite can assert create persisted the expected name. CI and developers running the suite only."))
+    let fetched = Project::get(project_id, valence, valence::use_!(r"**Test:** Reloads the fixture **project** by id so the Valence model suite can assert create persisted the expected name. CI and developers running the suite only."))
         .await
         .map_err(|e| e.to_string())?;
     if mode == RunMode::Correctness && fetched.is_none() {
@@ -71,13 +71,13 @@ async fn model_update_upsert(session: &mut BootstrapSession, mode: RunMode) -> R
     std::env::set_var("VALENCE_OWNERSHIP_UNIFIED_FETCH", "0");
     let valence = session.ensure_valence().map_err(|e| e.to_string())?;
     let project = Project::new("upd-upsert".to_string()).map_err(|e| e.to_string())?;
-    let created = Project::create_used(project, valence, valence::use_!(r"**Test:** Seeds a fixture **project** so the Valence model suite can exercise create and later reads against a known parent row. CI and developers running the suite only."))
+    let created = Project::create(project, valence, valence::use_!(r"**Test:** Seeds a fixture **project** so the Valence model suite can exercise create and later reads against a known parent row. CI and developers running the suite only."))
         .await
         .map_err(|e| e.to_string())?;
     let id = created.id().ok_or("missing id")?.id().to_string();
 
     let updated = Project::new("updated-name".to_string()).map_err(|e| e.to_string())?;
-    let after_update = Project::update_used(&id, updated, valence, valence::use_!(r"**Test:** Replaces the fixture **project** fields so the Valence model suite can assert full-row update kept the new values. CI and developers running the suite only."))
+    let after_update = Project::update(&id, updated, valence, valence::use_!(r"**Test:** Replaces the fixture **project** fields so the Valence model suite can assert full-row update kept the new values. CI and developers running the suite only."))
         .await
         .map_err(|e| e.to_string())?;
     if mode == RunMode::Correctness && after_update.name() != "updated-name" {
@@ -85,7 +85,7 @@ async fn model_update_upsert(session: &mut BootstrapSession, mode: RunMode) -> R
     }
 
     let upserted = Project::new("upserted".to_string()).map_err(|e| e.to_string())?;
-    let after_upsert = Project::upsert_used(&id, upserted, valence, valence::use_!(r"**Test:** Upserts the fixture **project** by id so the Valence model suite can assert create-or-replace left a stable row. CI and developers running the suite only."))
+    let after_upsert = Project::upsert(&id, upserted, valence, valence::use_!(r"**Test:** Upserts the fixture **project** by id so the Valence model suite can assert create-or-replace left a stable row. CI and developers running the suite only."))
         .await
         .map_err(|e| e.to_string())?;
     if mode == RunMode::Correctness && after_upsert.name() != "upserted" {
@@ -138,7 +138,7 @@ async fn seed_named(session: &mut BootstrapSession, names: &[&str]) -> Result<St
     let mut last_id = String::new();
     for name in names {
         let project = Project::new((*name).to_string()).map_err(|e| e.to_string())?;
-        let created = Project::create_used(project, valence, valence::use_!(r"**Test:** Seeds a fixture **project** so the Valence model suite can exercise create and later reads against a known parent row. CI and developers running the suite only."))
+        let created = Project::create(project, valence, valence::use_!(r"**Test:** Seeds a fixture **project** so the Valence model suite can exercise create and later reads against a known parent row. CI and developers running the suite only."))
             .await
             .map_err(|e| e.to_string())?;
         last_id = created.id().ok_or("missing id")?.id().to_string();
@@ -155,7 +155,7 @@ async fn query_filter_eq(session: &mut BootstrapSession, mode: RunMode) -> Resul
     let beta = format!("beta-filter-{tag}");
     seed_named(session, &[&alpha, &beta]).await?;
     let valence = session.ensure_valence().map_err(|e| e.to_string())?;
-    let rows = Project::query_used(valence, valence::use_!(r"**Test:** Queries fixture **projects** with filters so the Valence model suite can assert predicate and page results. CI and developers running the suite only."))
+    let rows = Project::query(valence, valence::use_!(r"**Test:** Queries fixture **projects** with filters so the Valence model suite can assert predicate and page results. CI and developers running the suite only."))
         .where_name(StringPredicate::Equals(alpha.clone()))
         .await
         .map_err(|e| e.to_string())?;
@@ -168,7 +168,7 @@ async fn query_filter_eq(session: &mut BootstrapSession, mode: RunMode) -> Resul
 async fn query_filter_miss(session: &mut BootstrapSession, mode: RunMode) -> Result<(), String> {
     seed_named(session, &["present-only"]).await?;
     let valence = session.ensure_valence().map_err(|e| e.to_string())?;
-    let rows = Project::query_used(valence, valence::use_!(r"**Test:** Queries fixture **projects** with filters so the Valence model suite can assert predicate and page results. CI and developers running the suite only."))
+    let rows = Project::query(valence, valence::use_!(r"**Test:** Queries fixture **projects** with filters so the Valence model suite can assert predicate and page results. CI and developers running the suite only."))
         .where_name(StringPredicate::Equals("does-not-exist".into()))
         .await
         .map_err(|e| e.to_string())?;
@@ -209,7 +209,7 @@ async fn typed_field_roundtrip(
     let label = format!("typed-rt-{tag}");
     let (probe, at) = seed_typed_probe(&label)?;
     let valence = session.ensure_valence().map_err(|e| e.to_string())?;
-    let created = TypedProbe::create_used(probe, valence, valence::use_!(r"**Test:** Seeds a **typed probe** fixture so the Valence model suite can assert typed field round-trips and filters. CI and developers running the suite only."))
+    let created = TypedProbe::create(probe, valence, valence::use_!(r"**Test:** Seeds a **typed probe** fixture so the Valence model suite can assert typed field round-trips and filters. CI and developers running the suite only."))
         .await
         .map_err(|e| e.to_string())?;
     let id = created
@@ -217,7 +217,7 @@ async fn typed_field_roundtrip(
         .ok_or("missing typed_probe id")?
         .id()
         .to_string();
-    let fetched = TypedProbe::get_used(&id, valence, valence::use_!(r"**Test:** Reloads the **typed probe** fixture by id so the Valence model suite can assert typed create persisted. CI and developers running the suite only."))
+    let fetched = TypedProbe::get(&id, valence, valence::use_!(r"**Test:** Reloads the **typed probe** fixture by id so the Valence model suite can assert typed create persisted. CI and developers running the suite only."))
         .await
         .map_err(|e| e.to_string())?
         .ok_or("typed_probe get returned none")?;
@@ -256,7 +256,7 @@ async fn query_filter_datetime(
     let label = format!("typed-dt-{tag}");
     let (probe, at) = seed_typed_probe(&label)?;
     let valence = session.ensure_valence().map_err(|e| e.to_string())?;
-    let created = TypedProbe::create_used(probe, valence, valence::use_!(r"**Test:** Seeds a **typed probe** fixture so the Valence model suite can assert typed field round-trips and filters. CI and developers running the suite only."))
+    let created = TypedProbe::create(probe, valence, valence::use_!(r"**Test:** Seeds a **typed probe** fixture so the Valence model suite can assert typed field round-trips and filters. CI and developers running the suite only."))
         .await
         .map_err(|e| e.to_string())?;
     let id = created
@@ -264,7 +264,7 @@ async fn query_filter_datetime(
         .ok_or("missing typed_probe id")?
         .id()
         .to_string();
-    let rows = TypedProbe::query_used(valence, valence::use_!(r"**Test:** Queries **typed probe** fixtures with field predicates so the Valence model suite can assert typed filters. CI and developers running the suite only."))
+    let rows = TypedProbe::query(valence, valence::use_!(r"**Test:** Queries **typed probe** fixtures with field predicates so the Valence model suite can assert typed filters. CI and developers running the suite only."))
         .where_at(DateTimePredicate::Equals(at))
         .await
         .map_err(|e| e.to_string())?;
@@ -296,14 +296,14 @@ async fn query_filter_datetime_miss(
     let label = format!("typed-dt-miss-{tag}");
     let (probe, _) = seed_typed_probe(&label)?;
     let valence = session.ensure_valence().map_err(|e| e.to_string())?;
-    TypedProbe::create_used(probe, valence, valence::use_!(r"**Test:** Seeds a **typed probe** fixture so the Valence model suite can assert typed field round-trips and filters. CI and developers running the suite only."))
+    TypedProbe::create(probe, valence, valence::use_!(r"**Test:** Seeds a **typed probe** fixture so the Valence model suite can assert typed field round-trips and filters. CI and developers running the suite only."))
         .await
         .map_err(|e| e.to_string())?;
     let far_future = Utc
         .timestamp_opt(3_000_000_000, 0)
         .single()
         .ok_or("invalid far-future timestamp")?;
-    let rows = TypedProbe::query_used(valence, valence::use_!(r"**Test:** Queries **typed probe** fixtures with field predicates so the Valence model suite can assert typed filters. CI and developers running the suite only."))
+    let rows = TypedProbe::query(valence, valence::use_!(r"**Test:** Queries **typed probe** fixtures with field predicates so the Valence model suite can assert typed filters. CI and developers running the suite only."))
         .where_at(DateTimePredicate::After(far_future))
         .await
         .map_err(|e| e.to_string())?;
@@ -327,7 +327,7 @@ async fn query_filter_currency(
     let label = format!("typed-cur-{tag}");
     let (probe, _) = seed_typed_probe(&label)?;
     let valence = session.ensure_valence().map_err(|e| e.to_string())?;
-    let created = TypedProbe::create_used(probe, valence, valence::use_!(r"**Test:** Seeds a **typed probe** fixture so the Valence model suite can assert typed field round-trips and filters. CI and developers running the suite only."))
+    let created = TypedProbe::create(probe, valence, valence::use_!(r"**Test:** Seeds a **typed probe** fixture so the Valence model suite can assert typed field round-trips and filters. CI and developers running the suite only."))
         .await
         .map_err(|e| e.to_string())?;
     let id = created
@@ -335,7 +335,7 @@ async fn query_filter_currency(
         .ok_or("missing typed_probe id")?
         .id()
         .to_string();
-    let rows = TypedProbe::query_used(valence, valence::use_!(r"**Test:** Queries **typed probe** fixtures with field predicates so the Valence model suite can assert typed filters. CI and developers running the suite only."))
+    let rows = TypedProbe::query(valence, valence::use_!(r"**Test:** Queries **typed probe** fixtures with field predicates so the Valence model suite can assert typed filters. CI and developers running the suite only."))
         .where_price_code(CurrencyCode::Usd)
         .where_price_minor(IntPredicate::Equals(12345))
         .await
@@ -374,10 +374,10 @@ async fn query_filter_currency_miss(
     let label = format!("typed-cur-miss-{tag}");
     let (probe, _) = seed_typed_probe(&label)?;
     let valence = session.ensure_valence().map_err(|e| e.to_string())?;
-    TypedProbe::create_used(probe, valence, valence::use_!(r"**Test:** Seeds a **typed probe** fixture so the Valence model suite can assert typed field round-trips and filters. CI and developers running the suite only."))
+    TypedProbe::create(probe, valence, valence::use_!(r"**Test:** Seeds a **typed probe** fixture so the Valence model suite can assert typed field round-trips and filters. CI and developers running the suite only."))
         .await
         .map_err(|e| e.to_string())?;
-    let rows = TypedProbe::query_used(valence, valence::use_!(r"**Test:** Queries **typed probe** fixtures with field predicates so the Valence model suite can assert typed filters. CI and developers running the suite only."))
+    let rows = TypedProbe::query(valence, valence::use_!(r"**Test:** Queries **typed probe** fixtures with field predicates so the Valence model suite can assert typed filters. CI and developers running the suite only."))
         .where_price_code(CurrencyCode::Eur)
         .await
         .map_err(|e| e.to_string())?;
@@ -393,7 +393,7 @@ async fn query_filter_currency_miss(
 async fn query_order_by(session: &mut BootstrapSession, mode: RunMode) -> Result<(), String> {
     seed_named(session, &["zulu-order", "alpha-order"]).await?;
     let valence = session.ensure_valence().map_err(|e| e.to_string())?;
-    let rows = Project::query_used(valence, valence::use_!(r"**Test:** Queries fixture **projects** with filters so the Valence model suite can assert predicate and page results. CI and developers running the suite only."))
+    let rows = Project::query(valence, valence::use_!(r"**Test:** Queries fixture **projects** with filters so the Valence model suite can assert predicate and page results. CI and developers running the suite only."))
         .order_by_name(SortDirection::Asc)
         .await
         .map_err(|e| e.to_string())?;
@@ -414,7 +414,7 @@ async fn query_order_by(session: &mut BootstrapSession, mode: RunMode) -> Result
 async fn query_pagination(session: &mut BootstrapSession, mode: RunMode) -> Result<(), String> {
     seed_named(session, &["p0", "p1", "p2"]).await?;
     let valence = session.ensure_valence().map_err(|e| e.to_string())?;
-    let page = Project::query_used(valence, valence::use_!(r"**Test:** Queries fixture **projects** with filters so the Valence model suite can assert predicate and page results. CI and developers running the suite only."))
+    let page = Project::query(valence, valence::use_!(r"**Test:** Queries fixture **projects** with filters so the Valence model suite can assert predicate and page results. CI and developers running the suite only."))
         .order_by_name(SortDirection::Asc)
         .limit(2)
         .offset(0)
@@ -429,7 +429,7 @@ async fn query_pagination(session: &mut BootstrapSession, mode: RunMode) -> Resu
 async fn query_offset_empty(session: &mut BootstrapSession, mode: RunMode) -> Result<(), String> {
     seed_named(session, &["one-row"]).await?;
     let valence = session.ensure_valence().map_err(|e| e.to_string())?;
-    let page = Project::query_used(valence, valence::use_!(r"**Test:** Queries fixture **projects** with filters so the Valence model suite can assert predicate and page results. CI and developers running the suite only."))
+    let page = Project::query(valence, valence::use_!(r"**Test:** Queries fixture **projects** with filters so the Valence model suite can assert predicate and page results. CI and developers running the suite only."))
         .limit(10)
         .offset(10_000)
         .await
@@ -453,11 +453,11 @@ async fn read_cache_smoke(session: &mut BootstrapSession, mode: RunMode) -> Resu
     }
     let id = seed_named(session, &["cache-row"]).await?;
     let valence = session.ensure_valence().map_err(|e| e.to_string())?;
-    let _ = Project::get_used(&id, valence, valence::use_!(r"**Test:** Reloads the fixture **project** by id so the Valence model suite can assert create persisted the expected name. CI and developers running the suite only."))
+    let _ = Project::get(&id, valence, valence::use_!(r"**Test:** Reloads the fixture **project** by id so the Valence model suite can assert create persisted the expected name. CI and developers running the suite only."))
         .await
         .map_err(|e| e.to_string())?;
     invalidate("project", &id);
-    let again = Project::get_used(&id, valence, valence::use_!(r"**Test:** Reloads the fixture **project** by id so the Valence model suite can assert create persisted the expected name. CI and developers running the suite only."))
+    let again = Project::get(&id, valence, valence::use_!(r"**Test:** Reloads the fixture **project** by id so the Valence model suite can assert create persisted the expected name. CI and developers running the suite only."))
         .await
         .map_err(|e| e.to_string())?;
     if again.is_none() {

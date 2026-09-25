@@ -37,17 +37,17 @@ pub async fn run(ctx: &RunContext) -> Result<BenchReport> {
 
     for i in 0..depth {
         let project = Project::new(format!("privacy-q-{i}")).expect("new");
-        Project::create_used(project, valence, valence::use_!(r"**Test:** Seeds fixture **projects** for a Valence bench runner so throughput timing has rows to create under load. Benchmark operators running the suite only.")).await?;
+        Project::create(project, valence, valence::use_!(r"**Test:** Seeds fixture **projects** for a Valence bench runner so throughput timing has rows to create under load. Benchmark operators running the suite only.")).await?;
     }
 
     clear_privacy_bypass();
     let mut with_filter = Vec::with_capacity(ctx.sweep.query_iters);
     for _ in 0..ctx.warmup {
-        let _ = Project::query_used(valence, valence::use_!(r"**Test:** Queries fixture **projects** in a Valence bench runner so filter and scan latency can be measured under load. Benchmark operators running the suite only.")).await?;
+        let _ = Project::query(valence, valence::use_!(r"**Test:** Queries fixture **projects** in a Valence bench runner so filter and scan latency can be measured under load. Benchmark operators running the suite only.")).await?;
     }
     for _ in 0..ctx.sweep.query_iters {
         let start = Instant::now();
-        let _ = Project::query_used(valence, valence::use_!(r"**Test:** Queries fixture **projects** in a Valence bench runner so filter and scan latency can be measured under load. Benchmark operators running the suite only.")).await?;
+        let _ = Project::query(valence, valence::use_!(r"**Test:** Queries fixture **projects** in a Valence bench runner so filter and scan latency can be measured under load. Benchmark operators running the suite only.")).await?;
         with_filter.push(start.elapsed().as_secs_f64() * 1000.0);
     }
 
@@ -55,7 +55,7 @@ pub async fn run(ctx: &RunContext) -> Result<BenchReport> {
     let mut bypass = Vec::with_capacity(ctx.sweep.query_iters);
     for _ in 0..ctx.sweep.query_iters {
         let start = Instant::now();
-        let _ = Project::query_used(valence, valence::use_!(r"**Test:** Queries fixture **projects** in a Valence bench runner so filter and scan latency can be measured under load. Benchmark operators running the suite only.")).await?;
+        let _ = Project::query(valence, valence::use_!(r"**Test:** Queries fixture **projects** in a Valence bench runner so filter and scan latency can be measured under load. Benchmark operators running the suite only.")).await?;
         bypass.push(start.elapsed().as_secs_f64() * 1000.0);
     }
     clear_privacy_bypass();

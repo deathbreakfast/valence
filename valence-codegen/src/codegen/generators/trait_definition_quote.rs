@@ -263,24 +263,18 @@ fn quote_trait_definition_bundle(p: &TraitDefinitionPieces) -> TokenStream {
 
         #[allow(dead_code)]
         impl<'a> #query_all_struct_name<'a> {
-            #[deprecated(note = "use query_used with use_!(...) for declared data-use transparency")]
-            pub fn query(valence: &'a valence::Valence) -> Self {
+            /// Declared trait query builder (catalog target: Trait).
+            pub fn query(
+                valence: &'a valence::Valence,
+                purpose: valence::DataUsePurpose,
+            ) -> Self {
+                let _ = purpose;
                 let tables = valence::TraitRegistry::global()
                     .tables_for_trait(#trait_name_lit);
                 let table_csv = tables.join(", ");
                 let mut core = valence::QueryCore::new(table_csv);
                 core.projection = Some(vec![#(#select_field_lits.to_string()),*]);
                 Self { inner: core, valence }
-            }
-
-            /// Declared trait query builder (catalog target: Trait).
-            pub fn query_used(
-                valence: &'a valence::Valence,
-                purpose: valence::DataUsePurpose,
-            ) -> Self {
-                let _ = purpose;
-                #[allow(deprecated)]
-                Self::query(valence)
             }
 
             #(#query_all_where_methods_pub)*
@@ -333,8 +327,12 @@ fn quote_trait_definition_bundle(p: &TraitDefinitionPieces) -> TokenStream {
 
             fn into_future(self) -> Self::IntoFuture {
                 Box::pin(async move {
-                    #[allow(deprecated)]
-                    self.inner.execute(self.valence).await
+                    self.inner
+                        .execute(
+                            self.valence,
+                            valence::DataUsePurpose::framework_nested(),
+                        )
+                        .await
                 })
             }
         }

@@ -2,11 +2,11 @@
 
 use std::sync::Arc;
 
-use product_model_host::Project;
+use product_model_host::{Project, Task, TaskMutable};
 use valence_core::actor::Actor;
 use valence_core::error::Result;
 use valence_core::runtime::Valence;
-use valence_core::{DatabaseBackend, Model};
+use valence_core::{DatabaseBackend, Model, RecordId};
 
 use crate::bootstrap::WireBackendOptions;
 use crate::deletion_capture::reset_deletion_capture;
@@ -256,18 +256,75 @@ pub async fn run_model_contract(backend: Arc<dyn DatabaseBackend>) -> Result<()>
         .build()?;
 
     let project = Project::new("alpha".to_string()).expect("new");
-    let created = Project::create_used(project, &valence, valence::use_!(r"**Test:** Seeds a fixture **project** so the Valence model suite can exercise create and later reads against a known parent row. CI and developers running the suite only.")).await?;
+    let created = Project::create(project, &valence, valence::use_!(r"**Test:** Seeds a fixture **project** so the Valence model suite can exercise create and later reads against a known parent row. CI and developers running the suite only.")).await?;
     let project_id = created.id().expect("id").id();
 
-    let fetched = Project::get_used(project_id, &valence, valence::use_!(r"**Test:** Reloads the fixture **project** by id so the Valence model suite can assert create persisted the expected name. CI and developers running the suite only.")).await?;
+    let fetched = Project::get(project_id, &valence, valence::use_!(r"**Test:** Reloads the fixture **project** by id so the Valence model suite can assert create persisted the expected name. CI and developers running the suite only.")).await?;
     assert!(fetched.is_some());
+    let fetched = fetched.expect("row exists");
 
-    let merged =
-        Project::merge_used(project_id, serde_json::json!({ "name": "beta" }), &valence, valence::use_!(r"**Test:** Merges a name patch onto the fixture **project** so the Valence model suite can assert partial update behavior. CI and developers running the suite only.")).await?;
+    let merged = fetched
+        .get_mutable(&valence, valence::use_!(r"**Test:** Loads the fixture **project** as a mutable builder so the Valence model suite can assert sparse partial-update behavior. CI and developers running the suite only."))
+        .set_name("beta".to_string())
+        .expect("set_name")
+        .commit()
+        .await?;
     assert_eq!(merged.name(), "beta");
 
+    // Disjoint-field concurrent-write regression: two "sessions" that each read the
+    // same original row and each change a DIFFERENT field must not clobber each
+    // other, even though neither knows about the other's write. This is the
+    // structural property the sparse `update_with_before` write depends on — a
+    // full-row replace (the pre-fix behavior) would fail this assertion.
+    let project_b = Project::create(
+        Project::new("gamma".to_string()).expect("new"),
+        &valence,
+        valence::use_!(r"**Test:** Seeds a second fixture **project** so the disjoint-field regression test has an independent value to swap a task's reference to. CI and developers running the suite only."),
+    )
+    .await?;
+    let project_b_id = project_b.id().expect("id").id().to_string();
+
+    let task = Task::new("ship".to_string(), RecordId::new("project", project_id)).expect("new");
+    let created_task = Task::create(
+        task,
+        &valence,
+        valence::use_!(r"**Test:** Seeds a fixture **task** so the disjoint-field regression test has a row with two independent fields to race edits against. CI and developers running the suite only."),
+    )
+    .await?;
+    let task_id = created_task.id().expect("id").id().to_string();
+
+    let before_task = Task::get(
+        &task_id,
+        &valence,
+        valence::use_!(r"**Test:** Reloads the fixture **task** so both simulated concurrent editors start from the same original snapshot. CI and developers running the suite only."),
+    )
+    .await?
+    .expect("row exists");
+
+    TaskMutable::new(before_task.clone(), &valence)
+        .set_title("shipped".to_string())
+        .expect("set_title")
+        .commit()
+        .await?;
+
+    TaskMutable::new(before_task.clone(), &valence)
+        .set_project(RecordId::new("project", project_b_id.clone()))
+        .expect("set_project")
+        .commit()
+        .await?;
+
+    let final_task = Task::get(
+        &task_id,
+        &valence,
+        valence::use_!(r"**Test:** Reloads the fixture **task** so the suite can assert both concurrent edits survived without clobbering each other. CI and developers running the suite only."),
+    )
+    .await?
+    .expect("row exists");
+    assert_eq!(final_task.title(), "shipped");
+    assert_eq!(final_task.project().id(), project_b_id.as_str());
+
     let captured = reset_deletion_capture();
-    Project::delete_used(project_id, &valence, valence::use_!(r"**Test:** Queues deletion of the fixture **project** so the Valence model suite can assert the cascade dispatcher path. CI and developers running the suite only.")).await?;
+    Project::delete(project_id, &valence, valence::use_!(r"**Test:** Queues deletion of the fixture **project** so the Valence model suite can assert the cascade dispatcher path. CI and developers running the suite only.")).await?;
     assert!(!captured
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner())

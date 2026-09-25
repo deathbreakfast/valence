@@ -102,7 +102,12 @@ pub(super) fn model_get_method_tokens(cx: &CrudEmitCtx<'_>) -> TokenStream {
         }
     };
     quote! {
-        async fn get(id: &str, valence: &valence::Valence) -> valence::Result<Option<Self>> {
+        async fn get(
+            id: &str,
+            valence: &valence::Valence,
+            purpose: valence::DataUsePurpose,
+        ) -> valence::Result<Option<Self>> {
+            let _ = purpose;
             let id = id.to_string();
             let (mut result, __bundle_status): (
                 Option<Self>,

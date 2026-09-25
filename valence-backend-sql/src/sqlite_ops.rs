@@ -14,7 +14,8 @@ use crate::json_merge;
 use crate::prepare_compiled;
 use crate::typed_table::{
     create_record_typed_sqlite, define_unique_index_column_sqlite, ensure_layout_for_write_sqlite,
-    get_record_typed_sqlite, map_select_row_sqlite, update_record_typed_sqlite, WriteEnsureCache,
+    get_record_typed_sqlite, map_select_row_sqlite, merge_record_typed_sqlite,
+    update_record_typed_sqlite, WriteEnsureCache,
 };
 
 /// Dialect-specific SQL fragments.
@@ -168,15 +169,28 @@ pub async fn merge_record_sqlite(
     patch: Value,
     ensured: &WriteEnsureCache,
 ) -> Result<Value> {
-    let existing = get_record_sqlite(pool, table, id)
-        .await?
-        .ok_or_else(|| Error::NotFound(format!("{table}:{id}")))?;
-    let mut base = existing.as_object().cloned().unwrap_or_default();
-    base.remove("id");
-    if let Some(patch_obj) = patch.as_object() {
-        json_merge(&mut base, patch_obj);
+    if valence_core::schema::SchemaRegistry::global()
+        .get_full_schema(table)
+        .is_none()
+    {
+        // No schema registered for this table: `StorageLayout::resolve_for_write`
+        // would build a layout from the sparse patch's own keys only
+        // (`from_content_keys`), which could miss real columns the row actually
+        // has. Fall back to the old fetch-then-full-update path for this case —
+        // registered tables (the real Model CRUD path) skip this branch entirely
+        // and get the atomic sparse write below.
+        let existing = get_record_sqlite(pool, table, id)
+            .await?
+            .ok_or_else(|| Error::NotFound(format!("{table}:{id}")))?;
+        let mut base = existing.as_object().cloned().unwrap_or_default();
+        base.remove("id");
+        if let Some(patch_obj) = patch.as_object() {
+            json_merge(&mut base, patch_obj);
+        }
+        return update_record_sqlite(pool, table, id, Value::Object(base), ensured).await;
     }
-    update_record_sqlite(pool, table, id, Value::Object(base), ensured).await
+    let layout = StorageLayout::resolve_for_write(table, &patch)?;
+    merge_record_typed_sqlite(pool, &layout, id, patch, ensured).await
 }
 
 pub async fn delete_record_sqlite(pool: &sqlx::SqlitePool, table: &str, id: &str) -> Result<()> {

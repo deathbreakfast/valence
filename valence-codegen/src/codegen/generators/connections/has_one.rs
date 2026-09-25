@@ -52,65 +52,78 @@ pub(super) fn push_has_one_methods_for_connection(
     }
 
     let target_table_lit = conn.to_table.as_str();
-    let forward_method = if field_is_nullable {
-        quote! {
-            /// Navigate the `#from_field` connection. Loads full target, runs read privacy.
+
+    if field_is_nullable {
+        methods.push(quote! {
+            /// Navigate the `#from_field` connection with a declared data use.
             /// Returns `Ok(None)` when the FK field is unset.
-            pub async fn #get_method_name(&self, valence: &valence::Valence) -> valence::Result<Option<#target_type>> {
+            pub async fn #get_method_name(
+                &self,
+                valence: &valence::Valence,
+                purpose: valence::DataUsePurpose,
+            ) -> valence::Result<Option<#target_type>> {
                 match &self.#field_ident {
                     Some(rid) => {
                         let id = valence::connection::extract_id_from_record(rid)?;
-                        #[allow(deprecated)]
-                        <#target_type as valence::Model>::get(&id, valence).await
+                        <#target_type as valence::Model>::get(&id, valence, purpose).await
                     }
-                    None => Ok(None),
+                    None => {
+                        let _ = purpose;
+                        Ok(None)
+                    }
                 }
             }
-        }
+        });
     } else if conn.required {
-        quote! {
-            /// Navigate the `#from_field` connection. Loads full target, runs read privacy.
-            pub async fn #get_method_name(&self, valence: &valence::Valence) -> valence::Result<#target_type> {
+        methods.push(quote! {
+            /// Navigate the `#from_field` connection with a declared data use.
+            pub async fn #get_method_name(
+                &self,
+                valence: &valence::Valence,
+                purpose: valence::DataUsePurpose,
+            ) -> valence::Result<#target_type> {
                 let id = valence::connection::extract_id_from_record(&self.#field_ident)?;
-                #[allow(deprecated)]
-                let row = <#target_type as valence::Model>::get(&id, valence).await?;
+                let row = <#target_type as valence::Model>::get(&id, valence, purpose).await?;
                 row.ok_or_else(|| valence::Error::NotFound(
                         format!("{} {} not found", #target_table_lit, id),
                     ))
             }
-        }
+        });
     } else {
-        quote! {
-            /// Navigate the `#from_field` connection. Loads full target, runs read privacy.
-            pub async fn #get_method_name(&self, valence: &valence::Valence) -> valence::Result<Option<#target_type>> {
+        methods.push(quote! {
+            /// Navigate the `#from_field` connection with a declared data use.
+            pub async fn #get_method_name(
+                &self,
+                valence: &valence::Valence,
+                purpose: valence::DataUsePurpose,
+            ) -> valence::Result<Option<#target_type>> {
                 let id = valence::connection::extract_id_from_record(&self.#field_ident)?;
-                #[allow(deprecated)]
-                <#target_type as valence::Model>::get(&id, valence).await
+                <#target_type as valence::Model>::get(&id, valence, purpose).await
             }
-        }
-    };
-    methods.push(forward_method);
+        });
+    }
 
     methods.push(quote! {
-        /// Reverse: all records pointing to this target (by reference)
+        /// Reverse: all records pointing to this target (by reference), with a declared data use.
         pub async fn #get_from_method_name(
             target: &#target_type,
             valence: &valence::Valence,
+            purpose: valence::DataUsePurpose,
         ) -> valence::Result<Vec<#struct_name>> {
             let id = valence::connection::id_from_model(target)?;
-            Self::#get_from_id_method_name(&id, valence).await
+            Self::#get_from_id_method_name(&id, valence, purpose).await
         }
     });
 
     let to_table_lit = conn.to_table.as_str();
     methods.push(quote! {
-        /// Reverse: all records pointing to this target (by ID)
+        /// Reverse: all records pointing to this target (by ID), with a declared data use.
         pub async fn #get_from_id_method_name(
             target_id: &str,
             valence: &valence::Valence,
+            purpose: valence::DataUsePurpose,
         ) -> valence::Result<Vec<#struct_name>> {
-            #[allow(deprecated)]
-            #struct_name::query(valence)
+            #struct_name::query(valence, purpose)
                 .#where_method_name(valence::RecordPredicate::Equals(
                     valence::RecordId::new(#to_table_lit, target_id),
                 ))

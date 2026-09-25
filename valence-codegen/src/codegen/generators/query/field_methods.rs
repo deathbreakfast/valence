@@ -127,8 +127,13 @@ pub(super) fn collect_field_query_methods(
             let distinct_method_name = format_ident!("distinct_{}", field_name_str);
             let field_name_lit = LitStr::new(field_name_str, proc_macro2::Span::call_site());
             distinct_methods.push(quote! {
-                pub async fn #distinct_method_name(self) -> valence::Result<Vec<String>> {
-                    self.inner.distinct_values(#field_name_lit, self.valence).await
+                pub async fn #distinct_method_name(
+                    self,
+                    purpose: valence::DataUsePurpose,
+                ) -> valence::Result<Vec<String>> {
+                    self.inner
+                        .distinct_values(#field_name_lit, self.valence, purpose)
+                        .await
                 }
             });
         }

@@ -13,8 +13,8 @@ use async_trait::async_trait;
 /// CRUD methods route through the active [`Valence`] backend, applying privacy and ownership
 /// hooks defined in the source schema.
 ///
-/// Prefer `*_used` methods with `use_!(...)` so declared data uses
-/// appear in the transparency catalog. Bare methods remain for migration (warn-only in v1).
+/// Every CRUD entry point takes a [`DataUsePurpose`] (pass `use_!(...)`) so declared data
+/// uses appear in the transparency catalog. There is no purpose-free public overload.
 ///
 /// # Examples
 ///
@@ -24,10 +24,10 @@ use async_trait::async_trait;
 /// ```ignore
 /// use valence::{use_, Model};
 ///
-/// let created = Widget::create_used(widget, &valence, use_!(r#"In the **Model trait demo**, we **create a demo widget** so later reload and update examples have a generated row to work with. Developers reading the crate docs use this example."#)).await?;
-/// let loaded = Widget::get_used(created.id(), &valence, use_!(r#"After create in the **Model trait demo**, we **reload the widget by id** so readers can confirm the declared get path returned the row. Developers reading the crate docs use this result."#)).await?;
-/// Widget::update_used(created.id(), updated, &valence, use_!(r#"In the **Model trait demo**, we **replace the widget with updated fields** so readers can see a full-row update on a generated model. Developers reading the crate docs use this result."#)).await?;
-/// Widget::delete_used(created.id(), &valence, use_!(r#"At the end of the **Model trait demo**, we **queue widget deletion** so readers can see how declared delete starts durable removal. Developers reading the crate docs use this result."#)).await?;
+/// let created = Widget::create(widget, &valence, use_!(r#"In the **Model trait demo**, we **create a demo widget** so later reload and update examples have a generated row to work with. Developers reading the crate docs use this example."#)).await?;
+/// let loaded = Widget::get(created.id(), &valence, use_!(r#"After create in the **Model trait demo**, we **reload the widget by id** so readers can confirm the declared get path returned the row. Developers reading the crate docs use this result."#)).await?;
+/// Widget::update(created.id(), updated, &valence, use_!(r#"In the **Model trait demo**, we **replace the widget with updated fields** so readers can see a full-row update on a generated model. Developers reading the crate docs use this result."#)).await?;
+/// Widget::delete(created.id(), &valence, use_!(r#"At the end of the **Model trait demo**, we **queue widget deletion** so readers can see how declared delete starts durable removal. Developers reading the crate docs use this result."#)).await?;
 /// ```
 ///
 /// See workspace `examples/codegen-host` and `examples/product-model-host`.
@@ -45,57 +45,29 @@ pub trait Model: Sized + Send + Sync {
 
     /// Fetch one row by primary key; returns `Ok(None)` when absent **or** when
     /// entity read privacy denies the viewer (uniform not-found).
-    #[deprecated(note = "use get_used with use_!(...) for declared data-use transparency")]
-    async fn get(id: &str, valence: &Valence) -> Result<Option<Self>>;
-
-    /// Declared read: same as [`Self::get`], with a catalog purpose.
-    async fn get_used(
-        id: &str,
-        valence: &Valence,
-        purpose: DataUsePurpose,
-    ) -> Result<Option<Self>> {
-        let _ = purpose;
-        #[allow(deprecated)]
-        Self::get(id, valence).await
-    }
+    ///
+    /// Pass `use_!(...)` so this read appears in the transparency catalog.
+    async fn get(id: &str, valence: &Valence, purpose: DataUsePurpose) -> Result<Option<Self>>;
 
     /// Insert a new row.
-    #[deprecated(note = "use create_used with use_!(...) for declared data-use transparency")]
-    async fn create(data: Self, valence: &Valence) -> Result<Self>;
-
-    /// Declared create: same as [`Self::create`], with a catalog purpose.
-    async fn create_used(data: Self, valence: &Valence, purpose: DataUsePurpose) -> Result<Self> {
-        let _ = purpose;
-        #[allow(deprecated)]
-        Self::create(data, valence).await
-    }
+    ///
+    /// Pass `use_!(...)` so this create appears in the transparency catalog.
+    async fn create(data: Self, valence: &Valence, purpose: DataUsePurpose) -> Result<Self>;
 
     /// Replace an existing row by id.
-    #[deprecated(note = "use update_used with use_!(...) for declared data-use transparency")]
-    async fn update(id: &str, data: Self, valence: &Valence) -> Result<Self>;
-
-    /// Declared update: same as [`Self::update`], with a catalog purpose.
-    async fn update_used(
+    ///
+    /// Pass `use_!(...)` so this update appears in the transparency catalog.
+    async fn update(
         id: &str,
         data: Self,
         valence: &Valence,
         purpose: DataUsePurpose,
-    ) -> Result<Self> {
-        let _ = purpose;
-        #[allow(deprecated)]
-        Self::update(id, data, valence).await
-    }
+    ) -> Result<Self>;
 
     /// Queue a durable deletion run (or hard-delete for deletion-skip platform tables).
-    #[deprecated(note = "use delete_used with use_!(...) for declared data-use transparency")]
-    async fn delete(id: &str, valence: &Valence) -> Result<()>;
-
-    /// Declared delete: same as [`Self::delete`], with a catalog purpose.
-    async fn delete_used(id: &str, valence: &Valence, purpose: DataUsePurpose) -> Result<()> {
-        let _ = purpose;
-        #[allow(deprecated)]
-        Self::delete(id, valence).await
-    }
+    ///
+    /// Pass `use_!(...)` so this delete appears in the transparency catalog.
+    async fn delete(id: &str, valence: &Valence, purpose: DataUsePurpose) -> Result<()>;
 
     /// Physically delete this row and its deletion DAG in the current future.
     ///
@@ -106,6 +78,8 @@ pub trait Model: Sized + Send + Sync {
     /// Intentionally unbounded: use only for bounded request workloads. Prefer
     /// [`Self::delete`] for large or retry-heavy graphs.
     ///
+    /// Pass `use_!(...)` so this delete appears in the transparency catalog.
+    ///
     /// # Errors
     ///
     /// Privacy, Restrict validation, pending coordination, or apply failures.
@@ -115,60 +89,31 @@ pub trait Model: Sized + Send + Sync {
     /// ```rust,ignore
     /// use valence::{use_, Model};
     ///
-    /// Project::delete_now_used(
+    /// Project::delete_now(
     ///     "project-42",
     ///     &session_valence,
     ///     use_!(r#"When a user asks to **remove a project**, we **erase that project and its deletion graph immediately** so related rows are gone in the same request. The signed-in operator who requested removal uses this outcome."#),
     /// )
     /// .await?;
-    /// assert!(Project::get_used("project-42", &session_valence, use_!(r#"After immediate deletion, we **load the project by id again** so we can confirm the row is gone before continuing. The same request path uses this check only."#)).await?.is_none());
+    /// assert!(Project::get("project-42", &session_valence, use_!(r#"After immediate deletion, we **load the project by id again** so we can confirm the row is gone before continuing. The same request path uses this check only."#)).await?.is_none());
     /// ```
-    #[deprecated(note = "use delete_now_used with use_!(...) for declared data-use transparency")]
-    async fn delete_now(id: &str, valence: &Valence) -> Result<()> {
-        crate::deletion::delete_entity_now(Self::table_name(), id, valence).await
-    }
-
-    /// Declared immediate delete: same as [`Self::delete_now`], with a catalog purpose.
-    async fn delete_now_used(id: &str, valence: &Valence, purpose: DataUsePurpose) -> Result<()> {
+    async fn delete_now(id: &str, valence: &Valence, purpose: DataUsePurpose) -> Result<()> {
         let _ = purpose;
-        #[allow(deprecated)]
-        Self::delete_now(id, valence).await
+        crate::deletion::delete_entity_now(Self::table_name(), id, valence).await
     }
 
     /// Create or replace a row by explicit id.
     ///
     /// Privacy: when the row is absent, **create** policies apply; when it exists, **update**
     /// policies apply to both the existing row and the proposed payload (after an authorized read).
-    #[deprecated(note = "use upsert_used with use_!(...) for declared data-use transparency")]
-    async fn upsert(id: &str, data: Self, valence: &Valence) -> Result<Self>;
-
-    /// Declared upsert: same as [`Self::upsert`], with a catalog purpose.
-    async fn upsert_used(
+    ///
+    /// Pass `use_!(...)` so this upsert appears in the transparency catalog.
+    async fn upsert(
         id: &str,
         data: Self,
         valence: &Valence,
         purpose: DataUsePurpose,
-    ) -> Result<Self> {
-        let _ = purpose;
-        #[allow(deprecated)]
-        Self::upsert(id, data, valence).await
-    }
-
-    /// Patch an existing row with a partial JSON object when the backend supports merge.
-    #[deprecated(note = "use merge_used with use_!(...) for declared data-use transparency")]
-    async fn merge(id: &str, patch: serde_json::Value, valence: &Valence) -> Result<Self>;
-
-    /// Declared merge: same as [`Self::merge`], with a catalog purpose.
-    async fn merge_used(
-        id: &str,
-        patch: serde_json::Value,
-        valence: &Valence,
-        purpose: DataUsePurpose,
-    ) -> Result<Self> {
-        let _ = purpose;
-        #[allow(deprecated)]
-        Self::merge(id, patch, valence).await
-    }
+    ) -> Result<Self>;
 }
 
 /// Field access direction for privacy checks.
@@ -176,7 +121,7 @@ pub trait Model: Sized + Send + Sync {
 pub enum FieldOperation {
     /// Read path (get, list, query projection).
     Read,
-    /// Write path (create, update, merge).
+    /// Write path (create, update).
     Write,
 }
 

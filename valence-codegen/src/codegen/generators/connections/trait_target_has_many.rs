@@ -26,16 +26,16 @@ pub(super) fn push_has_many_trait_target_method(
     let self_table_lit = schema.table_name.as_str();
 
     methods.push(quote! {
-        /// Navigate the `#conn_name` connection (HasMany trait target).
+        /// Navigate the `#conn_name` connection (HasMany trait target) with a declared data use.
         /// Returns rows from all trait implementor tables for this source.
         pub async fn #get_method_name(
             &self,
             valence: &valence::Valence,
+            purpose: valence::DataUsePurpose,
         ) -> valence::Result<Vec<#target_model>> {
             let id = valence::connection::id_from_model(self)?;
             let parent_rid = valence::RecordId::new(#self_table_lit, &id);
-            #[allow(deprecated)]
-            #target_query_all::query(valence)
+            #target_query_all::query(valence, purpose)
                 .#where_method_name(valence::RecordPredicate::Equals(parent_rid))
                 .await
         }

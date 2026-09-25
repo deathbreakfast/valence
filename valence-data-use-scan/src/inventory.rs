@@ -12,7 +12,7 @@ pub struct InventoryRow {
     pub line: u32,
     /// Crate name.
     pub crate_name: String,
-    /// Method (`get_used`, …).
+    /// Method (`get`, …).
     pub method: String,
     /// Purpose markdown.
     pub purpose: String,

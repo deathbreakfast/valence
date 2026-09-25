@@ -21,14 +21,14 @@ pub async fn run(ctx: &RunContext) -> Result<BenchReport> {
 
     for i in 0..depth {
         let project = Project::new(format!("scan-{i}")).expect("new");
-        Project::create_used(project, valence, valence::use_!(r"**Test:** Seeds fixture **projects** for a Valence bench runner so throughput timing has rows to create under load. Benchmark operators running the suite only.")).await?;
+        Project::create(project, valence, valence::use_!(r"**Test:** Seeds fixture **projects** for a Valence bench runner so throughput timing has rows to create under load. Benchmark operators running the suite only.")).await?;
     }
 
     let mut samples = Vec::with_capacity(ctx.sweep.query_iters.min(50));
     let mut last_len = 0usize;
     for _ in 0..ctx.sweep.query_iters.min(50) {
         let start = std::time::Instant::now();
-        let rows = Project::query_used(valence, valence::use_!(r"**Test:** Queries fixture **projects** in a Valence bench runner so filter and scan latency can be measured under load. Benchmark operators running the suite only.")).await?;
+        let rows = Project::query(valence, valence::use_!(r"**Test:** Queries fixture **projects** in a Valence bench runner so filter and scan latency can be measured under load. Benchmark operators running the suite only.")).await?;
         last_len = rows.len();
         samples.push(start.elapsed().as_secs_f64() * 1000.0);
     }

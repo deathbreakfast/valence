@@ -24,11 +24,14 @@ pub(super) fn push_has_many_method_for_connection(
     let self_table_lit = schema.table_name.as_str();
 
     methods.push(quote! {
-        /// Navigate the `#conn_name` connection (HasMany). Loads related records, runs read privacy.
-        pub async fn #get_method_name(&self, valence: &valence::Valence) -> valence::Result<Vec<#target_type>> {
+        /// Navigate the `#conn_name` connection (HasMany) with a declared data use.
+        pub async fn #get_method_name(
+            &self,
+            valence: &valence::Valence,
+            purpose: valence::DataUsePurpose,
+        ) -> valence::Result<Vec<#target_type>> {
             let id = valence::connection::id_from_model(self)?;
-            #[allow(deprecated)]
-            #target_type::query(valence)
+            #target_type::query(valence, purpose)
                 .#where_method_name(valence::RecordPredicate::Equals(
                     valence::RecordId::new(#self_table_lit, &id),
                 ))

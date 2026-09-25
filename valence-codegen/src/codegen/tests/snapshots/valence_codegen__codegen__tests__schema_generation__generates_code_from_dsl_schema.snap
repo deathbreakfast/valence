@@ -81,7 +81,12 @@ impl valence::Model for TestEntity {
     fn schema_version() -> &'static str {
         "0.1.0"
     }
-    async fn get(id: &str, valence: &valence::Valence) -> valence::Result<Option<Self>> {
+    async fn get(
+        id: &str,
+        valence: &valence::Valence,
+        purpose: valence::DataUsePurpose,
+    ) -> valence::Result<Option<Self>> {
+        let _ = purpose;
         let id = id.to_string();
         let (
             mut result,
@@ -177,7 +182,12 @@ impl valence::Model for TestEntity {
         };
         Ok(result)
     }
-    async fn create(data: Self, valence: &valence::Valence) -> valence::Result<Self> {
+    async fn create(
+        data: Self,
+        valence: &valence::Valence,
+        purpose: valence::DataUsePurpose,
+    ) -> valence::Result<Self> {
+        let _ = purpose;
         data.check_create_privacy(valence).await?;
         let record = serde_json::to_value(&data).map_err(valence::Error::from)?;
         Self::__assert_unique_constraints_for_record(&record, None, valence).await?;
@@ -226,10 +236,17 @@ impl valence::Model for TestEntity {
         id: &str,
         data: Self,
         valence: &valence::Valence,
+        purpose: valence::DataUsePurpose,
     ) -> valence::Result<Self> {
+        let _ = purpose;
         Self::update_with_before(id, data, None, valence).await
     }
-    async fn delete(id: &str, valence: &valence::Valence) -> valence::Result<()> {
+    async fn delete(
+        id: &str,
+        valence: &valence::Valence,
+        purpose: valence::DataUsePurpose,
+    ) -> valence::Result<()> {
+        let _ = purpose;
         match valence::deletion::prepare_deletion(
                 Self::table_name(),
                 id,
@@ -271,9 +288,9 @@ impl valence::Model for TestEntity {
         id: &str,
         data: Self,
         valence: &valence::Valence,
+        purpose: valence::DataUsePurpose,
     ) -> valence::Result<Self> {
-        #[allow(deprecated)]
-        let before_snapshot = Self::get(id, valence).await?;
+        let before_snapshot = Self::get(id, valence, purpose).await?;
         if let Some(ref existing) = before_snapshot {
             existing.check_update_privacy(valence).await?;
             data.check_update_privacy(valence).await?;
@@ -337,91 +354,6 @@ impl valence::Model for TestEntity {
             );
         }
         Ok(upserted)
-    }
-    async fn merge(
-        id: &str,
-        patch: serde_json::Value,
-        valence: &valence::Valence,
-    ) -> valence::Result<Self> {
-        #[allow(deprecated)]
-        let before_snapshot = Self::get(id, valence).await?;
-        let Some(ref existing) = before_snapshot else {
-            return Err(
-                valence::Error::NotFound(format!("{}:{}", Self::table_name(), id)),
-            );
-        };
-        existing.check_update_privacy(valence).await?;
-        let patch_for_db = match &patch {
-            serde_json::Value::Object(obj) if obj.is_empty() => {
-                return Ok(existing.clone());
-            }
-            serde_json::Value::Object(_) => patch.clone(),
-            _ => {
-                return Err(
-                    valence::Error::Validation(
-                        "Model::merge expects a JSON object patch".into(),
-                    ),
-                );
-            }
-        };
-        let mut merged_json = serde_json::to_value(existing)
-            .map_err(valence::Error::from)?;
-        if let serde_json::Value::Object(ref patch_obj) = patch_for_db {
-            if let serde_json::Value::Object(ref mut base) = merged_json {
-                for (k, v) in patch_obj {
-                    base.insert(k.clone(), v.clone());
-                }
-            } else {
-                return Err(
-                    valence::Error::Internal(
-                        "Model::merge: failed to merge into record JSON".into(),
-                    ),
-                );
-            }
-        }
-        Self::__assert_unique_constraints_for_record(&merged_json, Some(id), valence)
-            .await?;
-        let proposed: Self = serde_json::from_value(merged_json)
-            .map_err(valence::Error::from)?;
-        proposed.check_update_privacy(valence).await?;
-        let id = id.to_string();
-        let merged: Self = valence::retry_on_database_tx_conflict(
-                "Model::merge",
-                || {
-                    let id = id.clone();
-                    let patch_for_db = patch_for_db.clone();
-                    async move {
-                        let backend = valence
-                            .backend_for_table(<Self as valence::Model>::table_name())?;
-                        let row = backend
-                            .merge_record(Self::table_name(), id.as_str(), patch_for_db)
-                            .await?;
-                        serde_json::from_value(row).map_err(valence::Error::from)
-                    }
-                },
-            )
-            .await?;
-        {
-            let field_changes = TestEntityFieldChanges::compute(
-                before_snapshot.as_ref(),
-                Some(&merged),
-            );
-            let mutation = valence::Mutation::new(
-                valence::MutationKind::Update,
-                before_snapshot,
-                Some(merged.clone()),
-                field_changes,
-                valence,
-            );
-            Self::dispatch_side_effects(&mutation).await;
-        }
-        if let Some(__rid) = merged.id() {
-            valence::read_cache::invalidate(
-                <Self as valence::Model>::table_name(),
-                __rid.id(),
-            );
-        }
-        Ok(merged)
     }
 }
 impl TestEntity {
@@ -558,8 +490,11 @@ impl TestEntity {
             )
             .await
     }
-    /// Update an existing record, optionally skipping the pre-update fetch when the caller
-    /// already holds the authoritative row (e.g. `get_mutable().commit()`).
+    /// Update an existing record. When `before` is the caller's real original
+    /// snapshot (e.g. from `get_mutable().commit()`), only the fields that
+    /// changed relative to it are written — a sparse write that can't clobber a
+    /// field it doesn't name. When `before` is `None`, the full row is replaced,
+    /// same as `Model::update`.
     pub async fn update_with_before(
         id: &str,
         data: Self,
@@ -569,41 +504,95 @@ impl TestEntity {
         data.check_update_privacy(valence).await?;
         let record = serde_json::to_value(&data).map_err(valence::Error::from)?;
         Self::__assert_unique_constraints_for_record(&record, Some(id), valence).await?;
-        let before_snapshot = match before {
+        let (
+            before_snapshot,
+            sparse_patch,
+        ): (Option<Self>, Option<serde_json::Map<String, serde_json::Value>>) = match before {
             Some(existing) => {
                 existing.check_update_privacy(valence).await?;
-                Some(existing)
+                let existing_value = serde_json::to_value(&existing)
+                    .map_err(valence::Error::from)?;
+                let mut patch = serde_json::Map::new();
+                if let (
+                    serde_json::Value::Object(existing_obj),
+                    serde_json::Value::Object(record_obj),
+                ) = (&existing_value, &record) {
+                    for (k, v) in record_obj {
+                        if k != "id" && existing_obj.get(k) != Some(v) {
+                            patch.insert(k.clone(), v.clone());
+                        }
+                    }
+                }
+                (Some(existing), Some(patch))
             }
             None => {
-                #[allow(deprecated)]
-                let fetched = <Self as valence::Model>::get(id, valence).await?;
+                let fetched = <Self as valence::Model>::get(
+                        id,
+                        valence,
+                        valence::DataUsePurpose::framework_nested(),
+                    )
+                    .await?;
                 if let Some(ref existing) = fetched {
                     existing.check_update_privacy(valence).await?;
                 }
-                fetched
+                (fetched, None)
             }
         };
         let id = id.to_string();
-        let updated: Self = valence::retry_on_database_tx_conflict(
-                "Model::update",
-                || {
-                    let id = id.clone();
-                    let record = record.clone();
-                    async move {
-                        let backend = valence
-                            .backend_for_table(<Self as valence::Model>::table_name())?;
-                        let row = backend
-                            .update_record(
-                                <Self as valence::Model>::table_name(),
-                                id.as_str(),
-                                record,
-                            )
-                            .await?;
-                        serde_json::from_value(row).map_err(valence::Error::from)
-                    }
-                },
-            )
-            .await?;
+        let updated: Self = match sparse_patch {
+            Some(patch) if patch.is_empty() => {
+                before_snapshot
+                    .clone()
+                    .ok_or_else(|| valence::Error::NotFound(
+                        format!("{}:{}", < Self as valence::Model > ::table_name(), id),
+                    ))?
+            }
+            Some(patch) => {
+                let patch_value = serde_json::Value::Object(patch);
+                valence::retry_on_database_tx_conflict(
+                        "Model::update_with_before",
+                        || {
+                            let id = id.clone();
+                            let patch_value = patch_value.clone();
+                            async move {
+                                let backend = valence
+                                    .backend_for_table(<Self as valence::Model>::table_name())?;
+                                let row = backend
+                                    .merge_record(
+                                        <Self as valence::Model>::table_name(),
+                                        id.as_str(),
+                                        patch_value,
+                                    )
+                                    .await?;
+                                serde_json::from_value(row).map_err(valence::Error::from)
+                            }
+                        },
+                    )
+                    .await?
+            }
+            None => {
+                valence::retry_on_database_tx_conflict(
+                        "Model::update",
+                        || {
+                            let id = id.clone();
+                            let record = record.clone();
+                            async move {
+                                let backend = valence
+                                    .backend_for_table(<Self as valence::Model>::table_name())?;
+                                let row = backend
+                                    .update_record(
+                                        <Self as valence::Model>::table_name(),
+                                        id.as_str(),
+                                        record,
+                                    )
+                                    .await?;
+                                serde_json::from_value(row).map_err(valence::Error::from)
+                            }
+                        },
+                    )
+                    .await?
+            }
+        };
         if let Some(__rid) = updated.id() {
             valence::read_cache::invalidate(
                 <Self as valence::Model>::table_name(),
@@ -702,10 +691,13 @@ impl<'a> TestEntityMutable<'a> {
             deleted_at: None,
         }
     }
-    /// Load entity from DB directly as mutable.
-    pub async fn get(id: &str, valence: &'a valence::Valence) -> valence::Result<Self> {
-        #[allow(deprecated)]
-        let model = <TestEntity as valence::Model>::get(id, valence)
+    /// Load entity from DB directly as mutable with a declared data use.
+    pub async fn get(
+        id: &str,
+        valence: &'a valence::Valence,
+        purpose: valence::DataUsePurpose,
+    ) -> valence::Result<Self> {
+        let model = <TestEntity as valence::Model>::get(id, valence, purpose)
             .await?
             .ok_or_else(|| valence::Error::Validation(
                 format!("Entity not found: {}:{}", "test_entity", id),
@@ -758,44 +750,27 @@ impl<'a> TestEntityMutable<'a> {
     }
 }
 impl TestEntity {
-    /// Get a mutable builder for this model.
-    #[deprecated(
-        note = "use get_mutable_used with use_!(...) for declared data-use transparency"
-    )]
-    pub fn get_mutable<'a>(
-        &self,
-        valence: &'a valence::Valence,
-    ) -> TestEntityMutable<'a> {
-        TestEntityMutable::new(self.clone(), valence)
-    }
     /// Declared mutable builder (purpose captured at get_mutable; commit uses same row).
-    pub fn get_mutable_used<'a>(
+    pub fn get_mutable<'a>(
         &self,
         valence: &'a valence::Valence,
         purpose: valence::DataUsePurpose,
     ) -> TestEntityMutable<'a> {
         let _ = purpose;
-        #[allow(deprecated)] self.get_mutable(valence)
+        TestEntityMutable::new(self.clone(), valence)
     }
 }
 impl TestEntity {
-    /// Start a type-safe query
-    #[deprecated(
-        note = "use query_used with use_!(...) for declared data-use transparency"
-    )]
-    pub fn query(valence: &valence::Valence) -> TestEntityQuery<'_> {
-        TestEntityQuery {
-            inner: valence::QueryCore::new("test_entity".to_string()),
-            valence,
-        }
-    }
-    /// Declared schema query builder (catalog target: Schema).
-    pub fn query_used(
+    /// Start a type-safe query with a declared data use.
+    pub fn query(
         valence: &valence::Valence,
         purpose: valence::DataUsePurpose,
     ) -> TestEntityQuery<'_> {
         let _ = purpose;
-        #[allow(deprecated)] Self::query(valence)
+        TestEntityQuery {
+            inner: valence::QueryCore::new("test_entity".to_string()),
+            valence,
+        }
     }
 }
 /// Query builder for #struct_name
@@ -855,11 +830,17 @@ impl<'a> TestEntityQuery<'a> {
         self.inner = self.inner.order_by("deleted_at".to_string(), direction);
         self
     }
-    pub async fn distinct_id(self) -> valence::Result<Vec<String>> {
-        self.inner.distinct_values("id", self.valence).await
+    pub async fn distinct_id(
+        self,
+        purpose: valence::DataUsePurpose,
+    ) -> valence::Result<Vec<String>> {
+        self.inner.distinct_values("id", self.valence, purpose).await
     }
-    pub async fn distinct_name(self) -> valence::Result<Vec<String>> {
-        self.inner.distinct_values("name", self.valence).await
+    pub async fn distinct_name(
+        self,
+        purpose: valence::DataUsePurpose,
+    ) -> valence::Result<Vec<String>> {
+        self.inner.distinct_values("name", self.valence, purpose).await
     }
     /// OR-combine another query's conditions with this one.
     /// Returns rows matching *either* set of WHERE conditions.
@@ -896,7 +877,9 @@ impl<'a> std::future::IntoFuture for TestEntityQuery<'a> {
     >;
     fn into_future(self) -> Self::IntoFuture {
         Box::pin(async move {
-            #[allow(deprecated)] self.inner.execute(self.valence).await
+            self.inner
+                .execute(self.valence, valence::DataUsePurpose::framework_nested())
+                .await
         })
     }
 }

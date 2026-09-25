@@ -1,6 +1,7 @@
 //! Pluggable database backends for Valence.
 
 mod port;
+mod used;
 
 #[cfg(feature = "compiler-hybrid")]
 mod hybrid_compiler;
@@ -16,6 +17,9 @@ mod sql_compiler;
 mod surreal_compiler;
 
 pub use port::{BackendCapabilities, DatabaseBackend};
+pub use used::{
+    create_record, delete_record, get_record, merge_record, update_record, upsert_record,
+};
 
 #[cfg(feature = "compiler-hybrid")]
 pub use hybrid_compiler::HybridQueryCompiler;

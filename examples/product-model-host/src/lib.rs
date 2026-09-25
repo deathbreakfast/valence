@@ -67,7 +67,7 @@ mod tests {
 
         // Step 2 — Create parent Project (HasMany side of connection in project_valence_schema.rs).
         let project = Project::new("alpha".to_string()).expect("new");
-        let created = Project::create_used(
+        let created = Project::create(
             project,
             &valence,
             valence::use_!(r"When the **product-model-host** suite builds a sample workspace, we **create the parent project** so a linked task can exercise cascade delete. Developers running that example suite use this row."),
@@ -79,7 +79,7 @@ mod tests {
         // Step 3 — Create child Task with BelongsTo RecordId pointing at the project row.
         let task =
             Task::new("ship".to_string(), RecordId::new("project", project_id)).expect("new");
-        Task::create_used(
+        Task::create(
             task,
             &valence,
             valence::use_!(r"After the sample **project** exists, we **create a linked task** so cascade delete coverage has a child connection to remove with the parent. Developers running that example suite use this row."),
@@ -88,7 +88,7 @@ mod tests {
         .expect("create task");
 
         // Step 4 — Read and merge on the parent model.
-        let fetched = Project::get_used(
+        let fetched = Project::get(
             project_id,
             &valence,
             valence::use_!(r"After create, we **reload the project by id** so the product-model-host suite can confirm the stored name matches what we wrote. Developers running that example suite use this result."),
@@ -96,20 +96,23 @@ mod tests {
         .await
         .expect("get");
         assert_eq!(fetched.as_ref().map(|p| p.name().as_str()), Some("alpha"));
+        let fetched = fetched.expect("row exists");
 
-        let merged = Project::merge_used(
-            project_id,
-            serde_json::json!({ "name": "beta" }),
-            &valence,
-            valence::use_!(r"During the **product-model-host** suite, we **merge a new name onto the project** so partial update coverage can assert the renamed row. Developers running that example suite use this result."),
-        )
-        .await
-        .expect("merge");
+        let merged = fetched
+            .get_mutable(
+                &valence,
+                valence::use_!(r"During the **product-model-host** suite, we **load the project as a mutable builder** so partial update coverage can assert the renamed row. Developers running that example suite use this result."),
+            )
+            .set_name("beta".to_string())
+            .expect("set_name")
+            .commit()
+            .await
+            .expect("commit");
         assert_eq!(merged.name(), "beta");
 
         // Step 5 — Delete enqueues a DeletionRequest (on_delete: Cascade in schema); capture via dispatcher hook.
         let captured = capture_dispatcher();
-        Project::delete_used(
+        Project::delete(
             project_id,
             &valence,
             valence::use_!(r"At the end of the **product-model-host** suite, we **queue project deletion** so the cascade dispatcher hook can capture the deletion request. Developers running that example suite use this result."),

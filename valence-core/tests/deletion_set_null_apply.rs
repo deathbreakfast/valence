@@ -7,6 +7,7 @@ use std::sync::Arc;
 use serde_json::json;
 use valence_backend_mem::InMemoryBackend;
 use valence_core::actor::Actor;
+use valence_core::data_use::DataUsePurpose;
 use valence_core::deletion::dag::{DeletionAction, DeletionDag, DeletionNode};
 use valence_core::deletion::{apply_deletion_node, check_dag_delete_privacy_with_registry};
 use valence_core::evaluator::DEFAULT_IN_MEMORY;
@@ -186,7 +187,18 @@ async fn tm_s2_apply_remove_edge_clears_edges() {
     let v = mem_valence();
     let from = RecordId::new("proj", "p1");
     let to = RecordId::new("tag", "t1");
-    v.relate_edge("proj_tag", &from, &to).await.unwrap();
+    v.relate_edge(
+        "proj_tag",
+        &from,
+        &to,
+        DataUsePurpose::new(
+            r"**Test:** Creates a fixture edge so RemoveEdge apply can clear links. CI and developers running the suite only.",
+            file!(),
+            line!(),
+        ),
+    )
+    .await
+    .unwrap();
     assert_eq!(
         v.active_backend()
             .unwrap()

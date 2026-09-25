@@ -387,44 +387,52 @@ impl DatabaseBackend for RedisBackend {
     }
 
     async fn merge_record(&self, table: &str, id: &str, patch: Value) -> Result<Value> {
-        let existing = self
-            .get_record(table, id)
-            .await?
-            .unwrap_or_else(|| row_from_body(table, id, Value::Object(Map::new())));
-        self.release_unique_fields(table, &existing).await?;
-        let mut merged = existing;
-        if let (Some(base), Some(patch_obj)) = (merged.as_object_mut(), patch.as_object()) {
-            for (k, v) in patch_obj {
-                base.insert(k.clone(), v.clone());
-            }
-        }
-        self.claim_unique_fields(table, id, &merged, Some(id))
-            .await?;
-        let body = strip_id_field(&merged);
+        Self::assert_safe_table(table)?;
+        let patch_obj = patch.as_object().cloned().unwrap_or_default();
         let doc_key = self.keys.doc(table, id);
         let ids_key = self.keys.table_ids(table);
         let mut conn = self.conn.clone();
-        let pttl: i64 = redis::cmd("PTTL")
-            .arg(&doc_key)
-            .query_async(&mut conn)
-            .await
-            .unwrap_or(-1);
-        let _: () = redis::cmd("DEL")
-            .arg(&doc_key)
-            .query_async(&mut conn)
-            .await
-            .map_err(Self::map_err)?;
-        write_hash_fields(&mut conn, &doc_key, &body).await?;
-        if pttl > 0 {
-            let _: () = redis::cmd("PEXPIRE")
-                .arg(&doc_key)
-                .arg(pttl)
-                .query_async(&mut conn)
-                .await
-                .map_err(Self::map_err)?;
+
+        // Narrow, single-field reads of any unique-constrained field the patch
+        // actually touches, so its old value's uniqueness claim can be released
+        // before the new value is claimed — bookkeeping for the uniqueness index,
+        // not part of the write decision, so it doesn't reintroduce the race.
+        for field in self.unique_fields(table).await? {
+            if !patch_obj.contains_key(&field) {
+                continue;
+            }
+            let old_raw: Option<String> =
+                conn.hget(&doc_key, &field).await.map_err(Self::map_err)?;
+            let Some(raw) = old_raw else { continue };
+            let old_value: Value = serde_json::from_str(&raw).unwrap_or(Value::String(raw));
+            if let Some(s) = old_value.as_str() {
+                let key = self.keys.uniq(table, &field, s);
+                let _: () = conn.del(&key).await.map_err(Self::map_err)?;
+            }
+        }
+        self.claim_unique_fields(table, id, &patch, Some(id))
+            .await?;
+
+        // Sparse write: HSET changed fields, HDEL fields patched to null. The hash
+        // key is never deleted, so its TTL survives without any PTTL/PEXPIRE dance.
+        for (k, v) in &patch_obj {
+            if k == "id" {
+                continue;
+            }
+            if v.is_null() {
+                let _: () = conn.hdel(&doc_key, k).await.map_err(Self::map_err)?;
+            } else {
+                let s = serde_json::to_string(v).map_err(Error::from)?;
+                let _: () = conn.hset(&doc_key, k, s).await.map_err(Self::map_err)?;
+            }
         }
         let _: () = conn.sadd(&ids_key, id).await.map_err(Self::map_err)?;
-        Ok(merged)
+
+        // Read-after-write, for return-value shaping only (the write itself already
+        // completed atomically per field above).
+        self.get_record(table, id)
+            .await?
+            .ok_or_else(|| Error::NotFound(format!("{table}:{id}")))
     }
 
     async fn upsert_record(&self, table: &str, id: &str, content: Value) -> Result<Value> {

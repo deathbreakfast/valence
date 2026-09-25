@@ -22,7 +22,9 @@ impl QueryCore {
         table: impl Into<String>,
         id: impl AsRef<str>,
         valence: &Valence,
+        purpose: crate::data_use::DataUsePurpose,
     ) -> Result<Option<IdOnlyRecord>> {
+        let _ = purpose;
         let table_str = table.into();
         let id_str = id.as_ref();
 
@@ -49,7 +51,9 @@ impl QueryCore {
         table: impl Into<String>,
         id: impl AsRef<str>,
         valence: &Valence,
+        purpose: crate::data_use::DataUsePurpose,
     ) -> Result<Option<serde_json::Value>> {
+        let _ = purpose;
         let table_str = table.into();
         let id_str = id.as_ref();
         let backend = valence.backend_for_table(&table_str)?;
@@ -66,6 +70,7 @@ impl QueryCore {
         table: impl Into<String>,
         limit: u32,
         valence: &Valence,
+        purpose: crate::data_use::DataUsePurpose,
     ) -> Result<Vec<IdOnlyRecord>> {
         let table_str = table.into();
 
@@ -78,8 +83,7 @@ impl QueryCore {
         // Rows come from `execute_compiled_query` as JSON where Thing-shaped `id` values are
         // strings like `"counter:singleton"` — deserialize as `String`, then strip to id-only.
         let raw: Vec<IdOnlyRecord> = {
-            #[allow(deprecated)]
-            query.execute(valence).await?
+            query.execute(valence, purpose).await?
         };
         let records: Vec<IdOnlyRecord> = raw
             .into_iter()
@@ -112,6 +116,7 @@ impl QueryCore {
         table: impl Into<String>,
         id: impl AsRef<str>,
         valence: &Valence,
+        purpose: crate::data_use::DataUsePurpose,
     ) -> Result<Option<ValenceEntity>> {
         use crate::entity::ValenceEntity;
         use crate::privacy::PrivacyEvaluator;
@@ -127,7 +132,7 @@ impl QueryCore {
             .ok_or_else(|| Error::NotFound(format!("Schema not found: {table_str}")))?;
 
         // Step 2: Load full record (single trip; no privacy-free existence probe)
-        let raw_data = Self::get_record_json(&table_str, id_str, valence).await?;
+        let raw_data = Self::get_record_json(&table_str, id_str, valence, purpose).await?;
         let Some(raw_data) = raw_data else {
             return Ok(None);
         };
@@ -153,36 +158,6 @@ impl QueryCore {
         )))
     }
 
-    /// Declared Unscoped read of raw JSON (same as [`Self::get_record_json`]).
-    pub async fn get_record_json_used(
-        table: impl Into<String>,
-        id: impl AsRef<str>,
-        valence: &Valence,
-        purpose: crate::data_use::DataUsePurpose,
-    ) -> Result<Option<serde_json::Value>> {
-        let _ = purpose;
-        Self::get_record_json(table, id, valence).await
-    }
 
-    /// Declared Unscoped latest-ids helper (same as [`Self::latest_ids`]).
-    pub async fn latest_ids_used(
-        table: impl Into<String>,
-        limit: u32,
-        valence: &Valence,
-        purpose: crate::data_use::DataUsePurpose,
-    ) -> Result<Vec<IdOnlyRecord>> {
-        let _ = purpose;
-        Self::latest_ids(table, limit, valence).await
-    }
 
-    /// Declared Unscoped entity read (same as [`Self::get_entity`]).
-    pub async fn get_entity_used(
-        table: impl Into<String>,
-        id: impl AsRef<str>,
-        valence: &Valence,
-        purpose: crate::data_use::DataUsePurpose,
-    ) -> Result<Option<ValenceEntity>> {
-        let _ = purpose;
-        Self::get_entity(table, id, valence).await
-    }
 }

@@ -3,9 +3,7 @@
 use proc_macro2::TokenStream;
 use quote::quote;
 
-use super::emit_create::{
-    model_create_method_tokens, model_merge_method_tokens, model_upsert_method_tokens,
-};
+use super::emit_create::{model_create_method_tokens, model_upsert_method_tokens};
 use super::emit_ctx::CrudEmitCtx;
 use super::emit_delete::model_delete_method_tokens;
 use super::emit_get::model_get_method_tokens;
@@ -27,7 +25,6 @@ pub(super) fn emit_model_trait_impl(cx: &CrudEmitCtx<'_>) -> TokenStream {
     let update = model_update_method_tokens(field_changes_name);
     let delete = model_delete_method_tokens(cx);
     let upsert = model_upsert_method_tokens(cx);
-    let merge = model_merge_method_tokens(field_changes_name);
 
     quote! {
         #[async_trait::async_trait]
@@ -48,7 +45,6 @@ pub(super) fn emit_model_trait_impl(cx: &CrudEmitCtx<'_>) -> TokenStream {
             #update
             #delete
             #upsert
-            #merge
         }
     }
 }

@@ -24,8 +24,8 @@ mod codegen;
 
 /// Declares a data-use purpose (markdown) with call-site `file!` / `line!`.
 ///
-/// Pair with `*_used` Model / trait / QueryCore methods. Op and target are inferred
-/// from the receiver method for the catalog scan.
+/// Pass as the last argument to purpose-required Model / trait / QueryCore methods.
+/// Op and target are inferred from the receiver method for the catalog scan.
 ///
 /// Purpose text is end-user **trust copy** for someone who has never seen the code:
 /// prefer a short narrative with **bold** key terms; do not repeat op/schema/path
@@ -37,7 +37,7 @@ mod codegen;
 /// ```ignore
 /// use valence::{use_, Model};
 ///
-/// User::get_used(
+/// User::get(
 ///     id,
 ///     &valence,
 ///     valence::use_!(r#"When your browser presents a **session cookie**, we **load the matching user account** so sign-in can continue. The application uses this only to establish who is signed in for that request—not to render a profile page by itself."#),

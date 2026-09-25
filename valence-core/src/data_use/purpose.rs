@@ -1,4 +1,4 @@
-//! Purpose newtype carried into `*_used` APIs.
+//! Purpose newtype carried into declared Model / Query APIs.
 
 /// Markdown purpose string plus call-site `file!` / `line!` from `use_!`.
 #[derive(Debug, Clone, Copy)]
@@ -20,6 +20,18 @@ impl DataUsePurpose {
             file,
             line,
         }
+    }
+
+    /// Nested framework load when the public entry already declared a purpose.
+    ///
+    /// Not a product catalog row — used only inside Valence / generated Model bodies.
+    #[doc(hidden)]
+    pub const fn framework_nested() -> Self {
+        Self::new(
+            "Valence framework nested access; purpose was declared at the public entry point.",
+            "<valence-framework>",
+            0,
+        )
     }
 
     /// End-user trust copy (markdown).

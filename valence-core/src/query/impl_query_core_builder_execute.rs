@@ -15,16 +15,20 @@ impl QueryCore {
     /// # Errors
     ///
     /// Returns an error when the requested operation cannot be completed.
-    #[deprecated(note = "use execute_used with valence::use_!(...) for declared data-use transparency")]
     #[tracing::instrument(
         name = "valence.query.execute",
-        skip(self, valence),
+        skip(self, valence, purpose),
         fields(table = %self.table)
     )]
-    pub async fn execute<T>(mut self, valence: &Valence) -> Result<Vec<T>>
+    pub async fn execute<T>(
+        mut self,
+        valence: &Valence,
+        purpose: crate::data_use::DataUsePurpose,
+    ) -> Result<Vec<T>>
     where
         T: DeserializeOwned + Serialize,
     {
+        let _ = purpose;
         self.apply_query_window_clamps();
         let tables: Vec<String> = self
             .table
@@ -195,7 +199,13 @@ impl QueryCore {
     /// # Errors
     ///
     /// Returns an error when the requested operation cannot be completed.
-    pub async fn distinct_values(mut self, field: &str, valence: &Valence) -> Result<Vec<String>> {
+    pub async fn distinct_values(
+        mut self,
+        field: &str,
+        valence: &Valence,
+        purpose: crate::data_use::DataUsePurpose,
+    ) -> Result<Vec<String>> {
+        let _ = purpose;
         crate::safe_ident::assert_safe_ident(field)?;
         self.projection = None;
         self.group_by.clear();
@@ -204,8 +214,7 @@ impl QueryCore {
         self.offset = None;
 
         let rows: Vec<serde_json::Value> = {
-            #[allow(deprecated)]
-            self.execute(valence).await?
+            self.execute(valence, purpose).await?
         };
         let mut seen = std::collections::HashSet::new();
         let mut results = Vec::with_capacity(rows.len());
@@ -227,6 +236,7 @@ impl QueryCore {
         }
         Ok(results)
     }
+
 
     async fn post_filter_connection_privacy<T>(
         &self,
@@ -271,7 +281,7 @@ impl QueryCore {
                     break;
                 };
                 let Some(raw_data) =
-                    Self::get_record_json(to_table.as_str(), target_id.as_str(), valence).await?
+                    Self::get_record_json(to_table.as_str(), target_id.as_str(), valence, crate::data_use::DataUsePurpose::framework_nested()).await?
                 else {
                     exclude = true;
                     break;
@@ -360,17 +370,4 @@ impl QueryCore {
         Ok(kept)
     }
 
-    /// Declared Unscoped execute (same as [`Self::execute`]).
-    pub async fn execute_used<T>(
-        self,
-        valence: &Valence,
-        purpose: crate::data_use::DataUsePurpose,
-    ) -> Result<Vec<T>>
-    where
-        T: DeserializeOwned + Serialize,
-    {
-        let _ = purpose;
-        #[allow(deprecated)]
-        self.execute(valence).await
-    }
 }

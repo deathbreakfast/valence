@@ -153,24 +153,24 @@ pub(super) fn generate_composite_key_methods(
                 [#(#components),*].join(":")
             }
 
-            /// Point-lookup by composite key fields.
+            /// Point-lookup by composite key fields with a declared data use.
             pub async fn get_by_composite_key(
                 valence: &valence::Valence,
-                #(#params),*
+                #(#params,)*
+                purpose: valence::DataUsePurpose,
             ) -> valence::Result<Option<Self>> {
                 let id = Self::composite_id(#(#forward_args),*);
-                #[allow(deprecated)]
-                <Self as valence::Model>::get(&id, valence).await
+                <Self as valence::Model>::get(&id, valence, purpose).await
             }
 
-            /// Upsert using the composite key derived from the model's fields.
+            /// Upsert using the composite key with a declared data use.
             pub async fn upsert_by_composite_key(
                 data: Self,
                 valence: &valence::Valence,
+                purpose: valence::DataUsePurpose,
             ) -> valence::Result<Self> {
                 let id = Self::composite_id(#(#accessor_args),*);
-                #[allow(deprecated)]
-                <Self as valence::Model>::upsert(&id, data, valence).await
+                <Self as valence::Model>::upsert(&id, data, valence, purpose).await
             }
         }
     })

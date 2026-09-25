@@ -1,5 +1,6 @@
 //! Shared physical apply for one [`DeletionNode`] (sync executor + platform worker).
 
+use crate::data_use::DataUsePurpose;
 use crate::deletion::dag::{DeletionAction, DeletionNode};
 use crate::deletion::dispatch_queued_delete_side_effects;
 use crate::error::Result;
@@ -39,7 +40,18 @@ pub async fn apply_deletion_node(node: &DeletionNode, valence: &Valence) -> Resu
 }
 
 async fn apply_cascade_delete(table: &str, record_id: &str, valence: &Valence) -> Result<()> {
-    let Some(existing) = QueryCore::get_record_json(table, record_id, valence).await? else {
+    let Some(existing) = QueryCore::get_record_json(
+        table,
+        record_id,
+        valence,
+        DataUsePurpose::new(
+            r"When Valence applies a **cascade deletion** step, we **load the target row** so Delete privacy can run and side effects can see the row before it is erased. Deletion workers and the in-request delete path use this load.",
+            file!(),
+            line!(),
+        ),
+    )
+    .await?
+    else {
         read_cache::invalidate(table, record_id);
         return Ok(());
     };
@@ -61,7 +73,18 @@ async fn apply_set_null(
     field: &str,
     valence: &Valence,
 ) -> Result<()> {
-    let Some(_existing) = QueryCore::get_record_json(table, record_id, valence).await? else {
+    let Some(_existing) = QueryCore::get_record_json(
+        table,
+        record_id,
+        valence,
+        DataUsePurpose::new(
+            r"When Valence applies a **SetNull** deletion step, we **load the referring row** so we know the record still exists before clearing the foreign-key field. Deletion workers use this check.",
+            file!(),
+            line!(),
+        ),
+    )
+    .await?
+    else {
         read_cache::invalidate(table, record_id);
         return Ok(());
     };
@@ -83,10 +106,32 @@ async fn apply_remove_edge(
         .backend_for_table(table)
         .or_else(|_| valence.active_backend())?;
     for to in backend.get_edge_targets(&endpoint, edge_table).await? {
-        valence.unrelate_edge(edge_table, &endpoint, &to).await?;
+        valence
+            .unrelate_edge(
+                edge_table,
+                &endpoint,
+                &to,
+                crate::data_use::DataUsePurpose::new(
+                    "When Valence **applies a deletion plan**, we **remove outgoing graph edges** for this record so related links do not outlive the deleted row. This step runs only inside the deletion engine.",
+                    file!(),
+                    line!(),
+                ),
+            )
+            .await?;
     }
     for from in backend.get_edge_sources(&endpoint, edge_table).await? {
-        valence.unrelate_edge(edge_table, &from, &endpoint).await?;
+        valence
+            .unrelate_edge(
+                edge_table,
+                &from,
+                &endpoint,
+                crate::data_use::DataUsePurpose::new(
+                    "When Valence **applies a deletion plan**, we **remove incoming graph edges** for this record so related links do not outlive the deleted row. This step runs only inside the deletion engine.",
+                    file!(),
+                    line!(),
+                ),
+            )
+            .await?;
     }
     Ok(())
 }

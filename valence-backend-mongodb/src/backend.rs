@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use futures::TryStreamExt;
 use mongodb::bson::{doc, Document};
-use mongodb::options::IndexOptions;
+use mongodb::options::{IndexOptions, ReturnDocument};
 use mongodb::{Client, Collection, IndexModel};
 use serde_json::{Map, Value};
 
@@ -368,20 +368,21 @@ impl DatabaseBackend for MongoBackend {
     }
 
     async fn merge_record(&self, table: &str, id: &str, patch: Value) -> Result<Value> {
-        let existing = self
-            .get_record(table, id)
-            .await?
-            .unwrap_or_else(|| row_from_body(table, id, Value::Object(Map::new())));
-        let mut merged = existing;
-        if let (Some(base), Some(patch_obj)) = (merged.as_object_mut(), patch.as_object()) {
-            for (k, v) in patch_obj {
-                base.insert(k.clone(), v.clone());
-            }
+        // Only the patch's own keys are validated for uniqueness — fields the caller
+        // never touched cannot have changed, so they need no re-check here.
+        self.check_unique_fields(table, &patch, Some(id)).await?;
+        let partial_doc = body_document(&patch);
+        if partial_doc.is_empty() {
+            return self
+                .get_record(table, id)
+                .await?
+                .ok_or_else(|| Error::NotFound(format!("{table}:{id}")));
         }
-        self.check_unique_fields(table, &merged, Some(id)).await?;
-        let doc = body_document(&merged);
         let coll = self.collection(table);
-        coll.replace_one(doc! { "_id": id }, doc)
+        // Single atomic $set — no pre-fetch, no in-memory merge, no full-row replace.
+        let updated = coll
+            .find_one_and_update(doc! { "_id": id }, doc! { "$set": partial_doc })
+            .return_document(ReturnDocument::After)
             .await
             .map_err(|e| {
                 if e.to_string().contains("duplicate key") {
@@ -389,8 +390,9 @@ impl DatabaseBackend for MongoBackend {
                 } else {
                     Error::database(e.to_string())
                 }
-            })?;
-        Ok(merged)
+            })?
+            .ok_or_else(|| Error::NotFound(format!("{table}:{id}")))?;
+        Ok(Self::doc_to_row(table, id, updated))
     }
 
     async fn upsert_record(&self, table: &str, id: &str, content: Value) -> Result<Value> {

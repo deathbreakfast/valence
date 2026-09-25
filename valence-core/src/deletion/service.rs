@@ -5,6 +5,7 @@ use serde_json::{json, Value};
 use uuid::Uuid;
 
 use crate::actor::Actor;
+use crate::data_use::DataUsePurpose;
 use crate::error::{Error, Result};
 use crate::query::{QueryCore, SortDirection, StringPredicate};
 use crate::runtime::Valence;
@@ -54,9 +55,18 @@ impl DeletionService {
     /// Returns an error when the requested operation cannot be completed.
     pub async fn get_run_json(run_id: &str, v: &Valence) -> Result<Option<Value>> {
         let sys = system_valence(v);
-        QueryCore::get_record_json("valence_deletion_run", run_id, &sys)
-            .await
-            .map_err(|e| Error::database(e.to_string()))
+        QueryCore::get_record_json(
+            "valence_deletion_run",
+            run_id,
+            &sys,
+            DataUsePurpose::new(
+                r"When operators or workers inspect a **deletion run**, we **load that run's control row** so status and progress can be shown or updated. Platform automation and admin tooling use this metadata.",
+                file!(),
+                line!(),
+            ),
+        )
+        .await
+        .map_err(|e| Error::database(e.to_string()))
     }
 
     /// # Errors
@@ -83,7 +93,6 @@ impl DeletionService {
         v: &Valence,
     ) -> Result<Vec<Value>> {
         let sys = system_valence(v);
-        #[allow(deprecated)]
         QueryCore::new("valence_deletion_run".to_string())
             .where_string(
                 "root_table".to_string(),
@@ -95,7 +104,14 @@ impl DeletionService {
             )
             .order_by("requested_at".to_string(), SortDirection::Desc)
             .limit(50)
-            .execute(&sys)
+            .execute(
+                &sys,
+                DataUsePurpose::new(
+                    r"When operators list **deletion runs for a record**, we **query those control rows** so progress and history for that root can be shown. Platform admin tooling uses this listing.",
+                    file!(),
+                    line!(),
+                ),
+            )
             .await
             .map_err(|e| Error::database(e.to_string()))
     }
@@ -107,7 +123,6 @@ impl DeletionService {
     /// Returns an error when the requested operation cannot be completed.
     pub async fn list_runs_for_schema(schema_table: &str, v: &Valence) -> Result<Vec<Value>> {
         let sys = system_valence(v);
-        #[allow(deprecated)]
         QueryCore::new("valence_deletion_run".to_string())
             .where_string(
                 "root_table".to_string(),
@@ -115,7 +130,14 @@ impl DeletionService {
             )
             .order_by("requested_at".to_string(), SortDirection::Desc)
             .limit(50)
-            .execute(&sys)
+            .execute(
+                &sys,
+                DataUsePurpose::new(
+                    r"When operators list **deletion runs for a schema**, we **query those control rows** so recent teardown history for that table can be shown. Platform admin tooling uses this listing.",
+                    file!(),
+                    line!(),
+                ),
+            )
             .await
             .map_err(|e| Error::database(e.to_string()))
     }
@@ -163,11 +185,17 @@ impl DeletionService {
     /// Returns an error when the requested operation cannot be completed.
     pub async fn list_runs_recent(limit: u32, v: &Valence) -> Result<Vec<Value>> {
         let sys = system_valence(v);
-        #[allow(deprecated)]
         QueryCore::new("valence_deletion_run".to_string())
             .order_by("requested_at".to_string(), SortDirection::Desc)
             .limit(limit)
-            .execute(&sys)
+            .execute(
+                &sys,
+                DataUsePurpose::new(
+                    r"When operators browse **recent deletion runs**, we **query those control rows** so a paged newest-first history can be shown on the admin surface. Platform admin tooling uses this listing.",
+                    file!(),
+                    line!(),
+                ),
+            )
             .await
             .map_err(|e| Error::database(e.to_string()))
     }

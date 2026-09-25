@@ -137,7 +137,9 @@ impl Valence {
         &self,
         from: &RecordId,
         edge_table: &str,
+        purpose: crate::data_use::DataUsePurpose,
     ) -> Result<Vec<RecordId>> {
+        let _ = purpose;
         let backend = self.active_backend()?;
         backend.get_edge_targets(from, edge_table).await
     }
@@ -156,7 +158,9 @@ impl Valence {
         edge_table: &str,
         from: &RecordId,
         to: &RecordId,
+        purpose: crate::data_use::DataUsePurpose,
     ) -> Result<()> {
+        let _ = purpose;
         let backend = self.active_backend()?;
         backend.relate_edge(from, edge_table, to).await
     }
@@ -175,7 +179,9 @@ impl Valence {
         edge_table: &str,
         from: &RecordId,
         to: &RecordId,
+        purpose: crate::data_use::DataUsePurpose,
     ) -> Result<()> {
+        let _ = purpose;
         let backend = self.active_backend()?;
         backend.unrelate_edge(from, edge_table, to).await
     }

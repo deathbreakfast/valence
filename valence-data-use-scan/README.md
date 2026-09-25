@@ -1,11 +1,11 @@
 # uf-valence-data-use-scan
 
-Build-time catalog of Valence `*_used` + `use_!` call sites for the valence-uf-app
+Build-time catalog of Valence purpose-required + `use_!` call sites for the valence-uf-app
 Data uses UI.
 
 ## Features
 
-- **Workspace scan** — Discovers `*_used` calls across Cargo workspace members so
+- **Workspace scan** — Discovers purpose-required calls across Cargo workspace members so
   host SSR can ship a static catalog. Call `generate` once from `build.rs`.
   See crate rustdoc [Getting started](https://docs.rs/uf-valence-data-use-scan).
 - **Purpose extraction** — Reads nearby `use_!(…)` markdown for the catalog.
@@ -13,10 +13,12 @@ Data uses UI.
   ops UI surfaces.
 - **Test exclusion** — Optional omit of `tests/` paths from the UI snapshot via
   `Config::exclude_tests_from_snapshot`.
+- **Connection hops** — Classifies forward loads / edge mutates and optionally
+  bakes peer schema via `Config::connection_edges` for Referenced Reads/Updates.
 
 ## Getting started
 
-`uf-valence-data-use-scan` turns declared `*_used` / `use_!` call sites into a
+`uf-valence-data-use-scan` turns declared purpose-required / `use_!` call sites into a
 static `DATA_USES` slice. Call `generate` from a host `build.rs` after adding this
 crate as a `build-dependency`, once per compile.
 
@@ -33,6 +35,7 @@ fn main() -> Result<(), valence_data_use_scan::DataUseScanError> {
         workspace_root,
         out_dir: PathBuf::from(std::env::var("OUT_DIR").unwrap()),
         exclude_tests_from_snapshot: true,
+        connection_edges: vec![],
     })
 }
 ```

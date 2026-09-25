@@ -10,6 +10,7 @@ use std::collections::HashSet;
 
 use crate::actor::Actor;
 use crate::connection::extract_id_from_select_value;
+use crate::data_use::DataUsePurpose;
 use crate::error::{Error, Result};
 use crate::query::QueryCore;
 use crate::record_id::RecordId;
@@ -199,8 +200,17 @@ impl PrivacyEvaluator {
         let sys = v.with_actor(Actor::System {
             operation: "defer_to_edge_parent_fetch".into(),
         });
-        let Some(parent_raw) =
-            QueryCore::get_record_json(parent.table(), parent.id(), &sys).await?
+        let Some(parent_raw) = QueryCore::get_record_json(
+            parent.table(),
+            parent.id(),
+            &sys,
+            DataUsePurpose::new(
+                r"When a satellite row **defers read privacy to its parent**, we **load that parent row** so Valence can evaluate the parent's access policy as the viewer. Privacy evaluation uses this load only.",
+                file!(),
+                line!(),
+            ),
+        )
+        .await?
         else {
             let msg = format!(
                 "Access denied: defer_to_edge parent {}.{} not found",

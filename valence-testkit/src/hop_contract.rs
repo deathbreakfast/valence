@@ -44,7 +44,7 @@ async fn run_mem_sqlite_hops(valence: &Valence) -> Result<()> {
     use cross_backend_model_host::{Project, Task};
 
     let project = Project::new("alpha".to_string()).expect("new project");
-    let created = Project::create_used(project, valence, valence::use_!(r"**Test:** Seeds a fixture **project** so the Valence model suite can exercise create and later reads against a known parent row. CI and developers running the suite only.")).await?;
+    let created = Project::create(project, valence, valence::use_!(r"**Test:** Seeds a fixture **project** so the Valence model suite can exercise create and later reads against a known parent row. CI and developers running the suite only.")).await?;
     let project_id = created.id().expect("project id").id().to_string();
 
     let task = Task::new(
@@ -52,17 +52,27 @@ async fn run_mem_sqlite_hops(valence: &Valence) -> Result<()> {
         RecordId::new("xb_project", &project_id),
     )
     .expect("new task");
-    let task_row = Task::create_used(task, valence, valence::use_!(r"**Test:** Seeds a fixture **task** linked to a project so hop and cascade suites have a child row to navigate. CI and developers running the suite only.")).await?;
+    let task_row = Task::create(task, valence, valence::use_!(r"**Test:** Seeds a fixture **task** linked to a project so hop and cascade suites have a child row to navigate. CI and developers running the suite only.")).await?;
     let task_id = task_row.id().expect("task id").id().to_string();
 
-    let loaded_project = task_row.get_project(valence).await?;
+    let loaded_project = task_row
+        .get_project(
+            valence,
+            valence::use_!(r"**Test:** Follows the fixture **task→project** link so hop suites can assert BelongsTo navigation. CI and developers running the suite only."),
+        )
+        .await?;
     assert_eq!(loaded_project.name(), "alpha");
 
-    let tasks = Task::get_from_project(&loaded_project, valence).await?;
+    let tasks = Task::get_from_project(
+        &loaded_project,
+        valence,
+        valence::use_!(r"**Test:** Lists fixture **tasks for a project** so hop suites can assert HasMany reverse navigation. CI and developers running the suite only."),
+    )
+    .await?;
     assert_eq!(tasks.len(), 1);
     assert_eq!(tasks[0].id().expect("id").id(), task_id);
 
-    let projects = Project::query_used(valence, valence::use_!(r"**Test:** Queries fixture **projects** with filters so the Valence model suite can assert predicate and page results. CI and developers running the suite only."))
+    let projects = Project::query(valence, valence::use_!(r"**Test:** Queries fixture **projects** with filters so the Valence model suite can assert predicate and page results. CI and developers running the suite only."))
         .where_tasks_has_results(|q| {
             q.where_string(
                 "title".to_string(),
@@ -77,7 +87,7 @@ async fn run_mem_sqlite_hops(valence: &Valence) -> Result<()> {
         assert_eq!(projects[0].id().expect("id").id(), project_id);
     }
 
-    let hop_tasks = Project::query_used(valence, valence::use_!(r"**Test:** Queries fixture **projects** with filters so the Valence model suite can assert predicate and page results. CI and developers running the suite only."))
+    let hop_tasks = Project::query(valence, valence::use_!(r"**Test:** Queries fixture **projects** with filters so the Valence model suite can assert predicate and page results. CI and developers running the suite only."))
         .where_name(valence_core::StringPredicate::Equals("alpha".into()))
         .query_tasks()
         .await?;
@@ -99,8 +109,8 @@ async fn run_mem_mem_hops(valence: &Valence) -> Result<()> {
     use product_model_host::Project;
 
     let project = Project::new("solo".to_string()).expect("new");
-    let created = Project::create_used(project, valence, valence::use_!(r"**Test:** Seeds a fixture **project** so the Valence model suite can exercise create and later reads against a known parent row. CI and developers running the suite only.")).await?;
-    assert!(Project::get_used(created.id().expect("id").id(), valence, valence::use_!(r"**Test:** Reloads the fixture **project** by id so the Valence model suite can assert create persisted the expected name. CI and developers running the suite only."))
+    let created = Project::create(project, valence, valence::use_!(r"**Test:** Seeds a fixture **project** so the Valence model suite can exercise create and later reads against a known parent row. CI and developers running the suite only.")).await?;
+    assert!(Project::get(created.id().expect("id").id(), valence, valence::use_!(r"**Test:** Reloads the fixture **project** by id so the Valence model suite can assert create persisted the expected name. CI and developers running the suite only."))
         .await?
         .is_some());
     Ok(())

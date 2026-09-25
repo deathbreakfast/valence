@@ -20,13 +20,13 @@ pub async fn run(ctx: &RunContext) -> Result<BenchReport> {
 
     for i in 0..ctx.sweep.prefill {
         let project = Project::new(format!("cx-{i:05}")).expect("new");
-        Project::create_used(project, valence, valence::use_!(r"**Test:** Seeds fixture **projects** for a Valence bench runner so throughput timing has rows to create under load. Benchmark operators running the suite only.")).await?;
+        Project::create(project, valence, valence::use_!(r"**Test:** Seeds fixture **projects** for a Valence bench runner so throughput timing has rows to create under load. Benchmark operators running the suite only.")).await?;
     }
 
     let mut samples = Vec::with_capacity(ctx.sweep.query_iters);
     for _ in 0..ctx.sweep.query_iters {
         let start = std::time::Instant::now();
-        let _ = Project::query_used(valence, valence::use_!(r"**Test:** Queries fixture **projects** in a Valence bench runner so filter and scan latency can be measured under load. Benchmark operators running the suite only."))
+        let _ = Project::query(valence, valence::use_!(r"**Test:** Queries fixture **projects** in a Valence bench runner so filter and scan latency can be measured under load. Benchmark operators running the suite only."))
             .where_name(StringPredicate::StartsWith("cx-".into()))
             .order_by_name(SortDirection::Desc)
             .limit(25)

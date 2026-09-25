@@ -202,7 +202,6 @@ fn looks_like_path_op_duplication(s: &str) -> bool {
         "upsert ",
         "update ",
         "delete ",
-        "merge ",
         "delete_now ",
         "get_mutable ",
     ];

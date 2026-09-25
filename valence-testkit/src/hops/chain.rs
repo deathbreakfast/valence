@@ -160,12 +160,12 @@ fn project_with_note_body(body: &str) -> QueryCore {
 
 async fn seed_depth3(valence: &Valence, triple: HopTriple) -> Result<()> {
     let org = Org::new("acme".to_string()).expect("org");
-    let org_row = Org::create_used(org, valence, valence::use_!(r"**Test:** Seeds a fixture **organization** so the hop-chain suite can build a multi-level connection graph. CI and developers running the suite only.")).await?;
+    let org_row = Org::create(org, valence, valence::use_!(r"**Test:** Seeds a fixture **organization** so the hop-chain suite can build a multi-level connection graph. CI and developers running the suite only.")).await?;
     let org_id = org_row.id().expect("id").id().to_string();
 
     let project =
         Project::new("alpha".to_string(), RecordId::new("hop_chain_org", &org_id)).expect("p");
-    let project_row = Project::create_used(project, valence, valence::use_!(r"**Test:** Seeds a fixture **project** so the Valence model suite can exercise create and later reads against a known parent row. CI and developers running the suite only.")).await?;
+    let project_row = Project::create(project, valence, valence::use_!(r"**Test:** Seeds a fixture **project** so the Valence model suite can exercise create and later reads against a known parent row. CI and developers running the suite only.")).await?;
     let project_id = project_row.id().expect("id").id().to_string();
 
     let task = Task::new(
@@ -173,10 +173,10 @@ async fn seed_depth3(valence: &Valence, triple: HopTriple) -> Result<()> {
         RecordId::new("hop_chain_project", &project_id),
     )
     .expect("t");
-    let _task_row = Task::create_used(task, valence, valence::use_!(r"**Test:** Seeds a fixture **task** linked to a project so hop and cascade suites have a child row to navigate. CI and developers running the suite only.")).await?;
+    let _task_row = Task::create(task, valence, valence::use_!(r"**Test:** Seeds a fixture **task** linked to a project so hop and cascade suites have a child row to navigate. CI and developers running the suite only.")).await?;
 
     // Always assert seed + reverse nav (routing), independent of nested EXISTS support.
-    let projects = Project::query_used(valence, valence::use_!(r"**Test:** Queries fixture **projects** with filters so the Valence model suite can assert predicate and page results. CI and developers running the suite only."))
+    let projects = Project::query(valence, valence::use_!(r"**Test:** Queries fixture **projects** with filters so the Valence model suite can assert predicate and page results. CI and developers running the suite only."))
         .where_name(StringPredicate::Equals("alpha".into()))
         .await?;
     assert_eq!(
@@ -185,7 +185,12 @@ async fn seed_depth3(valence: &Valence, triple: HopTriple) -> Result<()> {
         "hop triple {}: expected seeded project",
         triple.slug()
     );
-    let tasks = Task::get_from_project(&projects[0], valence).await?;
+    let tasks = Task::get_from_project(
+        &projects[0],
+        valence,
+        valence::use_!(r"**Test:** Lists fixture **tasks for a project** so hop-chain suites can assert reverse navigation. CI and developers running the suite only."),
+    )
+    .await?;
     assert_eq!(
         tasks.len(),
         1,
@@ -202,7 +207,7 @@ async fn seed_depth3(valence: &Valence, triple: HopTriple) -> Result<()> {
         return Ok(());
     }
 
-    let orgs = Org::query_used(valence, valence::use_!(r"**Test:** Queries fixture **organizations** so the hop-chain suite can assert multi-hop filters return expected parents. CI and developers running the suite only."))
+    let orgs = Org::query(valence, valence::use_!(r"**Test:** Queries fixture **organizations** so the hop-chain suite can assert multi-hop filters return expected parents. CI and developers running the suite only."))
         .where_projects_has_results(|_| project_with_task_title("ship"))
         .await?;
     assert!(
@@ -212,7 +217,7 @@ async fn seed_depth3(valence: &Valence, triple: HopTriple) -> Result<()> {
     );
     assert_eq!(orgs[0].name(), "acme");
 
-    let miss = Org::query_used(valence, valence::use_!(r"**Test:** Queries fixture **organizations** so the hop-chain suite can assert multi-hop filters return expected parents. CI and developers running the suite only."))
+    let miss = Org::query(valence, valence::use_!(r"**Test:** Queries fixture **organizations** so the hop-chain suite can assert multi-hop filters return expected parents. CI and developers running the suite only."))
         .where_projects_has_results(|_| project_with_task_title("missing"))
         .await?;
     assert!(
@@ -231,7 +236,7 @@ async fn seed_depth4(valence: &Valence, quad: HopQuad) -> Result<()> {
     };
     seed_depth3(valence, triple).await?;
 
-    let projects = Project::query_used(valence, valence::use_!(r"**Test:** Queries fixture **projects** with filters so the Valence model suite can assert predicate and page results. CI and developers running the suite only."))
+    let projects = Project::query(valence, valence::use_!(r"**Test:** Queries fixture **projects** with filters so the Valence model suite can assert predicate and page results. CI and developers running the suite only."))
         .where_name(StringPredicate::Equals("alpha".into()))
         .await?;
     assert_eq!(
@@ -240,7 +245,12 @@ async fn seed_depth4(valence: &Valence, quad: HopQuad) -> Result<()> {
         "hop quad {}: expected project after depth3",
         quad.slug()
     );
-    let tasks = Task::get_from_project(&projects[0], valence).await?;
+    let tasks = Task::get_from_project(
+        &projects[0],
+        valence,
+        valence::use_!(r"**Test:** Lists fixture **tasks for a project** so hop-chain depth-4 suites can assert reverse navigation. CI and developers running the suite only."),
+    )
+    .await?;
     assert!(
         !tasks.is_empty(),
         "hop quad {}: expected task via reverse nav",
@@ -253,7 +263,7 @@ async fn seed_depth4(valence: &Valence, quad: HopQuad) -> Result<()> {
         RecordId::new("hop_chain_task", &task_id),
     )
     .expect("n");
-    Note::create_used(note, valence, valence::use_!(r"**Test:** Seeds a fixture **note** on the hop-chain graph so deeper connection walks have leaf content to find. CI and developers running the suite only."))
+    Note::create(note, valence, valence::use_!(r"**Test:** Seeds a fixture **note** on the hop-chain graph so deeper connection walks have leaf content to find. CI and developers running the suite only."))
         .await
         .unwrap_or_else(|e| panic!("hop quad {}: note create failed: {e}", quad.slug()));
 
@@ -266,7 +276,7 @@ async fn seed_depth4(valence: &Valence, quad: HopQuad) -> Result<()> {
         return Ok(());
     }
 
-    let orgs = Org::query_used(valence, valence::use_!(r"**Test:** Queries fixture **organizations** so the hop-chain suite can assert multi-hop filters return expected parents. CI and developers running the suite only."))
+    let orgs = Org::query(valence, valence::use_!(r"**Test:** Queries fixture **organizations** so the hop-chain suite can assert multi-hop filters return expected parents. CI and developers running the suite only."))
         .where_projects_has_results(|_| project_with_note_body("todo"))
         .await?;
     assert_eq!(

@@ -29,23 +29,17 @@ pub struct NamedQueryAll<'a> {
 }
 #[allow(dead_code)]
 impl<'a> NamedQueryAll<'a> {
-    #[deprecated(
-        note = "use query_used with use_!(...) for declared data-use transparency"
-    )]
-    pub fn query(valence: &'a valence::Valence) -> Self {
+    /// Declared trait query builder (catalog target: Trait).
+    pub fn query(
+        valence: &'a valence::Valence,
+        purpose: valence::DataUsePurpose,
+    ) -> Self {
+        let _ = purpose;
         let tables = valence::TraitRegistry::global().tables_for_trait("Named");
         let table_csv = tables.join(", ");
         let mut core = valence::QueryCore::new(table_csv);
         core.projection = Some(vec!["id".to_string(), "name".to_string()]);
         Self { inner: core, valence }
-    }
-    /// Declared trait query builder (catalog target: Trait).
-    pub fn query_used(
-        valence: &'a valence::Valence,
-        purpose: valence::DataUsePurpose,
-    ) -> Self {
-        let _ = purpose;
-        #[allow(deprecated)] Self::query(valence)
     }
     pub fn where_name(mut self, predicate: valence::StringPredicate) -> Self {
         self.inner = self.inner.where_string("name".to_string(), predicate);
@@ -97,7 +91,9 @@ impl<'a> std::future::IntoFuture for NamedQueryAll<'a> {
     >;
     fn into_future(self) -> Self::IntoFuture {
         Box::pin(async move {
-            #[allow(deprecated)] self.inner.execute(self.valence).await
+            self.inner
+                .execute(self.valence, valence::DataUsePurpose::framework_nested())
+                .await
         })
     }
 }

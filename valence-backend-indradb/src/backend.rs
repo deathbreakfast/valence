@@ -432,22 +432,27 @@ impl DatabaseBackend for IndradbBackend {
         id: &str,
         patch: serde_json::Value,
     ) -> Result<serde_json::Value> {
-        let mut record = self
+        // One read, reused for both untrack bookkeeping and the returned complete row —
+        // the prior version fetched twice for the same purpose.
+        let existing = self
             .get_record(table, id)
             .await?
             .unwrap_or_else(|| serde_json::json!({}));
-        if let Some(existing) = self.get_record(table, id).await? {
-            self.untrack_unique_fields(table, &existing).await;
-        }
-        if let (Some(base), Some(patch_obj)) = (record.as_object_mut(), patch.as_object()) {
+        self.untrack_unique_fields(table, &existing).await;
+        // Only the patch's own keys need validating — fields it doesn't name can't
+        // have changed.
+        self.check_unique_fields(table, &patch, Some(id)).await?;
+        // Storage is already one property per field; writing just `patch` (instead of
+        // the full merged record) makes the property writes themselves sparse.
+        self.write_fields(table, id, patch.clone())?;
+        let mut merged = existing;
+        if let (Some(base), Some(patch_obj)) = (merged.as_object_mut(), patch.as_object()) {
             for (k, v) in patch_obj {
                 base.insert(k.clone(), v.clone());
             }
         }
-        self.check_unique_fields(table, &record, Some(id)).await?;
-        self.write_fields(table, id, record.clone())?;
-        self.track_unique_fields(table, &record).await;
-        Ok(record)
+        self.track_unique_fields(table, &merged).await;
+        Ok(merged)
     }
 
     async fn upsert_record(

@@ -14,11 +14,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Fleet call-site `use_!` strings rewritten toward stranger-readable trust narratives
   (bold key terms; honest display vs internal use).
 
-- Declared data-use transparency: pair `*_used` Model / trait / `QueryCore` methods with
-  `use_!(…)` purpose markdown (file/line captured for the catalog). Bare CRUD/query APIs
-  remain available with `#[deprecated]` warnings until a later hard-deny. Schema/trait
-  `repository:` is required for View source links. `uf-valence-data-use-scan` builds the
-  snapshot consumed by valence-uf-app Data uses / Unscoped uses UI.
+- Declared data-use transparency: Model / trait / `QueryCore` entry points require
+  `use_!(…)` purpose markdown (file/line captured for the catalog). There is no
+  purpose-free public overload. Schema/trait `repository:` is required for View source
+  links. `uf-valence-data-use-scan` builds the snapshot consumed by valence-uf-app Data
+  uses / Unscoped uses UI.
+
+### Breaking
+
+- Model / trait / `QueryCore` / connection / Unscoped free-function entry points take a
+  required `DataUsePurpose` (`use_!(…)`) under the primary method names (`get`, `create`,
+  `query`, …). Purpose-free public overloads are removed.
 
 ### Fixed
 

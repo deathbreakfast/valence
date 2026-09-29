@@ -37,11 +37,9 @@ where
                     continue;
                 }
                 if operation == "Model::__assert_unique_field_value" {
-                    if let Error::Validation(ref msg) = e {
-                        if let Some((table, field)) = parse_unique_violation(msg) {
-                            instrumentation::record_unique_violation(table, field);
-                            return Err(e);
-                        }
+                    if let Some((table, field)) = e.as_unique_violation() {
+                        instrumentation::record_unique_violation(table, field);
+                        return Err(e);
                     }
                 }
                 if e.is_retryable_transaction_contention() {
@@ -51,11 +49,4 @@ where
             }
         }
     }
-}
-
-fn parse_unique_violation(msg: &str) -> Option<(&str, &str)> {
-    // "Unique constraint violation on table.field"
-    let rest = msg.strip_prefix("Unique constraint violation on ")?;
-    let (table, field) = rest.split_once('.')?;
-    Some((table, field))
 }

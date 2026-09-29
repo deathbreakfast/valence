@@ -92,7 +92,7 @@ At least one should be supplied for the trait to add behavior.
 | `r#type` (or `type`) | yes | `FieldType` expression |
 | `required` | no | Require the field (default `false`) |
 | `primary_key` | no | Mark as primary key (default `false`) |
-| `unique` | no | Require unique values (default `false`) |
+| `unique` | no | Require unique values (default `false`). SQL backends enforce it with a unique index; a duplicate write fails with `Error::unique_violation`, which callers match through `Error::as_unique_violation` |
 | `default` | no | Default value expression |
 | `validations` | no | Validator expression list |
 | `policies` | no | Field-level policy bundle |

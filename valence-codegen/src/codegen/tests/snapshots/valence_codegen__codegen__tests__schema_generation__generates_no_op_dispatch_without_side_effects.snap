@@ -415,11 +415,9 @@ impl PlainModel {
                 continue;
             }
             return Err(
-                valence::Error::Validation(
-                    format!(
-                        "Unique constraint violation on {}.{}", < Self as valence::Model
-                        > ::table_name(), field_name
-                    ),
+                valence::Error::unique_violation(
+                    <Self as valence::Model>::table_name(),
+                    field_name,
                 ),
             );
         }

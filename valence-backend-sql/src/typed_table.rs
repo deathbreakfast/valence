@@ -506,6 +506,59 @@ fn placeholders_postgres(n: usize) -> String {
         .join(", ")
 }
 
+/// Map a failed typed-row write (SQLite). A unique-index rejection becomes
+/// [`Error::unique_violation`], the same error the generated pre-write probe
+/// returns, so a writer that loses a race sees the same shape.
+fn map_write_err_sqlite(table: &str, e: sqlx::Error) -> Error {
+    let field = e
+        .as_database_error()
+        .filter(|db| db.is_unique_violation())
+        .and_then(|db| sqlite_unique_field(table, db.message()).map(str::to_owned));
+    match field {
+        Some(field) => unique_violation(table, &field),
+        None => Error::database(e.to_string()),
+    }
+}
+
+/// Map a failed typed-row write (Postgres); see [`map_write_err_sqlite`].
+fn map_write_err_postgres(table: &str, e: sqlx::Error) -> Error {
+    let field = e
+        .as_database_error()
+        .filter(|db| db.is_unique_violation())
+        .and_then(|db| db.constraint())
+        .and_then(|constraint| postgres_unique_field(table, constraint).map(str::to_owned));
+    match field {
+        Some(field) => unique_violation(table, &field),
+        None => Error::database(e.to_string()),
+    }
+}
+
+fn unique_violation(table: &str, field: &str) -> Error {
+    valence_core::instrumentation::record_unique_violation(table, field);
+    Error::unique_violation(table, field)
+}
+
+/// Field named by SQLite's `UNIQUE constraint failed: table.field` message (the
+/// first column when the index is composite).
+fn sqlite_unique_field<'m>(table: &str, message: &'m str) -> Option<&'m str> {
+    let columns = message.strip_prefix("UNIQUE constraint failed: ")?;
+    let (message_table, field) = columns.split(", ").next()?.split_once('.')?;
+    (message_table == table).then_some(field)
+}
+
+/// Field named by a Postgres unique constraint: `valence_unique_<table>_<field>`
+/// from [`define_unique_index_column_postgres`], or `<table>_pkey` for `id`.
+fn postgres_unique_field<'c>(table: &str, constraint: &'c str) -> Option<&'c str> {
+    if constraint.strip_prefix(table) == Some("_pkey") {
+        return Some("id");
+    }
+    constraint
+        .strip_prefix("valence_unique_")?
+        .strip_prefix(table)?
+        .strip_prefix('_')
+        .filter(|field| !field.is_empty())
+}
+
 /// Insert typed row (SQLite).
 pub async fn create_record_typed_sqlite(
     pool: &sqlx::SqlitePool,
@@ -548,7 +601,7 @@ pub async fn create_record_typed_sqlite(
     query
         .execute(pool)
         .await
-        .map_err(|e| Error::database(e.to_string()))?;
+        .map_err(|e| map_write_err_sqlite(&layout.table, e))?;
     Ok(row_from_columns(&layout.table, &id, out_fields))
 }
 
@@ -593,7 +646,7 @@ pub async fn create_record_typed_postgres(
     query
         .execute(pool)
         .await
-        .map_err(|e| Error::database(e.to_string()))?;
+        .map_err(|e| map_write_err_postgres(&layout.table, e))?;
     Ok(row_from_columns(&layout.table, &id, out_fields))
 }
 
@@ -800,7 +853,7 @@ pub async fn update_record_typed_sqlite(
     query
         .execute(pool)
         .await
-        .map_err(|e| Error::database(e.to_string()))?;
+        .map_err(|e| map_write_err_sqlite(&layout.table, e))?;
     Ok(row_from_columns(&layout.table, id, out))
 }
 
@@ -848,7 +901,7 @@ pub async fn update_record_typed_postgres(
     query
         .execute(pool)
         .await
-        .map_err(|e| Error::database(e.to_string()))?;
+        .map_err(|e| map_write_err_postgres(&layout.table, e))?;
     Ok(row_from_columns(&layout.table, id, out))
 }
 
@@ -894,7 +947,7 @@ pub async fn merge_record_typed_sqlite(
     let row = query
         .fetch_optional(pool)
         .await
-        .map_err(|e| Error::database(e.to_string()))?;
+        .map_err(|e| map_write_err_sqlite(&layout.table, e))?;
     let Some(row) = row else {
         return Err(Error::NotFound(format!("{}:{id}", layout.table)));
     };
@@ -942,7 +995,7 @@ pub async fn merge_record_typed_postgres(
     let row = query
         .fetch_optional(pool)
         .await
-        .map_err(|e| Error::database(e.to_string()))?;
+        .map_err(|e| map_write_err_postgres(&layout.table, e))?;
     let Some(row) = row else {
         return Err(Error::NotFound(format!("{}:{id}", layout.table)));
     };
@@ -1194,4 +1247,52 @@ pub fn map_select_row_postgres(table: &str, row: &sqlx::postgres::PgRow) -> Valu
 #[allow(dead_code)]
 fn _decode(storage: FieldStorage, raw: Option<&str>, i: Option<i64>) -> Value {
     decode_sql_cell(storage, raw, i)
+}
+
+#[cfg(test)]
+mod unique_violation_tests {
+    use super::{postgres_unique_field, sqlite_unique_field};
+
+    #[test]
+    fn sqlite_message_names_field_happy() {
+        assert_eq!(
+            sqlite_unique_field("tag", "UNIQUE constraint failed: tag.name_key"),
+            Some("name_key")
+        );
+        assert_eq!(
+            sqlite_unique_field("tag", "UNIQUE constraint failed: tag.a, tag.b"),
+            Some("a")
+        );
+    }
+
+    #[test]
+    fn sqlite_message_other_table_or_shape_sad() {
+        assert_eq!(
+            sqlite_unique_field("tag", "UNIQUE constraint failed: other.name_key"),
+            None
+        );
+        assert_eq!(
+            sqlite_unique_field("tag", "NOT NULL constraint failed: tag.name"),
+            None
+        );
+    }
+
+    #[test]
+    fn postgres_constraint_names_field_happy() {
+        assert_eq!(
+            postgres_unique_field("tag", "valence_unique_tag_name_key"),
+            Some("name_key")
+        );
+        assert_eq!(postgres_unique_field("tag", "tag_pkey"), Some("id"));
+    }
+
+    #[test]
+    fn postgres_constraint_other_table_or_shape_sad() {
+        assert_eq!(
+            postgres_unique_field("tag", "valence_unique_other_name_key"),
+            None
+        );
+        assert_eq!(postgres_unique_field("tag", "valence_unique_tag_"), None);
+        assert_eq!(postgres_unique_field("tag", "tag_name_idx"), None);
+    }
 }

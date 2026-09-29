@@ -97,7 +97,32 @@ impl Error {
             _ => false,
         }
     }
+
+    /// Build the [`Error::Validation`] a write gets when it would duplicate a
+    /// `unique: true` field value.
+    ///
+    /// Generated models return it from their pre-write probe, and the SQL
+    /// backends return it when the database unique index rejects a racing
+    /// write, so callers can match one shape with [`Error::as_unique_violation`].
+    #[must_use]
+    pub fn unique_violation(table: &str, field: &str) -> Self {
+        Self::Validation(format!("{UNIQUE_VIOLATION_PREFIX}{table}.{field}"))
+    }
+
+    /// The `(table, field)` named by an [`Error::unique_violation`], or `None`
+    /// for any other error.
+    #[must_use]
+    pub fn as_unique_violation(&self) -> Option<(&str, &str)> {
+        let Error::Validation(message) = self else {
+            return None;
+        };
+        message
+            .strip_prefix(UNIQUE_VIOLATION_PREFIX)?
+            .split_once('.')
+    }
 }
+
+const UNIQUE_VIOLATION_PREFIX: &str = "Unique constraint violation on ";
 
 impl From<&str> for Error {
     fn from(s: &str) -> Self {
@@ -129,5 +154,32 @@ mod tests {
         else {
             panic!("expected Serialization with source: {err:?}");
         };
+    }
+
+    #[test]
+    fn error_unique_violation_round_trips_happy() {
+        let err = Error::unique_violation("tag", "name_key");
+        assert_eq!(err.as_unique_violation(), Some(("tag", "name_key")));
+        assert_eq!(
+            err.to_string(),
+            "Validation error: Unique constraint violation on tag.name_key"
+        );
+    }
+
+    #[test]
+    fn as_unique_violation_ignores_other_validation_sad() {
+        assert_eq!(
+            Error::Validation("name is required".into()).as_unique_violation(),
+            None
+        );
+        assert_eq!(
+            Error::database("Unique constraint violation on tag.name_key").as_unique_violation(),
+            None
+        );
+    }
+
+    #[test]
+    fn unique_violation_not_retried() {
+        assert!(!Error::unique_violation("tag", "name_key").is_retryable_transaction_contention());
     }
 }

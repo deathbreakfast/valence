@@ -191,11 +191,10 @@ fn unique_constraint_helpers_tokens(unique_field_names: &[LitStr]) -> TokenStrea
                 if excluding_id.is_some_and(|id| id == matched_id) {
                     continue;
                 }
-                return Err(valence::Error::Validation(format!(
-                    "Unique constraint violation on {}.{}",
+                return Err(valence::Error::unique_violation(
                     <Self as valence::Model>::table_name(),
-                    field_name
-                )));
+                    field_name,
+                ));
             }
             Ok(())
         }

@@ -1,7 +1,11 @@
 //! SQLite storage engine.
 
-use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePool, SqlitePoolOptions};
+use sqlx::sqlite::{
+    SqliteConnectOptions, SqliteConnection, SqliteJournalMode, SqlitePool, SqlitePoolOptions,
+};
+use sqlx::ConnectOptions;
 use std::str::FromStr;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use valence_backend_sql::{
@@ -65,6 +69,9 @@ pub const PRIMARY: DatabaseFromEngine = Database::from_engine("primary", ENGINE_
 pub struct SqliteBackend {
     pool: SqlitePool,
     layout_ensured: WriteEnsureCache,
+    /// Idle connection outside the pool that keeps an in-memory database alive
+    /// across pool reconnects (see [`Self::connect`]).
+    _memory_anchor: Option<Arc<Mutex<SqliteConnection>>>,
 }
 
 impl SqliteBackend {
@@ -79,9 +86,22 @@ impl SqliteBackend {
 
     /// Connect to a SQLite database at `path` (`:memory:` for ephemeral).
     ///
-    /// In-memory URLs (`:memory:` or `mode=memory`) use a single-connection pool so every
-    /// checkout sees the same store. sqlx's default pool size otherwise opens isolated
-    /// private databases per connection for bare `:memory:`.
+    /// Bare `:memory:` (also `sqlite::memory:` and `sqlite://:memory:`) opens a
+    /// shared-cache memory database with a name unique to this backend, so two
+    /// backends in one process never see each other's rows.
+    ///
+    /// In-memory URLs (`:memory:` or `mode=memory`) keep one extra connection open for
+    /// the backend's lifetime. SQLite drops a memory database when its last connection
+    /// closes, and the pool replaces connections on its own (idle timeout, max lifetime,
+    /// or a failed release ping after a cancelled query). Without the extra connection a
+    /// replacement would open an empty database while the backend still believed its
+    /// tables existed. The data lives until the last clone of the backend is dropped.
+    ///
+    /// The pool itself stays at one connection for in-memory URLs. Shared-cache mode
+    /// uses table locks that the busy timeout does not cover. sqlx waits them out while
+    /// stepping a statement, but preparing one while another connection holds the schema
+    /// lock (Valence alters tables at write time) fails with `SQLITE_LOCKED`, and so does
+    /// a lock cycle between two writers.
     ///
     /// File-backed URLs use WAL and a 5s busy timeout so concurrent schema growth and
     /// writers wait instead of failing immediately with `SQLITE_BUSY`. In-memory URLs
@@ -97,8 +117,20 @@ impl SqliteBackend {
     pub async fn connect(path: &str) -> Result<Self> {
         let memory =
             path.contains(":memory:") || path.contains("mode=memory") || path == ":memory:";
-        let mut options = SqliteConnectOptions::from_str(path)
-            .or_else(|_| SqliteConnectOptions::from_str(&format!("sqlite:{path}")))
+        let bare_memory = path
+            .trim_start_matches("sqlite://")
+            .trim_start_matches("sqlite:")
+            == ":memory:";
+        let parsed = if bare_memory {
+            SqliteConnectOptions::from_str(&format!(
+                "file:valence-mem-{}?mode=memory&cache=shared",
+                uuid::Uuid::new_v4()
+            ))
+        } else {
+            SqliteConnectOptions::from_str(path)
+                .or_else(|_| SqliteConnectOptions::from_str(&format!("sqlite:{path}")))
+        };
+        let mut options = parsed
             .map_err(|e| Error::database(e.to_string()))?
             .create_if_missing(true)
             .statement_cache_capacity(0)
@@ -106,6 +138,15 @@ impl SqliteBackend {
         if !memory {
             options = options.journal_mode(SqliteJournalMode::Wal);
         }
+        let memory_anchor = if memory {
+            let conn = options
+                .connect()
+                .await
+                .map_err(|e| Error::database(e.to_string()))?;
+            Some(Arc::new(Mutex::new(conn)))
+        } else {
+            None
+        };
         let mut pool_opts = SqlitePoolOptions::new();
         if memory {
             pool_opts = pool_opts.max_connections(1);
@@ -118,6 +159,7 @@ impl SqliteBackend {
         Ok(Self {
             pool,
             layout_ensured: WriteEnsureCache::new(),
+            _memory_anchor: memory_anchor,
         })
     }
 

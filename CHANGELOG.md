@@ -28,6 +28,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- SQLite in-memory backends (`:memory:`, `mode=memory`) no longer lose their data when
+  the pool replaces its connection after a cancelled query, idle timeout, or max
+  lifetime. The backend holds one extra connection open so SQLite keeps the database,
+  and each bare `:memory:` backend gets its own uniquely named database.
 - SQL / mem filters for Currency subfields (`where_{field}_code` /
   `where_{field}_minor`): dotted paths emit `json_extract` (Postgres rewrite +
   integer cast for `amount_minor`); mem row-filter parses typed-column extracts

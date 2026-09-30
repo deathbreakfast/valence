@@ -5972,6 +5972,7 @@ dependencies = [
  "tokio",
  "uf-valence-backend-sql",
  "uf-valence-core",
+ "uuid",
  "valence-testkit",
 ]
 

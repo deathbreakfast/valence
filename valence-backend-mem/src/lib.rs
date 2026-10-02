@@ -43,8 +43,9 @@ mod tests {
         install_telemetry_sink(Arc::new(sink.clone()));
         let wrapped = wrap_backend(Arc::new(InMemoryBackend::new()));
         let _ = wrapped.get_record("fixture", "id").await.expect("get");
-        assert!(!sink
-            .recorded_counters_matching("valence_db_reads", &[("op", "get")])
-            .is_empty());
+        assert_ne!(
+            sink.recorded_counters_matching("valence_db_reads", &[("op", "get")]),
+            Vec::<valence_telemetry::RecordedCounter>::new()
+        );
     }
 }

@@ -1,8 +1,16 @@
 //! Declared data-use types for Valence transparency (`use_!` + purpose-required APIs).
+//!
+//! A deployment's declared uses are collected at build time into a
+//! [`DataUseCatalog`], installed once at host boot, and read back through
+//! [`DataUseCatalog::global`].
 
+mod catalog;
+mod connection;
 mod purpose;
 mod source_link;
 
+pub use catalog::{CatalogInstallError, DataUseCatalog};
+pub use connection::{ConnectionHop, ConnectionHopKind};
 pub use purpose::DataUsePurpose;
 pub use source_link::{SourceLink, SourceLinkConfig};
 
@@ -45,13 +53,24 @@ pub enum DataUseTarget {
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct DataUse {
     pub purpose: String,
+    /// Path relative to the declaring package's repository root.
     pub file: String,
     pub line: u32,
     pub crate_name: String,
+    /// `[package].repository` of the declaring crate. [`Self::file`] is relative to
+    /// this repository, so View source links start here.
+    #[serde(default)]
+    pub repository: String,
     pub target: DataUseTarget,
     pub op: DataOp,
     /// Method name that was scanned (`get`, `query`, …).
     pub method: String,
+    /// Connection this call loads or mutates, when the method is a hop.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub connection: Option<ConnectionHop>,
+    /// Peer schema resolved at build time for [`Self::connection`], when known.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub referenced_schema: Option<String>,
     /// Optional trait name when this row is shown on a schema page via fan-out.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub via_trait: Option<String>,

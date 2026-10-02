@@ -220,13 +220,14 @@ async fn tm_s2_apply_remove_edge_clears_edges() {
         from_table: "proj".into(),
     };
     apply_deletion_node(&node, &v).await.expect("remove edge");
-    assert!(v
-        .active_backend()
-        .unwrap()
-        .get_edge_targets(&from, "proj_tag")
-        .await
-        .unwrap()
-        .is_empty());
+    assert_eq!(
+        v.active_backend()
+            .unwrap()
+            .get_edge_targets(&from, "proj_tag")
+            .await
+            .unwrap(),
+        Vec::<valence_core::RecordId>::new()
+    );
 }
 
 #[tokio::test]

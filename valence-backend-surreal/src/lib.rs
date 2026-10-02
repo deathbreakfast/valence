@@ -67,8 +67,9 @@ mod instrumentation_smoke {
         db.use_ns("test").use_db("test").await.unwrap();
         let wrapped = wrap_backend(Arc::new(SurrealEmbeddedBackend::new(db)));
         let _ = wrapped.get_record("fixture", "id").await;
-        assert!(!sink
-            .recorded_counters_matching("valence_db_reads", &[("op", "get")])
-            .is_empty());
+        assert_ne!(
+            sink.recorded_counters_matching("valence_db_reads", &[("op", "get")]),
+            Vec::<valence_telemetry::RecordedCounter>::new()
+        );
     }
 }

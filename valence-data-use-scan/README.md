@@ -1,62 +1,80 @@
 # uf-valence-data-use-scan
 
-Build-time catalog of Valence purpose-required + `use_!` call sites for the valence-uf-app
-Data uses UI.
+Build-time catalog of every Valence data use a deployment declares. The host's `build.rs`
+generates a `data_use_catalog()` function, the host installs it at boot, and the
+valence-uf-app Data uses pages read it.
 
 ## Features
 
-- **Workspace scan** — Discovers purpose-required calls across Cargo workspace members so
-  host SSR can ship a static catalog. Call `generate` once from `build.rs`.
-  See crate rustdoc [Getting started](https://docs.rs/uf-valence-data-use-scan).
-- **Purpose extraction** — Reads nearby `use_!(…)` markdown for the catalog.
-- **Target classification** — Maps receivers to Schema / Trait / Unscoped for the
-  ops UI surfaces.
-- **Test exclusion** — Optional omit of `tests/` paths from the UI snapshot via
-  `Config::exclude_tests_from_snapshot`.
-- **Connection hops** — Classifies forward loads / edge mutates and optionally
-  bakes peer schema via `Config::connection_edges` for Referenced Reads/Updates.
+- **Deployment scan** — Collects every purpose-required call in the host package and every
+  crate it links, with the features the host was compiled with. Call `generate` once from
+  the host's `build.rs`.
+- **Deployment inventory** — The host lists binaries that run outside the server (Chronon,
+  Boson, or Photon runtimes, workers in other repositories) under
+  `[target.'cfg(any())'.dependencies]`. Cargo resolves and fetches them without compiling
+  them, and the scan reads their sources.
+- **Purpose extraction** — Reads the `use_!(…)` markdown next to each call.
+- **Target classification** — Maps receivers to Schema / Trait / Unscoped for the ops UI.
+- **Test exclusion** — `Config::exclude_tests_from_snapshot` omits test modules under
+  `src/` from the catalog.
+- **Connection hops** — Classifies forward loads and edge mutates, and optionally bakes the
+  peer schema via `Config::connection_edges` for Referenced Reads / Updates.
 
 ## Getting started
 
-`uf-valence-data-use-scan` turns declared purpose-required / `use_!` call sites into a
-static `DATA_USES` slice. Call `generate` from a host `build.rs` after adding this
-crate as a `build-dependency`, once per compile.
+Add this crate to the host server package's `[build-dependencies]` and call `generate` from
+its `build.rs`:
 
 ```rust,no_run
 use std::path::PathBuf;
-use valence_data_use_scan::{generate, Config};
+use valence_data_use_scan::{generate, Config, HostPackage};
 
-fn main() -> Result<(), valence_data_use_scan::DataUseScanError> {
-    let workspace_root = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap())
-        .parent()
-        .expect("workspace root")
-        .to_path_buf();
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let manifest_dir = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR")?);
+    let workspace_root = manifest_dir.parent().ok_or("host has no parent")?.to_path_buf();
     generate(&Config {
         workspace_root,
-        out_dir: PathBuf::from(std::env::var("OUT_DIR").unwrap()),
+        out_dir: PathBuf::from(std::env::var("OUT_DIR")?),
+        host: HostPackage::FromBuildScript,
         exclude_tests_from_snapshot: true,
         connection_edges: vec![],
-    })
+    })?;
+    Ok(())
 }
 ```
 
-Then in SSR code:
+Declare out-of-process components in the same package's `Cargo.toml`. Each one needs a
+library target; a binary-only crate needs a one-line `src/lib.rs`.
 
-```rust,ignore
-include!(concat!(env!("OUT_DIR"), "/data_uses.rs"));
-println!("data-use catalog rows: {}", DATA_USES.len());
+```toml
+[target.'cfg(any())'.dependencies]
+chronon-runtime = { path = "../chronon-runtime" }
+ocr-chronon-worker = { git = "https://github.com/acme/ocr-worker", branch = "main" }
 ```
 
-See the crate rustdoc for `generate`, target classification, and test exclusion.
+Then include the generated file once and install the catalog at boot:
+
+```rust,ignore
+mod generated {
+    include!(concat!(env!("OUT_DIR"), "/data_uses.rs"));
+}
+
+let catalog = generated::data_use_catalog().install()?;
+println!("data-use catalog rows: {}", catalog.len());
+```
+
+The crate rustdoc covers feature gating, the inventory contract, test exclusion, and
+connection hops. `tests/deployment_inventory.rs` is a runnable fixture deployment.
 
 ## Perf follow-up (TM-PERF-1)
 
-Measured locally (2026-09-12):
+Measured locally (2026-10-01):
 
 | Scenario | Result |
 |----------|--------|
-| Before host scan | valence-app `build.rs` had no data-use scan |
-| After fixture scan (`uf-valence-data-use-scan` tests) | ~30 ms wall for small fixture workspaces |
-| Valence workspace path walk (445 `.rs` files) | ~25 ms walk only |
+| Fixture deployment scan (7 packages, two `cargo metadata` calls) | ~40 ms per `generate` |
+| Valence workspace path walk (445 `.rs` files) | ~25 ms walk only (2026-09-12) |
 
-Catalog-bin / committed snapshot is not required at this cost. Re-measure on L5 marketing/host builds after enabling monorepo-wide `workspace_root` scans.
+Most of the cost is `cargo metadata`. Host builds rerun the scan only when `Cargo.lock`,
+a manifest, or a local package's `src/` changes. Re-measure on the L5 site host after
+wiring.

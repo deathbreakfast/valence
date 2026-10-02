@@ -1,59 +1,67 @@
-//! Build-time catalog of Valence purpose-required + `use_!` call sites for the
-//! valence-uf-app Data uses UI.
+//! Build-time catalog of every Valence data use a deployment declares.
 //!
-//! Walks workspace member `.rs` sources with `syn`, pairs each purpose-required method call
-//! with a nearby `valence::use_!(…)` purpose, and writes `data_uses.rs` under `OUT_DIR` for
-//! host `build.rs` to `include!`.
+//! Valence read and write APIs take a `use_!(…)` purpose explaining, in plain
+//! language, why the code touches that data. This crate finds those call sites
+//! across everything a deployment runs and generates a `data_use_catalog()`
+//! function that the host installs at boot, so end users can see how their data
+//! is used.
 //!
 //! ## Features
 //!
-//! - **Workspace scan** — Discovers purpose-required calls across Cargo workspace members
-//!   (via `cargo_metadata` plus a directory walk) so host SSR can ship a static
-//!   catalog. Call [`generate`] once from `build.rs` at compile time.
-//!   [Get started](#getting-started)
-//! - **Purpose extraction** — Reads `valence::use_!(r#"In **valence data use scan**, we **load this data** so the application can decide what to do next in this workflow. The result is used by **valence data use scan** logic and is only shown in a UI when that feature’s screens display it."#)` / `valence::use_!(r#"In **valence data use scan**, we **load this data** so the application can decide what to do next in this workflow. The result is used by **valence data use scan** logic and is only shown in a UI when that feature’s screens display it."#)` arguments next to
-//!   each purpose-required call so the UI can show end-user trust copy.
-//!   [Get started](#getting-started)
-//! - **Target classification** — Maps receivers to Schema / Trait / Unscoped for the
-//!   valence-uf-app Data uses surfaces (schema card, trait card, Unscoped page).
+//! - **Deployment scan** — Collects every purpose-required call in the host
+//!   package and everything it links, including product crates pulled from git,
+//!   with the features the host was compiled with. Call [`generate`] once from the
+//!   host's `build.rs`. [Get started](#getting-started)
+//! - **Deployment inventory** — Lets the host name components that run as their
+//!   own binaries (Chronon, Boson, or Photon runtimes, workers in other
+//!   repositories) so their uses appear too, without compiling them into the
+//!   host. [Declare deployment components](#declare-deployment-components)
+//! - **Purpose extraction** — Reads the `use_!(…)` markdown next to each
+//!   purpose-required call so the catalog shows end-user trust copy rather than
+//!   method names. [Get started](#getting-started)
+//! - **Target classification** — Sorts each use into Schema, Trait, or Unscoped so
+//!   the ops UI can show it on the right schema card, trait card, or Unscoped page.
 //!   [Get started](#getting-started)
 //! - **Purpose quality lint** — [`lint_purpose()`] checks trust-copy banlists and
 //!   tier depth so migration templates cannot re-land. [Get started](#lint-a-purpose-string)
 //! - **Test exclusion** — When [`Config::exclude_tests_from_snapshot`] is set, omits
-//!   `tests/` paths and `*_test.rs` files from the generated UI snapshot so fixture
-//!   twins stay out of operator views. [Get started](#exclude-tests-from-the-snapshot)
+//!   test modules inside `src/` (`tests.rs`, `*_test.rs`, `tests/` directories) from
+//!   the generated catalog so fixture twins stay out of operator views.
+//!   [Get started](#exclude-tests-from-the-snapshot)
 //! - **Connection hops** — Classifies forward `get_*` / `relate_to_*` hops
 //!   and optionally bakes peer schema via [`Config::connection_edges`] for Referenced
 //!   Reads / Updates in valence-uf-app. [Get started](#attribute-connection-hops)
 //!
 //! ## Getting started
 //!
-//! `uf-valence-data-use-scan` turns declared purpose-required / `use_!` call sites into a
-//! static `DATA_USES` slice for the Valence ops UI. Call [`generate`] from a host
-//! `build.rs` when the host crate builds (once per Cargo compile) after adding this
-//! crate as a `build-dependency`, with [`Config::workspace_root`] pointed at the
-//! Cargo workspace that owns the product crates you want catalogued.
+//! The catalog answers "how does this deployment use my data?" for end users, so
+//! it has to cover the whole deployment rather than one crate. The host server
+//! package owns that list: [`generate`] runs from its `build.rs` each time Cargo
+//! builds the host, and the host installs the result once at boot. The pass scans the `src/` tree of the
+//! host and every crate it links. Top-level `tests/`, `examples/`, and `benches/`
+//! never ship, so they are skipped. Components that run as separate binaries are
+//! added in [Declare deployment components](#declare-deployment-components).
 //!
 //! ### Prerequisites
 //!
-//! - This crate on `[build-dependencies]` of the host (for example `valence-app`).
-//! - Workspace members that already call purpose-required APIs with `use_!` purposes.
-//! - `OUT_DIR` available to the build script (Cargo provides it).
+//! - This crate on the host's `[build-dependencies]`.
+//! - `uf-valence` available to the host as `valence` (the generated function
+//!   returns `valence::data_use::DataUseCatalog`).
+//! - Product crates that call purpose-required APIs with `use_!` purposes.
 //!
 //! ### Wire generate from build.rs
 //!
 //! ```rust,no_run
 //! use std::path::PathBuf;
-//! use valence_data_use_scan::{generate, Config, DataUseScanError};
+//! use valence_data_use_scan::{generate, Config, HostPackage};
 //!
-//! fn main() -> Result<(), DataUseScanError> {
-//!     let workspace_root = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap())
-//!         .parent()
-//!         .expect("host crate parent is workspace root")
-//!         .to_path_buf();
+//! fn main() -> Result<(), Box<dyn std::error::Error>> {
+//!     let manifest_dir = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR")?);
+//!     let workspace_root = manifest_dir.parent().ok_or("host has no parent")?.to_path_buf();
 //!     generate(&Config {
 //!         workspace_root,
-//!         out_dir: PathBuf::from(std::env::var("OUT_DIR").unwrap()),
+//!         out_dir: PathBuf::from(std::env::var("OUT_DIR")?),
+//!         host: HostPackage::FromBuildScript,
 //!         exclude_tests_from_snapshot: true,
 //!         connection_edges: vec![],
 //!     })?;
@@ -61,18 +69,75 @@
 //! }
 //! ```
 //!
-//! On success the pass writes `data_uses.rs` under `out_dir` with a `DATA_USES`
-//! static slice. Include it from SSR code:
+//! [`HostPackage::FromBuildScript`] reads the building package's name and its
+//! enabled features from Cargo, so optional product crates are catalogued
+//! exactly when the host compiles them. On success the pass writes
+//! `data_uses.rs` under `out_dir`. Include it once in the host and install the
+//! catalog at boot:
 //!
 //! ```rust,ignore
-//! include!(concat!(env!("OUT_DIR"), "/data_uses.rs"));
-//! println!("data-use catalog rows: {}", DATA_USES.len());
+//! mod generated {
+//!     include!(concat!(env!("OUT_DIR"), "/data_uses.rs"));
+//! }
+//!
+//! let catalog = generated::data_use_catalog().install()?;
+//! println!("data-use catalog rows: {}", catalog.len());
 //! ```
 //!
-//! Observable outcome: `data_uses.rs` exists under `OUT_DIR`, and the slice lists
-//! Schema / Trait / Unscoped rows for scanned purposes. Metadata or parse failures
-//! return [`DataUseScanError`] (host `build.rs` should fail loud, not ship an empty
-//! catalog as success).
+//! Observable outcome: `data_use_catalog()` returns one row per declared use,
+//! with `file` relative to each crate's repository root, and readers find it
+//! through `DataUseCatalog::global()`. Metadata or parse failures return
+//! [`DataUseScanError`]; let `build.rs` fail rather than ship an empty catalog.
+//!
+//! ### Declare deployment components
+//!
+//! A deployment usually runs more than the web server: Chronon, Boson, or Photon
+//! runtimes, workers from other repositories, any binary the owner ships. Their
+//! uses belong in the same catalog, but only the host owner knows which
+//! binaries the deployment runs and where they come from, so the host declares
+//! them. List each one under `[target.'cfg(any())'.dependencies]` in the host
+//! package's `Cargo.toml`. `cfg(any())` is never true, so when the host builds,
+//! Cargo resolves, locks, and downloads these crates but never compiles or links
+//! them, and the scan reads their sources. Do this when you add a deployed
+//! binary, in the same change that adds it to your deploy.
+//!
+//! Prerequisites: the host's `build.rs` uses [`HostPackage::FromBuildScript`]
+//! as above, and each component exposes a library target. A binary-only crate
+//! needs a one-line `src/lib.rs` (a doc comment is enough), because Cargo drops
+//! lib-less dependencies.
+//!
+//! ```toml
+//! # server/Cargo.toml
+//! # Data-use inventory for binaries this deployment runs outside the web server.
+//! # cfg(any()) is never true: Cargo locks and fetches these but never builds them.
+//! [target.'cfg(any())'.dependencies]
+//! chronon-runtime = { path = "../chronon-runtime" }
+//! ocr-chronon-worker = { git = "https://github.com/acme/ocr-worker", branch = "main", features = ["s3"] }
+//! ```
+//!
+//! Features on an entry choose which optional crates of that component count,
+//! matching how the owner builds it. A host test then pins the deployment so a
+//! forgotten component fails CI:
+//!
+//! ```rust,ignore
+//! #[test]
+//! fn catalog_includes_every_deployed_component() {
+//!     // `host: HostPackage::FromBuildScript` in build.rs; generated module included above.
+//!     let catalog = generated::data_use_catalog();
+//!     let crates = catalog.crate_names();
+//!     assert!(crates.contains("chronon-runtime"));
+//!     assert!(crates.contains("ocr-chronon-worker"));
+//! }
+//! ```
+//!
+//! Observable outcome: uses declared in those components appear in the catalog
+//! with their own crate names and repository-relative paths, and nothing from
+//! them is compiled into the host. A non-optional inventory entry without a
+//! library target fails the build with
+//! [`DataUseScanError::InventoryDependencyWithoutLib`]. Components the owner
+//! never declares are invisible, so keep the list next to your deploy config
+//! and add a host test like the one above. Next: install the catalog at boot
+//! ([Valence guide](https://docs.rs/uf-valence/latest/valence/#install-the-data-use-catalog-at-boot)).
 //!
 //! ### Lint a purpose string
 //!
@@ -88,23 +153,25 @@
 //!
 //! ### Exclude tests from the snapshot
 //!
-//! Set [`Config::exclude_tests_from_snapshot`] to `true` when product tests mirror
-//! production purpose-required calls with twin purposes that must not appear in the UI.
+//! Set [`Config::exclude_tests_from_snapshot`] to `true` when unit-test modules under
+//! `src/` mirror production purpose-required calls with twin purposes that must not
+//! appear in the UI.
 //! Leave it `false` only when you intentionally want test fixtures in the catalog.
 //!
 //! ```rust,no_run
 //! use std::path::PathBuf;
-//! use valence_data_use_scan::{generate, Config};
+//! use valence_data_use_scan::{generate, Config, HostPackage};
 //!
 //! fn main() {
 //!     generate(&Config {
 //!         workspace_root: PathBuf::from("."),
 //!         out_dir: PathBuf::from("out"),
+//!         host: HostPackage::FromBuildScript,
 //!         exclude_tests_from_snapshot: true,
 //!         connection_edges: vec![],
 //!     })
 //!     .expect("data-use scan");
-//!     println!("excluded tests from DATA_USES snapshot");
+//!     println!("excluded tests from the data-use catalog");
 //! }
 //! ```
 //!
@@ -120,12 +187,13 @@
 //!
 //! ```rust,no_run
 //! use std::path::PathBuf;
-//! use valence_data_use_scan::{generate, Config, ConnectionEdge};
+//! use valence_data_use_scan::{generate, Config, ConnectionEdge, HostPackage};
 //!
 //! fn main() {
 //!     generate(&Config {
 //!         workspace_root: PathBuf::from("."),
 //!         out_dir: PathBuf::from("out"),
+//!         host: HostPackage::FromBuildScript,
 //!         exclude_tests_from_snapshot: true,
 //!         connection_edges: vec![ConnectionEdge {
 //!             from_table: "todo".into(),
@@ -144,38 +212,74 @@
 //!
 //! ## Examples
 //!
-//! Unit coverage of the fixture workspace lives in this crate's tests
-//! (`generate_excludes_tests_when_configured`). Host wiring: `valence-app/build.rs`.
+//! `tests/deployment_inventory.rs` builds a host workspace with an out-of-tree
+//! product, an inventory-only worker, and an undeclared binary, and checks what
+//! the catalog contains (`cargo test -p uf-valence-data-use-scan`).
 
 #![deny(clippy::missing_errors_doc)]
 
 mod classify;
+mod discover;
 mod emit;
 mod exclude;
 mod inventory;
 pub mod lint_purpose;
+mod repo_path;
 mod scan;
 
+pub use discover::HostPackage;
 pub use inventory::{inventory_csv_header, inventory_csv_row, lint_scan_hits, InventoryRow};
 pub use lint_purpose::{lint_purpose, purpose_passes, GapCode, PurposeTier};
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use classify::{
     classify_connection_hop, classify_method, classify_target, hop_field_matches_connection,
 };
+use discover::{discover, Discovery, PackageInfo};
 use exclude::should_exclude_path;
+use repo_path::RepoRoot;
 use scan::{scan_file, FoundUse};
 
 /// Failure while scanning purpose-required call sites or writing the snapshot.
 #[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
 pub enum DataUseScanError {
     /// `cargo_metadata` could not load the workspace manifest.
     #[error("cargo metadata: {message}")]
     Metadata {
         /// Human-readable failure detail (no secrets).
         message: String,
+    },
+    /// The host package is not a member of the workspace at `workspace_root`.
+    #[error("host package `{name}` is not a member of this workspace")]
+    UnknownHostPackage {
+        /// Package name that was looked up.
+        name: String,
+    },
+    /// [`HostPackage::Named`] listed a feature the host package does not declare.
+    #[error("package `{package}` has no feature `{feature}`")]
+    UnknownFeature {
+        /// Host package name.
+        package: String,
+        /// Feature that is not declared.
+        feature: String,
+    },
+    /// An inventory-only (`cfg(any())`) dependency has no library target, so
+    /// Cargo dropped it from the graph and its uses cannot be catalogued.
+    #[error(
+        "inventory dependency `{package}` has no library target; add a doc-only src/lib.rs so Cargo keeps it"
+    )]
+    InventoryDependencyWithoutLib {
+        /// Package name of the lib-less dependency.
+        package: String,
+    },
+    /// [`HostPackage::FromBuildScript`] ran outside a Cargo build script.
+    #[error("{var} is not set; HostPackage::FromBuildScript only works inside build.rs")]
+    MissingBuildScriptEnv {
+        /// Environment variable Cargo normally provides.
+        var: String,
     },
     /// A package manifest path had no parent directory.
     #[error("package path for {manifest}: {message}")]
@@ -205,11 +309,14 @@ pub enum DataUseScanError {
 
 /// Configuration for the data-use catalog scan.
 pub struct Config {
-    /// Root workspace directory (contains `Cargo.toml`).
+    /// Root of the workspace that contains the host package (holds `Cargo.toml`).
     pub workspace_root: PathBuf,
     /// Output directory where `data_uses.rs` will be written.
     pub out_dir: PathBuf,
-    /// When true, omit `tests/` paths and `*_test.rs` files from the UI snapshot.
+    /// Host package whose linked crates and `cfg(any())` inventory deps are scanned.
+    pub host: HostPackage,
+    /// When true, omit test modules under `src/` (`tests.rs`, `*_test.rs`, `tests/`
+    /// directories) from the catalog.
     pub exclude_tests_from_snapshot: bool,
     /// Optional connection edges used to bake [`ScanHit::referenced_schema`] at
     /// generate time. Empty in product hosts that resolve peers at SSR.
@@ -250,7 +357,7 @@ pub struct ConnectionHop {
 pub struct ScanHit {
     /// Markdown purpose text from `use_!`.
     pub purpose: String,
-    /// Repo-root-relative source path.
+    /// Path relative to the root of the repository that owns the package.
     pub file: String,
     /// 1-based line of the purpose-required call (best effort from the `use_!` / call span).
     pub line: u32,
@@ -309,28 +416,36 @@ impl OpKind {
     }
 }
 
-/// Scan workspace members and write `OUT_DIR/data_uses.rs`.
+/// Scan the host's deployment and write `OUT_DIR/data_uses.rs`.
 ///
-/// Call once from host `build.rs` after backends and product crates are on the
-/// workspace member list. Prefer [`Config::exclude_tests_from_snapshot`] `true` for
-/// operator-facing catalogs.
+/// Call once from the host package's `build.rs`. The scan covers the host,
+/// every crate it links, and every `[target.'cfg(any())'.dependencies]`
+/// inventory component, keeping only packages whose dependency graph reaches
+/// Valence, and reads each package's `src/` tree. Prefer
+/// [`Config::exclude_tests_from_snapshot`] `true` for operator-facing catalogs.
 ///
 /// # Errors
 ///
-/// Returns [`DataUseScanError`] when Cargo metadata cannot be loaded, a package
-/// path is invalid, a source file cannot be read/parsed, or the snapshot cannot
-/// be written.
+/// Returns [`DataUseScanError::UnknownHostPackage`] or
+/// [`DataUseScanError::UnknownFeature`] for a misnamed host or feature,
+/// [`DataUseScanError::InventoryDependencyWithoutLib`] for a lib-less inventory
+/// entry, [`DataUseScanError::MissingBuildScriptEnv`] when
+/// [`HostPackage::FromBuildScript`] runs outside `build.rs`, and the metadata,
+/// I/O, or parse variants when Cargo metadata cannot load, a source file cannot
+/// be read or parsed, or the snapshot cannot be written.
 pub fn generate(config: &Config) -> Result<(), DataUseScanError> {
     let started = Instant::now();
-    let hits = collect_hits(config)?;
-    let packages = discover_packages(config)?;
+    let discovery = discover(&config.workspace_root, &config.host)?;
+    let hits = hits_for(config, &discovery.packages)?;
 
     emit::write_snapshot(&config.out_dir, &hits)?;
 
     let duration_ms = started.elapsed().as_millis();
     tracing::info!(
         target: "valence.data_use.scan",
-        crate_count = packages.len(),
+        host_package = %discovery.host,
+        inventory_components = discovery.inventory_components,
+        crate_count = discovery.packages.len(),
         use_count = hits.len(),
         duration_ms = duration_ms as u64,
         "data-use scan complete"
@@ -338,34 +453,28 @@ pub fn generate(config: &Config) -> Result<(), DataUseScanError> {
 
     // Build-script directives must go to stdout for cargo.
     #[allow(clippy::print_stdout)]
-    {
-        println!(
-            "cargo:rerun-if-changed={}",
-            config.workspace_root.join("Cargo.toml").display()
-        );
-        for package in &packages {
-            println!(
-                "cargo:rerun-if-changed={}",
-                package.path.join("Cargo.toml").display()
-            );
-        }
+    for path in rerun_paths(&config.workspace_root, &discovery) {
+        println!("cargo:rerun-if-changed={}", path.display());
     }
 
     Ok(())
 }
 
-/// Collect every purpose-required + `use_!` hit under the workspace (no snapshot write).
+/// Collect every purpose-required + `use_!` hit for the host's deployment
+/// without writing the snapshot.
 ///
 /// # Errors
 ///
-/// Same as [`generate`] for metadata, I/O, and parse failures.
+/// Same as [`generate`] except snapshot write failures.
 pub fn collect_hits(config: &Config) -> Result<Vec<ScanHit>, DataUseScanError> {
-    let packages = discover_packages(config)?;
-    let mut hits: Vec<ScanHit> = Vec::new();
+    let discovery = discover(&config.workspace_root, &config.host)?;
+    hits_for(config, &discovery.packages)
+}
 
-    for package in &packages {
-        let package_hits = scan_package(config, package)?;
-        hits.extend(package_hits);
+fn hits_for(config: &Config, packages: &[PackageInfo]) -> Result<Vec<ScanHit>, DataUseScanError> {
+    let mut hits: Vec<ScanHit> = Vec::new();
+    for package in packages {
+        hits.extend(scan_package(config, package)?);
     }
 
     hits.sort_by(|a, b| {
@@ -394,51 +503,31 @@ pub fn collect_hits(config: &Config) -> Result<Vec<ScanHit>, DataUseScanError> {
     Ok(hits)
 }
 
-/// Package root discovered from Cargo metadata.
-struct PackageInfo {
-    name: String,
-    path: PathBuf,
-    /// From `[package].repository` (workspace inheritance resolved by cargo_metadata).
-    repository: String,
-}
-
-fn discover_packages(config: &Config) -> Result<Vec<PackageInfo>, DataUseScanError> {
-    use cargo_metadata::MetadataCommand;
-
-    let manifest_path = config.workspace_root.join("Cargo.toml");
-    let metadata = MetadataCommand::new()
-        .manifest_path(&manifest_path)
-        .no_deps()
-        .exec()
-        .map_err(|e| DataUseScanError::Metadata {
-            message: e.to_string(),
-        })?;
-
-    let mut packages = Vec::new();
-    for member_id in &metadata.workspace_members {
-        let Some(pkg) = metadata.packages.iter().find(|p| &p.id == member_id) else {
-            continue;
-        };
-        let path = pkg
-            .manifest_path
-            .parent()
-            .map(|dir| dir.as_std_path().to_path_buf())
-            .ok_or_else(|| DataUseScanError::PackagePath {
-                manifest: pkg.manifest_path.to_string(),
-                message: "manifest path has no parent directory".to_string(),
-            })?;
-        packages.push(PackageInfo {
-            name: pkg.name.to_string(),
-            path,
-            repository: pkg.repository.clone().unwrap_or_default(),
-        });
+/// Files whose change should rerun the scan: manifests, the lockfile, and the
+/// directories of path packages (registry and git sources are pinned by the lock).
+fn rerun_paths(workspace_root: &Path, discovery: &Discovery) -> Vec<PathBuf> {
+    let mut paths = vec![
+        workspace_root.join("Cargo.toml"),
+        workspace_root.join("Cargo.lock"),
+        discovery.host_manifest.clone(),
+    ];
+    for package in discovery.packages.iter().filter(|p| p.local) {
+        paths.push(package.path.join("Cargo.toml"));
+        paths.push(package.path.join("src"));
     }
-    Ok(packages)
+    paths.sort();
+    paths.dedup();
+    paths
 }
 
 fn scan_package(config: &Config, package: &PackageInfo) -> Result<Vec<ScanHit>, DataUseScanError> {
+    let repo_root = RepoRoot::detect(&package.path);
     let mut hits = Vec::new();
-    let walker = ignore::WalkBuilder::new(&package.path)
+    let src = package.path.join("src");
+    if !src.is_dir() {
+        return Ok(hits);
+    }
+    let walker = ignore::WalkBuilder::new(&src)
         .hidden(false)
         .git_ignore(true)
         .git_global(false)
@@ -450,24 +539,19 @@ fn scan_package(config: &Config, package: &PackageInfo) -> Result<Vec<ScanHit>, 
             message: e.to_string(),
         })?;
         let path = entry.path();
-        if !path.is_file() {
+        if !path.is_file() || path.extension().and_then(|e| e.to_str()) != Some("rs") {
             continue;
         }
-        if path.extension().and_then(|e| e.to_str()) != Some("rs") {
+        let in_package = path.strip_prefix(&package.path).unwrap_or(path);
+        if in_package.components().any(|c| c.as_os_str() == "target") {
             continue;
         }
-        // Skip build artifacts and dependency sources if they appear under the package.
-        let path_str = path.to_string_lossy();
-        if path_str.contains("/target/") || path_str.contains("\\target\\") {
-            continue;
-        }
-        if config.exclude_tests_from_snapshot && should_exclude_path(path) {
+        if config.exclude_tests_from_snapshot && should_exclude_path(in_package) {
             continue;
         }
 
-        let rel = relative_to_workspace(config, path);
-        let found = scan_file(path, &package.name, &rel)?;
-        for item in found {
+        let rel = repo_root.relative(path);
+        for item in scan_file(path, &package.name, &rel)? {
             hits.push(hit_from_found(
                 item,
                 &package.repository,
@@ -476,13 +560,6 @@ fn scan_package(config: &Config, package: &PackageInfo) -> Result<Vec<ScanHit>, 
         }
     }
     Ok(hits)
-}
-
-fn relative_to_workspace(config: &Config, path: &std::path::Path) -> String {
-    path.strip_prefix(&config.workspace_root)
-        .unwrap_or(path)
-        .to_string_lossy()
-        .replace('\\', "/")
 }
 
 fn hit_from_found(found: FoundUse, repository: &str, edges: &[ConnectionEdge]) -> ScanHit {
@@ -521,174 +598,4 @@ fn bake_referenced_schema(
             e.from_table == from_table && hop_field_matches_connection(&hop.field, &e.from_field)
         })
         .map(|e| e.to_table.clone())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::fs;
-    use tempfile::tempdir;
-
-    fn write_fixture_workspace(root: &std::path::Path) {
-        fs::write(
-            root.join("Cargo.toml"),
-            r#"[workspace]
-resolver = "2"
-members = ["prod_crate"]
-"#,
-        )
-        .unwrap();
-        let prod = root.join("prod_crate");
-        fs::create_dir_all(prod.join("src")).unwrap();
-        fs::create_dir_all(prod.join("tests")).unwrap();
-        fs::write(
-            prod.join("Cargo.toml"),
-            r#"[package]
-name = "prod_crate"
-version = "0.1.0"
-edition = "2021"
-repository = "https://github.com/unified-field-dev/prod_crate"
-"#,
-        )
-        .unwrap();
-        fs::write(
-            prod.join("src/lib.rs"),
-            include_str!("../tests/fixtures/prod_lib.rs"),
-        )
-        .unwrap();
-        fs::write(
-            prod.join("tests/integration.rs"),
-            include_str!("../tests/fixtures/test_twin.rs"),
-        )
-        .unwrap();
-    }
-
-    #[test]
-    fn generate_excludes_tests_when_configured() {
-        let dir = tempdir().unwrap();
-        write_fixture_workspace(dir.path());
-        let out = dir.path().join("out");
-        fs::create_dir_all(&out).unwrap();
-
-        generate(&Config {
-            workspace_root: dir.path().to_path_buf(),
-            out_dir: out.clone(),
-            exclude_tests_from_snapshot: true,
-            connection_edges: vec![],
-        })
-        .unwrap();
-
-        let generated = fs::read_to_string(out.join("data_uses.rs")).unwrap();
-        assert!(generated.contains("session cookie"));
-        assert!(
-            !generated.contains("data-use scan twin suite"),
-            "test twin purpose must be excluded from UI snapshot"
-        );
-        assert!(generated.contains("DataUseTarget::Schema"));
-        assert!(generated.contains("DataUseTarget::Trait"));
-        assert!(generated.contains("DataUseTarget::Unscoped"));
-        assert!(
-            generated.contains("https://github.com/unified-field-dev/prod_crate"),
-            "snapshot must carry package repository for Unscoped View source"
-        );
-    }
-
-    #[test]
-    fn generate_includes_tests_when_not_excluded() {
-        let dir = tempdir().unwrap();
-        write_fixture_workspace(dir.path());
-        let out = dir.path().join("out");
-        fs::create_dir_all(&out).unwrap();
-
-        generate(&Config {
-            workspace_root: dir.path().to_path_buf(),
-            out_dir: out.clone(),
-            exclude_tests_from_snapshot: false,
-            connection_edges: vec![],
-        })
-        .unwrap();
-
-        let generated = fs::read_to_string(out.join("data_uses.rs")).unwrap();
-        assert!(generated.contains("data-use scan twin suite"));
-    }
-
-    #[test]
-    fn generate_bakes_referenced_schema_from_edges() {
-        let dir = tempdir().unwrap();
-        write_fixture_workspace(dir.path());
-        // Append a connection hop call site to prod lib.
-        let lib = dir.path().join("prod_crate/src/lib.rs");
-        let mut body = fs::read_to_string(&lib).unwrap();
-        body.push_str(
-            r##"
-async fn _hop() {
-    let _ = Todo::get_owner(
-        &valence,
-        valence::use_!(r#"**Test:** Fixture hop owner load for peer bake."#),
-    )
-    .await;
-}
-"##,
-        );
-        fs::write(&lib, body).unwrap();
-        let out = dir.path().join("out");
-        fs::create_dir_all(&out).unwrap();
-
-        generate(&Config {
-            workspace_root: dir.path().to_path_buf(),
-            out_dir: out.clone(),
-            exclude_tests_from_snapshot: true,
-            connection_edges: vec![ConnectionEdge {
-                from_table: "todo".into(),
-                from_field: "owner".into(),
-                to_table: "user".into(),
-            }],
-        })
-        .unwrap();
-
-        let generated = fs::read_to_string(out.join("data_uses.rs")).unwrap();
-        assert!(
-            generated.contains("referenced_schema: Some(\"user\")"),
-            "expected baked peer user, got:\n{generated}"
-        );
-        assert!(generated.contains("connection_field: Some(\"owner\")"));
-        assert!(generated.contains("ConnectionKind::ForwardGet"));
-    }
-
-    #[test]
-    fn generate_leaves_referenced_none_without_matching_edge() {
-        let dir = tempdir().unwrap();
-        write_fixture_workspace(dir.path());
-        let lib = dir.path().join("prod_crate/src/lib.rs");
-        let mut body = fs::read_to_string(&lib).unwrap();
-        body.push_str(
-            r##"
-async fn _hop() {
-    let _ = Todo::get_owner(
-        &valence,
-        valence::use_!(r#"**Test:** Fixture hop without matching edge."#),
-    )
-    .await;
-}
-"##,
-        );
-        fs::write(&lib, body).unwrap();
-        let out = dir.path().join("out");
-        fs::create_dir_all(&out).unwrap();
-
-        generate(&Config {
-            workspace_root: dir.path().to_path_buf(),
-            out_dir: out.clone(),
-            exclude_tests_from_snapshot: true,
-            connection_edges: vec![],
-        })
-        .unwrap();
-
-        let generated = fs::read_to_string(out.join("data_uses.rs")).unwrap();
-        assert!(generated.contains("connection_field: Some(\"owner\")"));
-        assert!(
-            generated.contains("referenced_schema: None"),
-            "without edges, peer must stay None"
-        );
-    }
 }

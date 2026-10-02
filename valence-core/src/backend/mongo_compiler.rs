@@ -33,7 +33,7 @@ mod tests {
         );
         let cq = MongoQueryCompiler.compile(&core).expect("compile");
         assert!(cq.query_string.to_uppercase().contains(" WHERE "));
-        assert!(!cq.params.is_empty());
+        assert_ne!(cq.params, Vec::<(String, serde_json::Value)>::new());
         assert!(cq.query_string.contains("json_extract") || cq.query_string.contains("name"));
     }
 }

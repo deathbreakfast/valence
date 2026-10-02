@@ -29,6 +29,6 @@ mod tests {
             .where_string("name".into(), StringPredicate::Equals("alpha".into()));
         let cq = IndraQueryCompiler.compile(&core).expect("compile");
         assert!(cq.query_string.contains("WHERE"));
-        assert!(!cq.params.is_empty());
+        assert_ne!(cq.params, Vec::<(String, serde_json::Value)>::new());
     }
 }

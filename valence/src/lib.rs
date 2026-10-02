@@ -46,6 +46,10 @@
 //!   [`use_!`] so purpose markdown is catalogued for valence-uf-app Data uses surfaces.
 //!   Every schema and trait requires a `repository:` URL for View source links.
 //!   [Get started](#declare-a-data-use).
+//! - **Deployment data-use catalog** — The host build script generates every declared use in
+//!   the deployment, including workers that run outside the server process, and
+//!   [`DataUseCatalog::install`] makes that list the one valence-uf-app reads.
+//!   [Get started](#install-the-data-use-catalog-at-boot).
 //!
 //! Enable backends with Cargo features (`mem` is the default). The crate `README.md` lists every
 //! feature flag and environment variable. See repository [`SECURITY.md`](https://github.com/unified-field-dev/valence/blob/main/SECURITY.md)
@@ -63,8 +67,8 @@
 //! - A generated or macro [`Model`] (or trait query / [`QueryCore`]) that takes a `DataUsePurpose` (pass `use_!(...)`).
 //! - Every schema and trait declares `repository:` as the Git HTTPS root (required for
 //!   View source links in the ops UI).
-//! - Optional: host `build.rs` wired to `uf-valence-data-use-scan` when you want the
-//!   catalog snapshot for valence-uf-app.
+//! - Optional: a host catalog installed at boot when you want these uses listed in
+//!   valence-uf-app ([Install the data-use catalog at boot](#install-the-data-use-catalog-at-boot)).
 //!
 //! ## Call with purpose
 //!
@@ -127,8 +131,62 @@
 //! ).await?;
 //! ```
 //!
-//! Next: wire `uf-valence-data-use-scan::generate` from host `build.rs`,
+//! Next: [install the data-use catalog at boot](#install-the-data-use-catalog-at-boot),
 //! then open Data uses cards / `/valence/unscoped-uses` in valence-uf-app.
+//!
+//! # Install the data-use catalog at boot
+//!
+//! Install the catalog once at host boot, before the router serves its first request, so
+//! valence-uf-app lists every use the deployment declares. The host's `build.rs` runs
+//! `uf-valence-data-use-scan`, which reads the server, every crate it links, and each
+//! out-of-process component the host lists under `[target.'cfg(any())'.dependencies]`.
+//! Cargo resolves those entries without compiling them, so a Chronon binary or Photon
+//! service shows up in the catalog without being linked into the server.
+//!
+//! ## Prerequisites
+//!
+//! - A host `build.rs` that calls `valence_data_use_scan::generate` with
+//!   `HostPackage::FromBuildScript`. The scan crate's Getting started has the full script and
+//!   the inventory manifest.
+//! - The generated `data_uses.rs` included once in the server crate. It defines
+//!   `data_use_catalog()`.
+//!
+//! ## Install at startup
+//!
+//! ```rust
+//! use valence::data_use::{DataOp, DataUse, DataUseCatalog, DataUseTarget};
+//!
+//! // A real host includes the generated function instead:
+//! // include!(concat!(env!("OUT_DIR"), "/data_uses.rs"));
+//! fn data_use_catalog() -> DataUseCatalog {
+//!     DataUseCatalog::from_entries(vec![DataUse {
+//!         purpose: "When a counter **ticks on schedule**, we **update its value** so the dashboard shows the latest count.".into(),
+//!         file: "counter-app-worker/src/tick.rs".into(),
+//!         line: 18,
+//!         crate_name: "counter-app-worker".into(),
+//!         repository: "https://github.com/unified-field-dev/counter-app".into(),
+//!         target: DataUseTarget::Schema("counter".into()),
+//!         op: DataOp::Update,
+//!         method: "update".into(),
+//!         connection: None,
+//!         referenced_schema: None,
+//!         via_trait: None,
+//!     }])
+//! }
+//!
+//! fn main() {
+//!     DataUseCatalog::install(data_use_catalog()).expect("one install per process");
+//!     let installed = DataUseCatalog::global();
+//!     assert!(installed.is_some());
+//!     println!("data-use rows: {}", installed.map_or(0, DataUseCatalog::len));
+//! }
+//! ```
+//!
+//! Observable outcome: [`DataUseCatalog::global`] returns the installed catalog, and Data uses
+//! pages list the worker's `update` row next to the server's own uses. When `global()` is
+//! `None`, valence-uf-app shows a wiring error instead of an empty list. A second
+//! [`DataUseCatalog::install`] returns [`CatalogInstallError::AlreadyInstalled`] and keeps the
+//! first catalog, which points at two boot paths in the host.
 //!
 //! # Defer-to-edge read privacy
 //!

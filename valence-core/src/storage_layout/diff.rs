@@ -211,7 +211,7 @@ mod tests {
         };
         let diff = layout_diff(&desired, &live, KnownEngines::SQLITE).unwrap();
         assert!(matches!(diff.ops[0], AdditiveOp::AddField(ref f) if f.name == "score"));
-        assert!(diff.tweaks.is_empty());
+        assert_eq!(diff.tweaks, Vec::<SafeTweak>::new());
     }
 
     #[test]

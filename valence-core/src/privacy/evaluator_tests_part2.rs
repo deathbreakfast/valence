@@ -219,5 +219,5 @@
 
         assert!(filtered.contains_key("id"));
         assert!(filtered.contains_key("secret"));
-        assert!(hidden.is_empty());
+        assert_eq!(hidden, Vec::<String>::new());
     }

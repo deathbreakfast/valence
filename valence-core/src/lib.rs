@@ -130,7 +130,10 @@ pub use connection::{
     id_from_model, Cardinality, IdHolder, OnDelete,
 };
 pub use currency::{Currency, CurrencyCode, CurrencyError, ParseCurrencyCodeError};
-pub use data_use::{DataOp, DataUse, DataUsePurpose, DataUseTarget, SourceLink, SourceLinkConfig};
+pub use data_use::{
+    CatalogInstallError, ConnectionHop, ConnectionHopKind, DataOp, DataUse, DataUseCatalog,
+    DataUsePurpose, DataUseTarget, SourceLink, SourceLinkConfig,
+};
 pub use database_retry::retry_on_database_tx_conflict;
 pub use deletion::{
     apply_deletion_dag, apply_deletion_node, check_dag_delete_privacy,

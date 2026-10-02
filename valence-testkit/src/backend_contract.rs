@@ -162,7 +162,7 @@ async fn relate_unrelate_edges(backend: &dyn DatabaseBackend) -> Result<()> {
     let to = RecordId::new(CONTRACT_TABLE, "n2");
     backend.relate_edge(&from, "contract_edge", &to).await?;
     let targets = backend.get_edge_targets(&from, "contract_edge").await?;
-    assert!(!targets.is_empty());
+    assert_ne!(targets, Vec::<RecordId>::new());
     backend.unrelate_edge(&from, "contract_edge", &to).await?;
     Ok(())
 }

@@ -406,12 +406,12 @@ mod tests {
     #[test]
     fn list_ttl_tables_filters_registry() {
         let mut registry = SchemaRegistry::new();
-        assert!(list_ttl_table_names(&registry).is_empty());
+        assert_eq!(list_ttl_table_names(&registry), Vec::<String>::new());
 
         registry.register(Box::leak(Box::new(SchemaMetadata::from_schema(
             leak_schema("no_ttl", None),
         ))));
-        assert!(list_ttl_table_names(&registry).is_empty());
+        assert_eq!(list_ttl_table_names(&registry), Vec::<String>::new());
 
         registry.register(Box::leak(Box::new(SchemaMetadata::from_schema(
             leak_schema("with_ttl_a", Some(policy())),

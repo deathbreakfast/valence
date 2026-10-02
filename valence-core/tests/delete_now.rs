@@ -468,11 +468,13 @@ async fn delete_now_cascades_children_and_removes_root() {
         .expect("SetNull row remains");
     assert!(referrer.get("parent_id").unwrap().is_null());
     assert_eq!(referrer.get("name").and_then(|x| x.as_str()), Some("keep"));
-    assert!(backend
-        .get_edge_targets(&from, "dn_root_peer")
-        .await
-        .unwrap()
-        .is_empty());
+    assert_eq!(
+        backend
+            .get_edge_targets(&from, "dn_root_peer")
+            .await
+            .unwrap(),
+        Vec::<valence_core::RecordId>::new()
+    );
     assert!(QueryCore::get_record_json("dn_peer", "t1", &v, DataUsePurpose::new(r"**Test:** Reloads fixture rows by id so the Valence suite can assert presence, absence, or field state after deletion and privacy scenarios. CI and developers running the suite only.", file!(), line!()))
         .await
         .unwrap()

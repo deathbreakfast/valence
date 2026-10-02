@@ -424,7 +424,7 @@ mod tests {
         );
         let rows = vec![serde_json::json!({"id": "1", "at": 1_700_000_000_i64})];
         let out = apply_equality_where(rows, &compiled);
-        assert!(out.is_empty());
+        assert_eq!(out, Vec::<serde_json::Value>::new());
     }
 
     #[test]
@@ -464,7 +464,7 @@ mod tests {
         let rows =
             vec![serde_json::json!({"id": "1", "price": {"code": "USD", "amount_minor": 12345}})];
         let out = apply_equality_where(rows, &compiled);
-        assert!(out.is_empty());
+        assert_eq!(out, Vec::<serde_json::Value>::new());
     }
 
     #[test]

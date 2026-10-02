@@ -68,11 +68,10 @@ async fn crud_and_edges_round_trip() {
     assert_eq!(outs[0].table(), "b");
     assert_eq!(outs[0].id(), "b1");
     b.unrelate_edge(&fa, "link", &tb).await.expect("unrelate");
-    assert!(b
-        .get_edge_targets(&fa, "link")
-        .await
-        .expect("edges2")
-        .is_empty());
+    assert_eq!(
+        b.get_edge_targets(&fa, "link").await.expect("edges2"),
+        Vec::<valence_core::RecordId>::new()
+    );
 }
 
 #[tokio::test]

@@ -1,0 +1,4 @@
+harness=cursor
+utc=2026-10-03T19:10:41Z
+hostname=uf-ws-w-test
+instance_id=i-0b1f58bcfcf08775f

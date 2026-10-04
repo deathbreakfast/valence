@@ -190,6 +190,172 @@ pub fn rewrite_json_extract_for_postgres(sql: &str) -> String {
     out
 }
 
+/// Postgres reserved words that a Valence table could be named after. Unquoted,
+/// `FROM user` reads `current_user` and `FROM order` is a syntax error.
+const POSTGRES_RESERVED_TABLE_WORDS: &[&str] = &[
+    "all",
+    "analyse",
+    "analyze",
+    "and",
+    "any",
+    "array",
+    "as",
+    "asc",
+    "asymmetric",
+    "authorization",
+    "binary",
+    "both",
+    "case",
+    "cast",
+    "check",
+    "collate",
+    "collation",
+    "column",
+    "concurrently",
+    "constraint",
+    "create",
+    "cross",
+    "current_catalog",
+    "current_date",
+    "current_role",
+    "current_schema",
+    "current_time",
+    "current_timestamp",
+    "current_user",
+    "default",
+    "deferrable",
+    "desc",
+    "distinct",
+    "do",
+    "else",
+    "end",
+    "except",
+    "false",
+    "fetch",
+    "for",
+    "foreign",
+    "freeze",
+    "from",
+    "full",
+    "grant",
+    "group",
+    "having",
+    "ilike",
+    "in",
+    "initially",
+    "inner",
+    "intersect",
+    "into",
+    "is",
+    "isnull",
+    "join",
+    "lateral",
+    "leading",
+    "left",
+    "like",
+    "limit",
+    "localtime",
+    "localtimestamp",
+    "natural",
+    "not",
+    "notnull",
+    "null",
+    "offset",
+    "on",
+    "only",
+    "or",
+    "order",
+    "outer",
+    "overlaps",
+    "placing",
+    "primary",
+    "references",
+    "returning",
+    "right",
+    "select",
+    "session_user",
+    "similar",
+    "some",
+    "symmetric",
+    "system_user",
+    "table",
+    "tablesample",
+    "then",
+    "to",
+    "trailing",
+    "true",
+    "union",
+    "unique",
+    "user",
+    "using",
+    "variadic",
+    "verbose",
+    "when",
+    "where",
+    "window",
+    "with",
+];
+
+/// Double-quote a reserved-word table name that follows `FROM` or `JOIN`.
+///
+/// The compiled-query emitter writes table names bare, which is fine for SQLite but
+/// not for Postgres when the table is `user`, `order`, `group`, and so on. Only bare
+/// lowercase reserved words are touched, so every other query text is unchanged,
+/// and nothing inside a single-quoted literal is rewritten.
+#[must_use]
+pub fn quote_reserved_tables_for_postgres(sql: &str) -> String {
+    fn is_ident_byte(b: u8) -> bool {
+        b.is_ascii_alphanumeric() || b == b'_'
+    }
+    let bytes = sql.as_bytes();
+    let mut out = String::with_capacity(sql.len() + 8);
+    let mut i = 0;
+    let mut in_literal = false;
+    let mut after_table_keyword = false;
+    while i < bytes.len() {
+        let b = bytes[i];
+        if in_literal {
+            out.push(b as char);
+            if b == b'\'' {
+                in_literal = false;
+            }
+            i += 1;
+            continue;
+        }
+        if b == b'\'' {
+            in_literal = true;
+            after_table_keyword = false;
+            out.push('\'');
+            i += 1;
+            continue;
+        }
+        if !is_ident_byte(b) {
+            if !b.is_ascii_whitespace() {
+                after_table_keyword = false;
+            }
+            let ch_len = sql[i..].chars().next().map_or(1, char::len_utf8);
+            out.push_str(&sql[i..i + ch_len]);
+            i += ch_len;
+            continue;
+        }
+        let start = i;
+        while i < bytes.len() && is_ident_byte(bytes[i]) {
+            i += 1;
+        }
+        let word = &sql[start..i];
+        if after_table_keyword && POSTGRES_RESERVED_TABLE_WORDS.contains(&word) {
+            out.push('"');
+            out.push_str(word);
+            out.push('"');
+        } else {
+            out.push_str(word);
+        }
+        after_table_keyword =
+            word.eq_ignore_ascii_case("from") || word.eq_ignore_ascii_case("join");
+    }
+    out
+}
+
 /// Normalize compiled query for Postgres execution (`$1`, `$2`, … placeholders).
 ///
 /// # Errors
@@ -198,7 +364,8 @@ pub fn rewrite_json_extract_for_postgres(sql: &str) -> String {
 pub fn prepare_compiled_postgres(compiled: &CompiledQuery) -> Result<(String, Vec<Value>)> {
     ensure_read_only(&compiled.query_string)?;
     let for_sql = rewrite_value_id_unique_probe_for_document_sql(&compiled.query_string);
-    let rewritten = rewrite_json_extract_for_postgres(&for_sql);
+    let rewritten =
+        quote_reserved_tables_for_postgres(&rewrite_json_extract_for_postgres(&for_sql));
     Ok(sql_with_postgres_placeholders(&rewritten, &compiled.params))
 }
 
@@ -243,6 +410,51 @@ mod tests {
 
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn postgres_quotes_reserved_table_after_from() {
+        assert_eq!(
+            quote_reserved_tables_for_postgres(
+                "SELECT * FROM user WHERE (primary_email = $param_0 OR primary_email = $param_1) LIMIT 1"
+            ),
+            "SELECT * FROM \"user\" WHERE (primary_email = $param_0 OR primary_email = $param_1) LIMIT 1"
+        );
+        assert_eq!(
+            quote_reserved_tables_for_postgres(
+                "SELECT id FROM task WHERE owner IN (SELECT id FROM user WHERE x = 1) AND g IN (SELECT 1 FROM group AS g JOIN order o ON o.id = g.id)"
+            ),
+            "SELECT id FROM task WHERE owner IN (SELECT id FROM \"user\" WHERE x = 1) AND g IN (SELECT 1 FROM \"group\" AS g JOIN \"order\" o ON o.id = g.id)"
+        );
+    }
+
+    #[test]
+    fn postgres_quote_leaves_columns_literals_and_plain_tables() {
+        let unchanged = [
+            "SELECT * FROM account_email WHERE address = $value LIMIT 2",
+            "SELECT * FROM task WHERE user = $param_0 ORDER BY created_at DESC",
+            "SELECT * FROM task WHERE note = 'from user' AND ('task:' || id) = $param_0",
+            "SELECT * FROM \"user\" WHERE id = $1",
+            "SELECT * FROM User WHERE id = $1",
+            "SELECT COUNT(*) FROM users",
+        ];
+        for sql in unchanged {
+            assert_eq!(quote_reserved_tables_for_postgres(sql), sql, "{sql}");
+        }
+    }
+
+    #[test]
+    fn prepare_compiled_postgres_quotes_user_table() {
+        let compiled = CompiledQuery::new(
+            "SELECT * FROM user WHERE primary_email = $param_0 LIMIT 1".into(),
+            vec![("param_0".into(), json!("account_email:1"))],
+        );
+        let (sql, values) = prepare_compiled_postgres(&compiled).unwrap();
+        assert_eq!(
+            sql,
+            "SELECT * FROM \"user\" WHERE primary_email = $1 LIMIT 1"
+        );
+        assert_eq!(values, vec![json!("account_email:1")]);
+    }
 
     #[test]
     fn positional_preserves_json_path_and_binds_params() {

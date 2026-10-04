@@ -296,16 +296,47 @@ const POSTGRES_RESERVED_TABLE_WORDS: &[&str] = &[
     "with",
 ];
 
-/// Double-quote a reserved-word table name that follows `FROM` or `JOIN`.
+/// Reserved words Postgres evaluates as values (`user` is `CURRENT_USER`). A bare
+/// column with one of these names compares against the session value instead of the
+/// column and silently matches nothing, so they are quoted anywhere they appear.
+const POSTGRES_VALUE_KEYWORDS: &[&str] = &[
+    "current_catalog",
+    "current_date",
+    "current_role",
+    "current_schema",
+    "current_time",
+    "current_timestamp",
+    "current_user",
+    "localtime",
+    "localtimestamp",
+    "session_user",
+    "system_user",
+    "user",
+];
+
+/// Double-quote reserved-word identifiers the compiled-query emitter writes bare.
 ///
-/// The compiled-query emitter writes table names bare, which is fine for SQLite but
-/// not for Postgres when the table is `user`, `order`, `group`, and so on. Only bare
-/// lowercase reserved words are touched, so every other query text is unchanged,
-/// and nothing inside a single-quoted literal is rewritten.
+/// The emitter writes table and column names bare, which is fine for SQLite but not
+/// for Postgres when the table is `user`, `order`, `group`, and so on, or when a
+/// column is named `user`. Reserved words that follow `FROM` or `JOIN` are quoted as
+/// tables; value keywords such as `user` are quoted in any position unless they are
+/// already qualified (`.`, `"`, `$`) or called as a function. Only bare lowercase
+/// words are touched, and nothing inside a single-quoted literal is rewritten.
 #[must_use]
 pub fn quote_reserved_tables_for_postgres(sql: &str) -> String {
     fn is_ident_byte(b: u8) -> bool {
         b.is_ascii_alphanumeric() || b == b'_'
+    }
+    fn is_bare_value_keyword(bytes: &[u8], start: usize, end: usize, word: &str) -> bool {
+        if !POSTGRES_VALUE_KEYWORDS.contains(&word) {
+            return false;
+        }
+        let qualified = start > 0 && matches!(bytes[start - 1], b'.' | b'"' | b'$');
+        let called = bytes[end..]
+            .iter()
+            .find(|b| !b.is_ascii_whitespace())
+            .is_some_and(|b| *b == b'(');
+        !qualified && !called
     }
     let bytes = sql.as_bytes();
     let mut out = String::with_capacity(sql.len() + 8);
@@ -343,7 +374,9 @@ pub fn quote_reserved_tables_for_postgres(sql: &str) -> String {
             i += 1;
         }
         let word = &sql[start..i];
-        if after_table_keyword && POSTGRES_RESERVED_TABLE_WORDS.contains(&word) {
+        if (after_table_keyword && POSTGRES_RESERVED_TABLE_WORDS.contains(&word))
+            || is_bare_value_keyword(bytes, start, i, word)
+        {
             out.push('"');
             out.push_str(word);
             out.push('"');
@@ -431,15 +464,33 @@ mod tests {
     fn postgres_quote_leaves_columns_literals_and_plain_tables() {
         let unchanged = [
             "SELECT * FROM account_email WHERE address = $value LIMIT 2",
-            "SELECT * FROM task WHERE user = $param_0 ORDER BY created_at DESC",
+            "SELECT * FROM task WHERE owner = $param_0 ORDER BY created_at DESC",
             "SELECT * FROM task WHERE note = 'from user' AND ('task:' || id) = $param_0",
             "SELECT * FROM \"user\" WHERE id = $1",
             "SELECT * FROM User WHERE id = $1",
             "SELECT COUNT(*) FROM users",
+            "SELECT * FROM task WHERE t.user = $1 AND \"user\" = $2 AND user_id = $user",
+            "SELECT current_timestamp() AS now",
         ];
         for sql in unchanged {
             assert_eq!(quote_reserved_tables_for_postgres(sql), sql, "{sql}");
         }
+    }
+
+    #[test]
+    fn postgres_quotes_value_keyword_columns_anywhere() {
+        assert_eq!(
+            quote_reserved_tables_for_postgres(
+                "SELECT * FROM notification WHERE (user = $param_0) AND read_at IS NULL LIMIT 100"
+            ),
+            "SELECT * FROM notification WHERE (\"user\" = $param_0) AND read_at IS NULL LIMIT 100"
+        );
+        assert_eq!(
+            quote_reserved_tables_for_postgres(
+                "SELECT user, current_date FROM user WHERE note = 'user' ORDER BY user DESC"
+            ),
+            "SELECT \"user\", \"current_date\" FROM \"user\" WHERE note = 'user' ORDER BY \"user\" DESC"
+        );
     }
 
     #[test]

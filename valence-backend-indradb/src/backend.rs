@@ -59,6 +59,10 @@ type IndraDb = indradb::Database<MemoryDatastore>;
 pub struct IndradbBackend {
     db: IndraDb,
     unique_indexes: RwLock<HashMap<(String, String), HashSet<String>>>,
+    /// Bare record ids for edge endpoints, keyed by vertex UUID. Endpoints whose
+    /// rows live in another backend (split logical databases) have no properties
+    /// here, and the UUIDv5 cannot be reversed.
+    edge_endpoint_ids: std::sync::RwLock<HashMap<Uuid, String>>,
 }
 
 impl std::fmt::Debug for IndradbBackend {
@@ -81,6 +85,7 @@ impl IndradbBackend {
         Self {
             db: MemoryDatastore::new_db(),
             unique_indexes: RwLock::new(HashMap::new()),
+            edge_endpoint_ids: std::sync::RwLock::new(HashMap::new()),
         }
     }
 
@@ -114,7 +119,20 @@ impl IndradbBackend {
         let vertex_type = Self::table_identifier(table)?;
         let vertex = Vertex::with_id(Self::vertex_uuid(table, id), vertex_type);
         let _ = self.db.create_vertex(&vertex).map_err(Self::db_err)?;
+        self.edge_endpoint_ids
+            .write()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .entry(vertex.id)
+            .or_insert_with(|| id.to_string());
         Ok(vertex)
+    }
+
+    fn edge_endpoint_id(&self, vertex_id: Uuid) -> Option<String> {
+        self.edge_endpoint_ids
+            .read()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .get(&vertex_id)
+            .cloned()
     }
 
     /// Read one property per field into a Valence JSON object (includes nested `id`).
@@ -547,6 +565,7 @@ impl DatabaseBackend for IndradbBackend {
                         .as_object()
                         .and_then(Self::record_id_from_props)
                         .or_else(|| storage_id_from_content(&body))
+                        .or_else(|| self.edge_endpoint_id(edge.inbound_id))
                         .unwrap_or_else(|| edge.inbound_id.to_string());
                     targets.push(RecordId::new(inbound_table, target_id));
                 }

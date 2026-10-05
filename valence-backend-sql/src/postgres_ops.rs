@@ -17,7 +17,10 @@ use crate::typed_table::{
 };
 
 pub fn ensure_table_ddl_postgres(table: &str) -> String {
-    format!("CREATE TABLE IF NOT EXISTS {table} (id TEXT PRIMARY KEY NOT NULL)")
+    format!(
+        "CREATE TABLE IF NOT EXISTS {} (id TEXT PRIMARY KEY NOT NULL)",
+        valence_core::safe_ident::quote_sql_ident(table)
+    )
 }
 
 pub async fn ensure_edges_postgres(pool: &PgPool) -> Result<()> {
@@ -175,7 +178,11 @@ pub async fn merge_record_postgres(
 }
 
 pub async fn delete_record_postgres(pool: &PgPool, table: &str, id: &str) -> Result<()> {
-    let q = format!("DELETE FROM {table} WHERE id = $1");
+    assert_safe_table(table)?;
+    let q = format!(
+        "DELETE FROM {} WHERE id = $1",
+        valence_core::safe_ident::quote_sql_ident(table)
+    );
     sqlx::query(&q)
         .bind(id)
         .execute(pool)
@@ -354,7 +361,10 @@ pub async fn apply_ttl_policy_postgres(
     let field = valence_core::ttl::EXPIRE_AT_FIELD;
     valence_core::safe_ident::assert_safe_ident(field)?;
     let idx = format!("valence_ttl_expire_at_{table}");
-    let q = format!("CREATE INDEX IF NOT EXISTS {idx} ON {table} ({field})");
+    let q = format!(
+        "CREATE INDEX IF NOT EXISTS {idx} ON {} ({field})",
+        valence_core::safe_ident::quote_sql_ident(table)
+    );
     sqlx::query(&q)
         .execute(pool)
         .await

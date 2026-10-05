@@ -692,7 +692,14 @@ fn bind_postgres<'q>(
 ) -> Result<sqlx::query::Query<'q, sqlx::Postgres, sqlx::postgres::PgArguments>> {
     let value = coerce_for_storage(storage, value)?;
     if value.is_null() {
-        return Ok(query.bind(None::<String>));
+        // Postgres types every parameter, so a TEXT null is rejected by BIGINT/BOOLEAN/JSONB columns.
+        return Ok(match storage {
+            FieldStorage::Integer => query.bind(None::<i64>),
+            FieldStorage::Boolean => query.bind(None::<bool>),
+            FieldStorage::Decimal => query.bind(None::<f64>),
+            FieldStorage::Json | FieldStorage::Currency => query.bind(None::<Value>),
+            FieldStorage::String | FieldStorage::Date => query.bind(None::<String>),
+        });
     }
     match storage {
         FieldStorage::Integer => {

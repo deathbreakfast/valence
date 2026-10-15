@@ -90,10 +90,7 @@ cargo test -p valence-bench -- --test-threads=1
 # Hybrid port contract (mem primary)
 cargo test -p uf-valence-backend-hybrid --test backend_contract -- --test-threads=1
 
-# Full AWS campaign (operator shell with cloud env loaded — see uf-live-cloud-lab)
-# cd ../../uf-live-cloud-lab/valence
-# ./scripts/aws-e2e-bench.sh --dry-run
-# ./infra/aws/campaign/provision.sh && … deploy-and-run e2e/bench …
+# Full AWS campaign tooling is maintained separately and isn't part of this repo.
 # After typed-storage upgrade: wipe still drops Postgres schema / Mongo DB / Redis.
 
 # Codegen / model runtime subset

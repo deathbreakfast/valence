@@ -7,6 +7,9 @@
 infra/aws/campaign/instances.env
 profiling/
 
+# Local bench output; decision-grade results aren't kept in this repo
+/profiling/valence-bench/reports/
+
 # Local Sentrux quality-gate config (dev artifact; not part of upstream)
 .sentrux/
 valence-data-use-scan/purpose_inventory.csv

@@ -1,4 +1,4 @@
-//! UC3 event builders for Valence instrumentation.
+//! Spectra event builders for Valence instrumentation.
 
 use serde_json::{json, Value};
 

@@ -31,7 +31,7 @@ impl PurposeTier {
             || p.contains("testkit")
             || p.contains("/bench/")
             || p.contains("campaign-ops")
-            || p.contains("uf-live-cloud-lab")
+            || p.contains("-lab/")
         {
             // Teaching prod fixtures under tests/fixtures/prod* stay S3.
             if p.contains("fixtures/prod") {

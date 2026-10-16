@@ -272,4 +272,44 @@ mod tests {
         let err = f.build(&system).expect_err("system");
         assert!(err.to_string().contains("System"));
     }
+
+    #[test]
+    fn build_rejects_external_service_user_when_policy_installed() {
+        use crate::actor_policy::RejectExternalSystemActor;
+        let valence = Valence::builder()
+            .add_backend("default", Arc::new(MockBackend))
+            .build()
+            .expect("build");
+        let router = Arc::clone(valence.database_router());
+        let config =
+            RouterValenceFactoryConfig::new("default").actor_json_policy(RejectExternalSystemActor);
+        let f = RouterValenceFactory::new(router, config);
+        let bot = serde_json::to_value(Actor::ServiceUser {
+            service_name: "bot:7c9e6679-7425-40de-944b-e07fc1f90ae7".into(),
+        })
+        .expect("json");
+        let err = f.build(&bot).expect_err("external service user");
+        assert!(err.to_string().contains("ServiceUser"));
+    }
+
+    #[test]
+    fn build_allows_internal_service_user() {
+        use crate::actor_policy::{ActorTrust, RejectExternalSystemActor};
+        let valence = Valence::builder()
+            .add_backend("default", Arc::new(MockBackend))
+            .build()
+            .expect("build");
+        let router = Arc::clone(valence.database_router());
+        let mut config =
+            RouterValenceFactoryConfig::new("default").actor_json_policy(RejectExternalSystemActor);
+        config.actor_trust = ActorTrust::Internal;
+        let f = RouterValenceFactory::new(router, config);
+        let bot = Actor::ServiceUser {
+            service_name: "bot:7c9e6679-7425-40de-944b-e07fc1f90ae7".into(),
+        };
+        let built = f
+            .build(&serde_json::to_value(&bot).expect("json"))
+            .expect("internal service user");
+        assert_eq!(built.actor(), &bot);
+    }
 }

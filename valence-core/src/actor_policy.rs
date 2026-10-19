@@ -2,7 +2,7 @@
 //!
 //! Hosts that reconstruct [`crate::actor::Actor`] from external JSON should install an
 //! [`ActorJsonPolicy`] so untrusted clients cannot mint [`crate::actor::Actor::System`] or
-//! [`crate::actor::Actor::ServiceUser`]. A service user (bot accounts among them) never comes
+//! [`crate::actor::Actor::ServiceUser`]. A service user, built-in or registered, never comes
 //! from a browser session, so external JSON claiming one is treated as forged; build those
 //! actors on the server with [`ActorTrust::Internal`] from identity the host already holds.
 
@@ -38,7 +38,8 @@ pub trait ActorJsonPolicy: Send + Sync {
 /// Recognizes the `{"System": ...}` and `{"ServiceUser": ...}` object keys (case-sensitive),
 /// matching [`crate::actor::Actor`]'s serde form. External JSON may still carry a `User` or
 /// `Anonymous` actor. [`ActorTrust::Internal`] callers are never rejected: that is the path for
-/// actors the server builds itself, such as a bot actor resolved from a stored API token.
+/// actors the server builds itself, such as a registered service user resolved from a stored API
+/// token.
 ///
 /// # Examples
 ///
@@ -46,13 +47,13 @@ pub trait ActorJsonPolicy: Send + Sync {
 /// use valence_core::{ActorJsonPolicy, ActorTrust, RejectExternalSystemActor};
 ///
 /// let policy = RejectExternalSystemActor;
-/// let bot = serde_json::json!({"ServiceUser": {"service_name": "bot:7c9e6679-7425-40de-944b-e07fc1f90ae7"}});
+/// let registered = serde_json::json!({"ServiceUser": {"service_name": "svc:7c9e6679-7425-40de-944b-e07fc1f90ae7"}});
 /// let user = serde_json::json!({"User": {"user_id": "u1"}});
 ///
-/// assert!(policy.validate(ActorTrust::External, &bot).is_err());
+/// assert!(policy.validate(ActorTrust::External, &registered).is_err());
 /// assert!(policy.validate(ActorTrust::External, &user).is_ok());
-/// // Server-built actor JSON (for example a bearer layer resolving a bot token).
-/// assert!(policy.validate(ActorTrust::Internal, &bot).is_ok());
+/// // Server-built actor JSON (for example a bearer layer resolving a service user's token).
+/// assert!(policy.validate(ActorTrust::Internal, &registered).is_ok());
 /// ```
 #[derive(Debug, Default, Clone, Copy)]
 pub struct RejectExternalSystemActor;
@@ -101,16 +102,16 @@ mod tests {
     #[test]
     fn reject_external_service_user() {
         let policy = RejectExternalSystemActor;
-        let bot = serde_json::json!({"ServiceUser": {"service_name": "bot:7c9e6679-7425-40de-944b-e07fc1f90ae7"}});
+        let registered = serde_json::json!({"ServiceUser": {"service_name": "svc:7c9e6679-7425-40de-944b-e07fc1f90ae7"}});
         let infra = serde_json::json!({"ServiceUser": {"service_name": "spectra-ingest"}});
-        for actor in [&bot, &infra] {
+        for actor in [&registered, &infra] {
             let err = policy
                 .validate(ActorTrust::External, actor)
                 .expect_err("external service user must be rejected");
             let text = err.to_string();
             assert!(text.contains("ServiceUser"), "{text}");
             assert!(
-                !text.contains("bot:"),
+                !text.contains("svc:"),
                 "error must not echo the actor: {text}"
             );
         }
@@ -119,8 +120,8 @@ mod tests {
     #[test]
     fn allow_internal_service_user() {
         let policy = RejectExternalSystemActor;
-        let bot = serde_json::json!({"ServiceUser": {"service_name": "bot:7c9e6679-7425-40de-944b-e07fc1f90ae7"}});
-        assert!(policy.validate(ActorTrust::Internal, &bot).is_ok());
+        let registered = serde_json::json!({"ServiceUser": {"service_name": "svc:7c9e6679-7425-40de-944b-e07fc1f90ae7"}});
+        assert!(policy.validate(ActorTrust::Internal, &registered).is_ok());
     }
 
     #[test]

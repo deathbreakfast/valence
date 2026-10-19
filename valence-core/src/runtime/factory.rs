@@ -284,11 +284,11 @@ mod tests {
         let config =
             RouterValenceFactoryConfig::new("default").actor_json_policy(RejectExternalSystemActor);
         let f = RouterValenceFactory::new(router, config);
-        let bot = serde_json::to_value(Actor::ServiceUser {
-            service_name: "bot:7c9e6679-7425-40de-944b-e07fc1f90ae7".into(),
+        let registered = serde_json::to_value(Actor::ServiceUser {
+            service_name: "svc:7c9e6679-7425-40de-944b-e07fc1f90ae7".into(),
         })
         .expect("json");
-        let err = f.build(&bot).expect_err("external service user");
+        let err = f.build(&registered).expect_err("external service user");
         assert!(err.to_string().contains("ServiceUser"));
     }
 
@@ -304,12 +304,12 @@ mod tests {
             RouterValenceFactoryConfig::new("default").actor_json_policy(RejectExternalSystemActor);
         config.actor_trust = ActorTrust::Internal;
         let f = RouterValenceFactory::new(router, config);
-        let bot = Actor::ServiceUser {
-            service_name: "bot:7c9e6679-7425-40de-944b-e07fc1f90ae7".into(),
+        let registered = Actor::ServiceUser {
+            service_name: "svc:7c9e6679-7425-40de-944b-e07fc1f90ae7".into(),
         };
         let built = f
-            .build(&serde_json::to_value(&bot).expect("json"))
+            .build(&serde_json::to_value(&registered).expect("json"))
             .expect("internal service user");
-        assert_eq!(built.actor(), &bot);
+        assert_eq!(built.actor(), &registered);
     }
 }

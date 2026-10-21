@@ -66,12 +66,6 @@ pub struct TreeLint {
 /// walked; git-ignored paths, `target/`, and test paths (see the data-use
 /// snapshot's test exclusion) are skipped. `InventoryRow::file` is relative to `root` with `/`
 /// separators, and tier inference runs on that path. The crate name is the
-/// Lint every `use_!` site in the `*.rs` files under `root`, with no cargo metadata.
-///
-/// For contributors rewriting purposes in a checkout. Hidden directories are
-/// walked; git-ignored paths, `target/`, and test paths (see the data-use
-/// snapshot's test exclusion) are skipped. `InventoryRow::file` is relative to `root` with `/`
-/// separators, and tier inference runs on that path. The crate name is the
 /// `[package].name` of the nearest `Cargo.toml` at or above the file (up to
 /// `root`), else `root`'s directory name. A file that cannot be read or parsed
 /// lands in [`TreeLint::skipped`] and the rest are still linted.

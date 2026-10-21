@@ -205,9 +205,9 @@ fn filters_search_or_like_across_title_and_searchable_text() {
 }
 
 #[allow(clippy::assert_is_empty)] // empty-result checks read better as assert!(rows.is_empty())
-mod and_groups {
+mod clause_matching {
     use super::*;
-    use crate::query::sql_row_filter::and_groups::split_top_level;
+    use crate::query::sql_row_filter::clause::split_top_level;
     use crate::query::{QueryCore, RecordPredicate};
     use crate::RecordId;
 
@@ -444,7 +444,7 @@ mod and_groups {
 
     #[test]
     fn or_only_clause_still_matches_any_term() {
-        // Same results as the pre-split behaviour: no top-level AND, so the old path runs.
+        // An OR-only clause keeps a row when any term matches.
         let sql = "SELECT * FROM t WHERE a = $p0 OR b = $p1";
         assert_eq!(
             run(sql, vec![("p0", "y".into()), ("p1", "q".into())]),

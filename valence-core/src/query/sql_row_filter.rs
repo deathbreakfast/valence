@@ -1,23 +1,24 @@
 //! SELECT WHERE / ORDER / LIMIT / OFFSET support for document-row adapters (mem, IndraDB,
 //! Redis, MongoDB, hybrid).
 //!
-//! Filtering works on the text of the compiled SQL, not on a parsed query. Parameter names are
-//! matched as substrings, so `$param_1` can be confused with `$param_10`.
+//! Filtering works on the text of the compiled SQL, not on a parsed query. In clauses without
+//! `OR`, parameter names are matched as substrings, so `$param_1` can be confused with
+//! `$param_10`.
 
-mod and_groups;
+mod clause;
 
 use crate::compiled_query::CompiledQuery;
 
 /// Apply `field {=,>,>=,<,<=} $param` and `LIKE` filters from compiled SQL.
 ///
-/// A clause that mixes `OR` with a top-level `AND` (two record predicates, for example) keeps a
-/// row only when every `AND` conjunct matches; each conjunct is itself an `OR` of terms. A term
-/// the filter cannot read excludes the row. A clause with only `OR` terms keeps a row when any
-/// term matches. A clause with only `AND` terms applies each comparison in turn and ignores
+/// A clause containing `OR` is matched term by term with `OR` looser than `AND`: a row is kept
+/// when every top-level `AND` conjunct matches, and each conjunct matches when any of its `OR`
+/// terms does (two record predicates joined by `AND`, for example). A term the filter cannot
+/// read excludes the row. A clause without `OR` applies each comparison in turn and ignores
 /// fragments it does not recognise.
 ///
-/// Matching is string-level on the compiled SQL, so parameter-name prefix collisions such as
-/// `$param_1` and `$param_10` are not told apart.
+/// Matching is string-level on the compiled SQL. In clauses without `OR`, parameter-name prefix
+/// collisions such as `$param_1` and `$param_10` are not told apart.
 pub fn apply_equality_where(
     mut rows: Vec<serde_json::Value>,
     compiled: &CompiledQuery,
@@ -36,17 +37,10 @@ pub fn apply_equality_where(
         .unwrap_or(where_part.len());
     let clause = where_part[..end].trim();
 
-    if and_groups::needs_group_matching(clause) {
+    if clause.to_ascii_uppercase().contains(" OR ") {
         return rows
             .into_iter()
-            .filter(|row| and_groups::clause_matches(row, clause, &compiled.params))
-            .collect();
-    }
-
-    if clause.to_uppercase().contains(" OR ") {
-        return rows
-            .into_iter()
-            .filter(|row| or_clause_matches(row, clause, &compiled.params))
+            .filter(|row| clause::clause_matches(row, clause, &compiled.params))
             .collect();
     }
 
@@ -244,49 +238,6 @@ pub fn apply_order_limit_offset(
     rows
 }
 
-fn or_clause_matches(
-    row: &serde_json::Value,
-    clause: &str,
-    params: &[(String, serde_json::Value)],
-) -> bool {
-    let stripped = clause.trim().trim_start_matches('(').trim_end_matches(')');
-    let normalized = stripped.replace(" or ", " OR ").replace(" like ", " LIKE ");
-    for part in normalized.split(" OR ") {
-        let part = part.trim();
-        if let Some(eq_at) = part.find(" = $") {
-            let before = part[..eq_at].trim_end();
-            let key = part[eq_at + 4..]
-                .trim()
-                .trim_end_matches(|c: char| !c.is_ascii_alphanumeric() && c != '_');
-            let field = extract_field_ref(before);
-            if let Some((_, value)) = params.iter().find(|(k, _)| k == key) {
-                if !field.is_empty() && row_field_equals(row, &field, value) {
-                    return true;
-                }
-            }
-            continue;
-        }
-        if let Some(like_at) = part.to_uppercase().find(" LIKE $") {
-            let before = part[..like_at].trim_end();
-            let key = part[like_at + " LIKE $".len()..]
-                .trim()
-                .trim_end_matches(|c: char| !c.is_ascii_alphanumeric() && c != '_');
-            let field = extract_field_ref(before);
-            if let Some((_, value)) = params.iter().find(|(k, _)| k == key) {
-                if let Some(pattern) = value.as_str() {
-                    if !field.is_empty()
-                        && row_string_field(row, &field)
-                            .is_some_and(|s| sql_like_matches(s, pattern))
-                    {
-                        return true;
-                    }
-                }
-            }
-        }
-    }
-    false
-}
-
 /// Parse a SQL LHS into a Valence field path (`name`, `body` path, or `price.code`).
 fn extract_field_ref(before: &str) -> String {
     let mut trimmed = before.trim();
@@ -372,5 +323,4 @@ fn values_equal(actual: &serde_json::Value, expected: &serde_json::Value) -> boo
 }
 
 #[cfg(test)]
-#[path = "sql_row_filter_tests.rs"]
 mod tests;

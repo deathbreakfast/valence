@@ -1,4 +1,4 @@
-//! Row matching for WHERE clauses that combine top-level `AND` with `OR` groups.
+//! Row matching for WHERE clauses that contain `OR`, including `OR` groups joined by `AND`.
 //!
 //! Record predicates compile to a parenthesised `OR` group, so two of them joined by `AND`
 //! must match as "every group matches", not as one flat `OR`.
@@ -8,12 +8,6 @@ use super::{
 };
 
 type Params = [(String, serde_json::Value)];
-
-/// True when the clause has an `OR` and a top-level `AND`, so it needs [`clause_matches`].
-pub(super) fn needs_group_matching(clause: &str) -> bool {
-    let upper = clause.to_ascii_uppercase();
-    upper.contains(" OR ") && upper.contains(" AND ")
-}
 
 /// Split `clause` on `keyword` (e.g. `" AND "`, matched case-insensitively) at paren depth 0
 /// and outside `'...'` literals. `None` when parens or quotes are unbalanced.

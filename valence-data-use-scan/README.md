@@ -17,6 +17,9 @@ valence-uf-app Data uses pages read it.
 - **Target classification** — Maps receivers to Schema / Trait / Unscoped for the ops UI.
 - **Test exclusion** — `Config::exclude_tests_from_snapshot` omits test modules under
   `src/` from the catalog.
+- **Purpose lint** — `lint_purpose` flags template sentences and hedges in `use_!` text.
+  The `valence-purpose-lint` binary counts hits per file (see
+  [Checking purposes in a checkout](#checking-purposes-in-a-checkout)).
 - **Connection hops** — Classifies forward loads and edge mutates, and optionally bakes the
   peer schema via `Config::connection_edges` for Referenced Reads / Updates.
 
@@ -78,3 +81,28 @@ Measured locally (2026-10-01):
 Most of the cost is `cargo metadata`. Host builds rerun the scan only when `Cargo.lock`,
 a manifest, or a local package's `src/` changes. Re-measure on the L5 site host after
 wiring.
+
+## Checking purposes in a checkout
+
+This is for contributors rewriting `use_!` purposes, not for host developers. Point the
+binary at a checkout to count the purposes that still carry a migration template sentence
+(`BAN_TEMPLATE`) or a hedge such as "not necessarily" or "unless that feature" (`HEDGE`):
+
+```sh
+cargo run -p uf-valence-data-use-scan --bin valence-purpose-lint -- path/to/checkout
+```
+
+```text
+src/applications/service.rs: 4
+src/images/service.rs: 2
+6 template/hedge hits in 2 files; 6 of 41 use_! sites
+```
+
+The run exits 0 even when it finds hits, so you can use it as an inventory before any CI
+gate. It exits 1 if a file could not be parsed (listed on stderr) and 2 on a usage error or
+an unreadable path. `--sites` adds `file:line: CODE phrase` for each hit, and `--csv` prints
+every site with all of its gap codes. Only `BAN_TEMPLATE` and `HEDGE` count as hits;
+others, such as `TOO_THIN`, appear only in the CSV. Test paths and `target/` are skipped.
+
+To fix a hit, follow the call's result to where it is used, then write what data is read or
+written, why, and which product feature and screen it serves, in plain words.

@@ -1,7 +1,12 @@
 //! Purpose-string quality lint for Valence `use_!` trust copy.
 //!
-//! Tier-aware checks: ban migration templates and catalog duplication, reject
-//! thin/jargon purposes, require `**Test:**` (or `### Test`) for harness paths.
+//! Tier-aware checks: ban migration templates ([`TEMPLATE_PHRASES`]) and hedges
+//! ([`HEDGE_PHRASES`]), catalog duplication, thin/jargon purposes, and require
+//! `**Test:**` (or `### Test`) for harness paths.
+//!
+//! Template and hedge phrases are matched after [`phrase_text`] normalization:
+//! lowercase, markdown `*` dropped, curly apostrophes straightened, whitespace
+//! collapsed. Every other check sees the same text it always did.
 
 use std::fmt;
 
@@ -59,13 +64,76 @@ impl PurposeTier {
     }
 }
 
+/// Migration-template sentence fragments, matched after [`phrase_text`] normalization.
+///
+/// A 2026 migration stamped these generic sentences onto production `use_!`
+/// call sites. They say nothing about what the code does with the data.
+pub const TEMPLATE_PHRASES: &[&str] = &[
+    "valence persistence for this feature path",
+    "mutable handle for in-place update",
+    "decide what to do next in this workflow",
+    "show or process the matching set for this workflow",
+    "so the next step in that feature can continue with the latest values",
+    "so later steps see the latest values for this workflow",
+    "is not shown as a standalone end-user page by itself",
+    "so saved changes apply on the next read",
+];
+
+/// Hedges that say the author did not check how the data is used.
+pub const HEDGE_PHRASES: &[&str] = &["not necessarily", "unless that feature"];
+
+/// Normalize a purpose for template and hedge matching: lowercase, drop `*`,
+/// straighten `’` to `'`, collapse whitespace.
+#[must_use]
+pub fn phrase_text(s: &str) -> String {
+    let cleaned: String = s
+        .chars()
+        .filter(|c| *c != '*')
+        .map(|c| if c == '\u{2019}' { '\'' } else { c })
+        .collect();
+    cleaned
+        .to_lowercase()
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+/// Every template and hedge phrase found in `purpose`, in list order.
+#[must_use]
+pub fn matching_phrases(purpose: &str) -> Vec<&'static str> {
+    let text = phrase_text(purpose);
+    TEMPLATE_PHRASES
+        .iter()
+        .chain(HEDGE_PHRASES)
+        .copied()
+        .filter(|p| text.contains(p))
+        .collect()
+}
+
+fn contains_any(text: &str, phrases: &[&str]) -> bool {
+    phrases.iter().any(|p| text.contains(p))
+}
+
 /// Machine-stable gap codes for inventory / CI.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[non_exhaustive]
 pub enum GapCode {
     /// Empty or whitespace-only purpose.
     Empty,
-    /// Migration template phrase.
+    /// Migration template phrase (see [`TEMPLATE_PHRASES`]).
+    ///
+    /// The sentence was stamped onto many call sites and says nothing about this
+    /// one. Follow the result to its consumer and write what data is read or
+    /// written, why, and which product feature serves it, in plain words.
     BanTemplate,
+    /// Hedge such as "not necessarily displayed … unless that feature's UI shows it"
+    /// (see [`HEDGE_PHRASES`]).
+    ///
+    /// A hedge means the author did not check how the data is used, and a purpose
+    /// that may contradict the code is false trust copy. Find the consumer (server
+    /// function, view, task, branch) and state which screen shows the data and to
+    /// whom, or which decision it drives.
+    Hedge,
     /// `Type in path.rs` / leading get/query/create duplication.
     BanPath,
     /// Ritual “not copied outside Valence” negatives.
@@ -89,6 +157,7 @@ impl GapCode {
         match self {
             Self::Empty => "EMPTY",
             Self::BanTemplate => "BAN_TEMPLATE",
+            Self::Hedge => "HEDGE",
             Self::BanPath => "BAN_PATH",
             Self::BanRitualNegative => "BAN_RITUAL_NEGATIVE",
             Self::BanJargon => "BAN_JARGON",
@@ -97,6 +166,14 @@ impl GapCode {
             Self::TestPrefix => "TEST_PREFIX",
             Self::FakeDisplay => "FAKE_DISPLAY",
         }
+    }
+}
+
+impl GapCode {
+    /// `BanTemplate` or `Hedge`: the codes the purpose rewrite counts.
+    #[must_use]
+    pub const fn is_template_or_hedge(self) -> bool {
+        matches!(self, Self::BanTemplate | Self::Hedge)
     }
 }
 
@@ -118,10 +195,12 @@ pub fn lint_purpose(purpose: &str, tier: PurposeTier) -> Vec<GapCode> {
 
     let lower = trimmed.to_ascii_lowercase();
 
-    if lower.contains("valence persistence for this feature path")
-        || lower.contains("mutable handle for in-place update")
-    {
+    let phrases = phrase_text(trimmed);
+    if contains_any(&phrases, TEMPLATE_PHRASES) {
         gaps.push(GapCode::BanTemplate);
+    }
+    if contains_any(&phrases, HEDGE_PHRASES) {
+        gaps.push(GapCode::Hedge);
     }
 
     if lower.contains("typed store")

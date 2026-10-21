@@ -13,7 +13,7 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 use valence_data_use_scan::{
-    inventory_csv_header, inventory_csv_row, lint_tree, matching_phrases, HitSummary,
+    inventory_csv_header, inventory_csv_row, lint_tree, matching_phrases_for, HitSummary,
 };
 
 const USAGE: &str = "usage: valence-purpose-lint [--sites | --csv] <path>...\n\n\
@@ -74,11 +74,8 @@ fn main() -> ExitCode {
         println!("{}", HitSummary::from_rows(&rows));
         if sites {
             for row in &rows {
-                if !row.gaps.iter().any(|g| g.is_template_or_hedge()) {
-                    continue;
-                }
-                let phrases = matching_phrases(&row.purpose).join("; ");
                 for gap in row.gaps.iter().filter(|g| g.is_template_or_hedge()) {
+                    let phrases = matching_phrases_for(&row.purpose, *gap).join("; ");
                     println!("{}:{}: {gap} {phrases}", row.file, row.line);
                 }
             }

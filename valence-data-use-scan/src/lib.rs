@@ -254,8 +254,8 @@ pub use inventory::{
     TreeLint,
 };
 pub use lint_purpose::{
-    lint_purpose, matching_phrases, purpose_passes, GapCode, PurposeTier, HEDGE_PHRASES,
-    TEMPLATE_PHRASES,
+    lint_purpose, matching_phrases, matching_phrases_for, purpose_passes, GapCode, PurposeTier,
+    HEDGE_PHRASES, TEMPLATE_PHRASES,
 };
 
 use std::path::{Path, PathBuf};

@@ -82,8 +82,11 @@ pub const TEMPLATE_PHRASES: &[&str] = &[
 /// Hedges that say the author did not check how the data is used.
 pub const HEDGE_PHRASES: &[&str] = &["not necessarily", "unless that feature"];
 
-/// Normalize a purpose for template and hedge matching: lowercase, drop `*`,
-/// straighten `’` to `'`, collapse whitespace.
+/// Normalize a purpose for template and hedge matching.
+///
+/// Lowercases, drops `*`, straightens `’` to `'`, and collapses whitespace.
+/// Reachable as `valence_data_use_scan::lint_purpose::phrase_text`; it is not
+/// re-exported at the crate root.
 #[must_use]
 pub fn phrase_text(s: &str) -> String {
     let cleaned: String = s
@@ -108,6 +111,19 @@ pub fn matching_phrases(purpose: &str) -> Vec<&'static str> {
         .copied()
         .filter(|p| text.contains(p))
         .collect()
+}
+
+/// Phrases in `purpose` that justify `gap`: template phrases for
+/// [`GapCode::BanTemplate`], hedges for [`GapCode::Hedge`], none for other codes.
+#[must_use]
+pub fn matching_phrases_for(purpose: &str, gap: GapCode) -> Vec<&'static str> {
+    let list = match gap {
+        GapCode::BanTemplate => TEMPLATE_PHRASES,
+        GapCode::Hedge => HEDGE_PHRASES,
+        _ => return Vec::new(),
+    };
+    let text = phrase_text(purpose);
+    list.iter().copied().filter(|p| text.contains(p)).collect()
 }
 
 fn contains_any(text: &str, phrases: &[&str]) -> bool {
@@ -167,9 +183,7 @@ impl GapCode {
             Self::FakeDisplay => "FAKE_DISPLAY",
         }
     }
-}
 
-impl GapCode {
     /// `BanTemplate` or `Hedge`: the codes the purpose rewrite counts.
     #[must_use]
     pub const fn is_template_or_hedge(self) -> bool {

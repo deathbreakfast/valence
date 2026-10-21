@@ -115,3 +115,24 @@ fn sites_and_csv_modes() {
     assert!(out.starts_with("file:line,crate,method,tier,score,gap_codes,purpose\n"));
     assert!(out.contains("src/good.rs:"));
 }
+
+#[test]
+fn sites_pairs_each_code_with_its_own_phrases() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    write(
+        dir.path(),
+        "src/both.rs",
+        &file_with(&[site(
+            "We decide what to do next in this workflow, not necessarily shown to the operator.",
+        )]),
+    );
+    let out = s(&run(&["--sites", dir.path().to_str().expect("utf8")]).stdout);
+    assert!(
+        out.contains("src/both.rs:2: BAN_TEMPLATE decide what to do next in this workflow\n"),
+        "{out}"
+    );
+    assert!(
+        out.contains("src/both.rs:2: HEDGE not necessarily\n"),
+        "{out}"
+    );
+}

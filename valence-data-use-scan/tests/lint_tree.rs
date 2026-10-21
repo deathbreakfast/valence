@@ -123,3 +123,37 @@ fn crate_name_and_tier_come_from_the_tree() {
     assert_eq!(tree.rows[0].file, "lepton-auth/src/totp/api.rs");
     assert_eq!(tree.rows[0].tier, valence_data_use_scan::PurposeTier::S3);
 }
+
+#[test]
+fn crate_name_skips_workspace_name_and_strips_comments() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    // Member manifest has no literal name: the walk continues to the parent.
+    write(
+        dir.path(),
+        "outer/Cargo.toml",
+        "[package]\nname = \"outer-crate\" # the real one\n",
+    );
+    write(
+        dir.path(),
+        "outer/inner/Cargo.toml",
+        "[package]\nname.workspace = true\nname_extra = \"x\"\n",
+    );
+    write(
+        dir.path(),
+        "outer/inner/src/a.rs",
+        &file_with(&[site(CLEAN)]),
+    );
+    write(dir.path(), "outer/src/b.rs", &file_with(&[site(CLEAN)]));
+    let tree = lint_tree(dir.path()).expect("lint");
+    assert_eq!(tree.rows.len(), 2);
+    for row in &tree.rows {
+        assert_eq!(row.crate_name, "outer-crate", "{}", row.file);
+    }
+}
+
+#[test]
+fn hidden_directories_are_walked() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    write(dir.path(), ".hidden/src/a.rs", &file_with(&[site(CLEAN)]));
+    assert_eq!(lint_tree(dir.path()).expect("lint").rows.len(), 1);
+}

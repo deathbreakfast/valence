@@ -1,6 +1,6 @@
 //! Inventory ledger: every scanned `use_!` with purpose lint score.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::fmt;
 use std::path::{Path, PathBuf};
 
@@ -62,9 +62,15 @@ pub struct TreeLint {
 
 /// Lint every `use_!` site in the `*.rs` files under `root`, with no cargo metadata.
 ///
-/// For contributors rewriting purposes in a checkout. Skips hidden and
-/// git-ignored paths, `target/`, and test paths (see the data-use snapshot's
-/// test exclusion). `InventoryRow::file` is relative to `root` with `/`
+/// For contributors rewriting purposes in a checkout. Hidden directories are
+/// walked; git-ignored paths, `target/`, and test paths (see the data-use
+/// snapshot's test exclusion) are skipped. `InventoryRow::file` is relative to `root` with `/`
+/// separators, and tier inference runs on that path. The crate name is the
+/// Lint every `use_!` site in the `*.rs` files under `root`, with no cargo metadata.
+///
+/// For contributors rewriting purposes in a checkout. Hidden directories are
+/// walked; git-ignored paths, `target/`, and test paths (see the data-use
+/// snapshot's test exclusion) are skipped. `InventoryRow::file` is relative to `root` with `/`
 /// separators, and tier inference runs on that path. The crate name is the
 /// `[package].name` of the nearest `Cargo.toml` at or above the file (up to
 /// `root`), else `root`'s directory name. A file that cannot be read or parsed
@@ -120,10 +126,12 @@ pub fn lint_tree(root: &Path) -> Result<TreeLint, DataUseScanError> {
     files.sort();
 
     let mut rows = Vec::new();
+    let mut names: HashMap<PathBuf, Option<String>> = HashMap::new();
     for path in files {
         let in_root = path.strip_prefix(root).unwrap_or(&path);
         let rel = in_root.to_string_lossy().replace('\\', "/");
-        let crate_name = crate_name_for(&path, root).unwrap_or_else(|| fallback.clone());
+        let crate_name =
+            crate_name_for(&path, root, &mut names).unwrap_or_else(|| fallback.clone());
         match scan_file(&path, &crate_name, &rel) {
             Ok(found) => {
                 let hits: Vec<ScanHit> = found.into_iter().map(hit_from_found_bare).collect();
@@ -140,27 +148,58 @@ fn hit_from_found_bare(f: crate::scan::FoundUse) -> ScanHit {
 }
 
 /// `[package].name` of the nearest `Cargo.toml` from `file`'s directory up to `root`.
-fn crate_name_for(file: &Path, root: &Path) -> Option<String> {
+///
+/// `names` caches each directory's answer (`None` = no named manifest there).
+/// A manifest without a literal `name = "…"` (for example `name.workspace = true`)
+/// is not a match, so the walk continues to the parent.
+fn crate_name_for(
+    file: &Path,
+    root: &Path,
+    names: &mut HashMap<PathBuf, Option<String>>,
+) -> Option<String> {
     let mut dir = file.parent();
     while let Some(d) = dir {
-        if let Ok(text) = std::fs::read_to_string(d.join("Cargo.toml")) {
-            let mut in_package = false;
-            for line in text.lines() {
-                let line = line.trim();
-                if line.starts_with('[') {
-                    in_package = line == "[package]";
-                } else if in_package {
-                    if let Some(rest) = line.strip_prefix("name") {
-                        let value = rest.trim_start().strip_prefix('=')?.trim();
-                        return Some(value.trim_matches('"').to_string());
-                    }
-                }
-            }
+        let found = names
+            .entry(d.to_path_buf())
+            .or_insert_with(|| {
+                std::fs::read_to_string(d.join("Cargo.toml"))
+                    .ok()
+                    .and_then(|text| package_name(&text))
+            })
+            .clone();
+        if found.is_some() {
+            return found;
         }
         if d == root {
             break;
         }
         dir = d.parent();
+    }
+    None
+}
+
+/// The `[package]` table's literal `name = "…"`, ignoring trailing `#` comments.
+fn package_name(manifest: &str) -> Option<String> {
+    let mut in_package = false;
+    for line in manifest.lines() {
+        let line = line.trim();
+        if line.starts_with('[') {
+            in_package = line.split('#').next().map(str::trim) == Some("[package]");
+            continue;
+        }
+        if !in_package {
+            continue;
+        }
+        let Some((key, value)) = line.split_once('=') else {
+            continue;
+        };
+        if key.trim() != "name" {
+            continue;
+        }
+        let value = value.split('#').next().unwrap_or("").trim();
+        if let Some(name) = value.strip_prefix('"').and_then(|v| v.strip_suffix('"')) {
+            return Some(name.to_string());
+        }
     }
     None
 }

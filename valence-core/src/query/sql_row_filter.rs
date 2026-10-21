@@ -1,8 +1,23 @@
-//! SELECT WHERE / ORDER / LIMIT / OFFSET support for document-row adapters (mem, IndraDB).
+//! SELECT WHERE / ORDER / LIMIT / OFFSET support for document-row adapters (mem, IndraDB,
+//! Redis, MongoDB, hybrid).
+//!
+//! Filtering works on the text of the compiled SQL, not on a parsed query. Parameter names are
+//! matched as substrings, so `$param_1` can be confused with `$param_10`.
+
+mod and_groups;
 
 use crate::compiled_query::CompiledQuery;
 
 /// Apply `field {=,>,>=,<,<=} $param` and `LIKE` filters from compiled SQL.
+///
+/// A clause that mixes `OR` with a top-level `AND` (two record predicates, for example) keeps a
+/// row only when every `AND` conjunct matches; each conjunct is itself an `OR` of terms. A term
+/// the filter cannot read excludes the row. A clause with only `OR` terms keeps a row when any
+/// term matches. A clause with only `AND` terms applies each comparison in turn and ignores
+/// fragments it does not recognise.
+///
+/// Matching is string-level on the compiled SQL, so parameter-name prefix collisions such as
+/// `$param_1` and `$param_10` are not told apart.
 pub fn apply_equality_where(
     mut rows: Vec<serde_json::Value>,
     compiled: &CompiledQuery,
@@ -20,6 +35,13 @@ pub fn apply_equality_where(
         .or_else(|| where_upper.find(" GROUP BY "))
         .unwrap_or(where_part.len());
     let clause = where_part[..end].trim();
+
+    if and_groups::needs_group_matching(clause) {
+        return rows
+            .into_iter()
+            .filter(|row| and_groups::clause_matches(row, clause, &compiled.params))
+            .collect();
+    }
 
     if clause.to_uppercase().contains(" OR ") {
         return rows

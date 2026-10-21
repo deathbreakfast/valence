@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- The document-row filter shared by the mem, IndraDB, Redis, MongoDB and hybrid backends
+  flattened `(a = $x) AND (b = $y)` into one `OR`. A query filtering two record fields at
+  once (a team and a user, say) returned every row matching either field, so a lookup for a
+  user who is not on a team could return another member's edge. Every `AND` group must now
+  match, and a term the filter cannot read excludes the row.
+
 ### Added
 
 - Purpose quality lint in `uf-valence-data-use-scan` (`lint_purpose`, tier-aware gap

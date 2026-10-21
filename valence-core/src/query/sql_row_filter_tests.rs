@@ -203,3 +203,252 @@ fn filters_search_or_like_across_title_and_searchable_text() {
     let out = apply_equality_where(rows, &compiled);
     assert_eq!(out.len(), 2);
 }
+
+#[allow(clippy::assert_is_empty)] // empty-result checks read better as assert!(rows.is_empty())
+mod and_groups {
+    use super::*;
+    use crate::query::sql_row_filter::and_groups::split_top_level;
+    use crate::query::{QueryCore, RecordPredicate};
+    use crate::RecordId;
+
+    fn ids(rows: &[serde_json::Value]) -> Vec<&str> {
+        rows.iter().map(|r| r["id"].as_str().unwrap()).collect()
+    }
+
+    fn edge(id: &str, team: &str, user: &str) -> serde_json::Value {
+        serde_json::json!({
+            "id": id,
+            "team_id": {"table": "team", "id": team},
+            "user_id": {"table": "user", "id": user},
+        })
+    }
+
+    /// e1 (t1,uA), e2 (t1,uB), e3 (t2,uA).
+    fn edges() -> Vec<serde_json::Value> {
+        vec![
+            edge("e1", "t1", "uA"),
+            edge("e2", "t1", "uB"),
+            edge("e3", "t2", "uA"),
+        ]
+    }
+
+    /// The compiled shape of `where_team_id(Equals).where_user_id(Equals)`, from the real
+    /// query builder, so this breaks if the emitted SQL changes.
+    fn team_user_query(team: Option<&str>, user: Option<&str>) -> CompiledQuery {
+        let mut q = QueryCore::new("team_member".to_string());
+        if let Some(t) = team {
+            q = q.where_record(
+                "team_id".into(),
+                RecordPredicate::Equals(RecordId::new("team", t)),
+            );
+        }
+        if let Some(u) = user {
+            q = q.where_record(
+                "user_id".into(),
+                RecordPredicate::Equals(RecordId::new("user", u)),
+            );
+        }
+        let (sql, params) = q.to_sql().expect("compile");
+        CompiledQuery::new(sql, params)
+    }
+
+    fn run(sql: &str, params: Vec<(&str, serde_json::Value)>) -> Vec<String> {
+        let params = params
+            .into_iter()
+            .map(|(k, v)| (k.to_string(), v))
+            .collect();
+        let rows = vec![
+            serde_json::json!({"id": "r1", "a": "x", "b": "p", "n": 5, "t": "alpha"}),
+            serde_json::json!({"id": "r2", "a": "x", "b": "q", "n": 9, "t": "beta"}),
+            serde_json::json!({"id": "r3", "a": "y", "b": "p", "n": 9, "t": "alpha"}),
+        ];
+        let out = apply_equality_where(rows, &CompiledQuery::new(sql.into(), params));
+        out.iter()
+            .map(|r| r["id"].as_str().unwrap().to_string())
+            .collect()
+    }
+
+    #[test]
+    fn team_and_user_record_predicates_both_apply() {
+        let out = apply_equality_where(edges(), &team_user_query(Some("t1"), Some("uA")));
+        assert_eq!(ids(&out), ["e1"]);
+    }
+
+    #[test]
+    fn team_matches_but_user_absent_returns_nothing() {
+        let out = apply_equality_where(edges(), &team_user_query(Some("t1"), Some("uC")));
+        assert!(out.is_empty(), "got {:?}", ids(&out));
+    }
+
+    #[test]
+    fn user_matches_but_team_absent_returns_nothing() {
+        let out = apply_equality_where(edges(), &team_user_query(Some("t9"), Some("uA")));
+        assert!(out.is_empty(), "got {:?}", ids(&out));
+    }
+
+    #[test]
+    fn neither_team_nor_user_matches_returns_nothing() {
+        let out = apply_equality_where(edges(), &team_user_query(Some("t9"), Some("uC")));
+        assert!(out.is_empty());
+    }
+
+    #[test]
+    fn user_exists_only_on_other_team_returns_nothing() {
+        let out = apply_equality_where(edges(), &team_user_query(Some("t2"), Some("uB")));
+        assert!(out.is_empty());
+    }
+
+    #[test]
+    fn team_only_query_returns_every_edge_of_the_team() {
+        let out = apply_equality_where(edges(), &team_user_query(Some("t1"), None));
+        assert_eq!(ids(&out), ["e1", "e2"]);
+    }
+
+    #[test]
+    fn three_conjuncts_with_one_failing_return_nothing() {
+        let sql = "SELECT * FROM t WHERE (a = $p0 OR a = $p1) AND (b = $p2 OR b = $p3) AND (t = $p4 OR t = $p5)";
+        let params = |last: &str| {
+            vec![
+                ("p0", "x".into()),
+                ("p1", "zz".into()),
+                ("p2", "p".into()),
+                ("p3", "zz".into()),
+                ("p4", last.into()),
+                ("p5", "zz".into()),
+            ]
+        };
+        assert_eq!(run(sql, params("alpha")), ["r1"]);
+        assert!(run(sql, params("gamma")).is_empty());
+    }
+
+    #[test]
+    fn two_or_groups_need_both_groups_to_match() {
+        let sql = "SELECT * FROM t WHERE (a = $p0 OR a = $p1) AND (b = $p2 OR b = $p3)";
+        // r2 is in the first group only, r3 in the second only.
+        let out = run(
+            sql,
+            vec![
+                ("p0", "x".into()),
+                ("p1", "zz".into()),
+                ("p2", "p".into()),
+                ("p3", "p".into()),
+            ],
+        );
+        assert_eq!(out, ["r1"]);
+    }
+
+    #[test]
+    fn and_with_like_conjunct() {
+        let sql = "SELECT * FROM t WHERE (a = $p0 OR a = $p1) AND t LIKE $p2";
+        let params = vec![("p0", "x".into()), ("p1", "y".into()), ("p2", "al%".into())];
+        assert_eq!(run(sql, params), ["r1", "r3"]);
+        let none = vec![("p0", "x".into()), ("p1", "y".into()), ("p2", "zz%".into())];
+        assert!(run(sql, none).is_empty());
+    }
+
+    #[test]
+    fn lowercase_keywords_behave_like_uppercase() {
+        let sql = "SELECT * FROM t WHERE (a = $p0 or a = $p1) and (b = $p2 or b = $p3)";
+        let out = run(
+            sql,
+            vec![
+                ("p0", "x".into()),
+                ("p1", "zz".into()),
+                ("p2", "p".into()),
+                ("p3", "zz".into()),
+            ],
+        );
+        assert_eq!(out, ["r1"]);
+    }
+
+    #[test]
+    fn and_inside_a_quoted_literal_does_not_split() {
+        assert_eq!(
+            split_top_level("(a = 'x AND y' OR b = $p) AND c = $q", " AND ").unwrap(),
+            ["(a = 'x AND y' OR b = $p)", "c = $q"]
+        );
+        assert_eq!(
+            split_top_level("a = 'p AND q'", " AND ").unwrap(),
+            ["a = 'p AND q'"]
+        );
+    }
+
+    #[test]
+    fn and_inside_json_extract_or_cast_parens_does_not_split() {
+        let clause = "CAST(json_extract(price, '$.a AND b') AS INTEGER) = $p0 AND x = $p1";
+        assert_eq!(
+            split_top_level(clause, " AND ").unwrap(),
+            [
+                "CAST(json_extract(price, '$.a AND b') AS INTEGER) = $p0",
+                "x = $p1"
+            ]
+        );
+        assert_eq!(
+            split_top_level("f(a AND b) = $p", " AND ").unwrap().len(),
+            1
+        );
+    }
+
+    #[test]
+    fn missing_param_key_matches_nothing_without_panicking() {
+        let sql = "SELECT * FROM t WHERE (a = $p0 OR a = $p1) AND (b = $p2 OR b = $p3)";
+        // `p3` is named in the clause but absent from params; `p2` still matches nothing useful.
+        let out = run(
+            sql,
+            vec![("p0", "x".into()), ("p1", "y".into()), ("p2", "zz".into())],
+        );
+        assert!(out.is_empty());
+        assert!(run(sql, vec![]).is_empty());
+    }
+
+    #[test]
+    fn unbalanced_parens_match_nothing_without_panicking() {
+        assert!(split_top_level("(a = $p0 OR a = $p1 AND b = $p2", " AND ").is_none());
+        assert!(split_top_level("a = $p0) AND (b = $p2", " AND ").is_none());
+        let sql = "SELECT * FROM t WHERE (a = $p0 OR a = $p1 AND b = $p2";
+        assert!(run(
+            sql,
+            vec![("p0", "x".into()), ("p1", "y".into()), ("p2", "p".into())]
+        )
+        .is_empty());
+    }
+
+    #[test]
+    fn unbalanced_quote_matches_nothing_without_panicking() {
+        let sql = "SELECT * FROM t WHERE (a = $p0 OR a = 'x) AND b = $p2";
+        assert!(run(sql, vec![("p0", "x".into()), ("p2", "p".into())]).is_empty());
+    }
+
+    #[test]
+    fn range_conjunct_with_or_group_requires_both() {
+        let sql = "SELECT * FROM t WHERE n >= $p0 AND (a = $p1 OR a = $p2)";
+        // n >= 9 keeps r2, r3; a in {x} keeps r1, r2; both: r2.
+        let out = run(
+            sql,
+            vec![("p0", 9.into()), ("p1", "x".into()), ("p2", "zz".into())],
+        );
+        assert_eq!(out, ["r2"]);
+    }
+
+    #[test]
+    fn unrecognised_conjunct_excludes_every_row() {
+        let is_null = "SELECT * FROM t WHERE a IS NULL AND (b = $p0 OR b = $p1)";
+        assert!(run(is_null, vec![("p0", "p".into()), ("p1", "q".into())]).is_empty());
+        let not_equal = "SELECT * FROM t WHERE a != $p2 AND (b = $p0 OR b = $p1)";
+        assert!(run(
+            not_equal,
+            vec![("p0", "p".into()), ("p1", "q".into()), ("p2", "x".into())]
+        )
+        .is_empty());
+    }
+
+    #[test]
+    fn or_only_clause_still_matches_any_term() {
+        // Same results as the pre-split behaviour: no top-level AND, so the old path runs.
+        let sql = "SELECT * FROM t WHERE a = $p0 OR b = $p1";
+        assert_eq!(
+            run(sql, vec![("p0", "y".into()), ("p1", "q".into())]),
+            ["r2", "r3"]
+        );
+    }
+}

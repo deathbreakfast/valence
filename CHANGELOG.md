@@ -17,6 +17,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `uf-valence-data-use-scan` purpose lint bans six more migration template sentences
+  under `BAN_TEMPLATE` and adds `HEDGE` for "not necessarily" and "unless that feature".
+  New `valence-purpose-lint` binary, `lint_tree` and `HitSummary` count hits per file.
+  `GapCode` is now `#[non_exhaustive]`; matches on it need a wildcard arm.
+  Behavior change: purposes that carry any of the eight template phrases or the two
+  hedges now fail `lint_purpose` and `lint_scan_hits`, so a downstream test or CI gate
+  on this crate goes red until those `use_!` purposes are rewritten from the code
+  (gluon alone has 495 hits in 120 files).
+
 - Purpose quality lint in `uf-valence-data-use-scan` (`lint_purpose`, tier-aware gap
   codes, inventory helpers) so migration template purposes cannot re-land unnoticed.
   Fleet call-site `use_!` strings rewritten toward stranger-readable trust narratives

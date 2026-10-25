@@ -26,7 +26,8 @@ pub fn generate_side_effects(
         }
 
         let field_name = format_ident!("{}", field.name);
-        let is_required = !field.nullable;
+        // Getter shape follows storage: read-hidable required fields are Option too.
+        let is_required = !field.stored_optional();
         let is_copy = field_type_is_copy(field);
 
         let field_type = rust_type_tokens(field, &model_name);

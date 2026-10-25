@@ -155,7 +155,7 @@ pub fn json_as_helpers_and_attrs(
 
     let ser_name = ser_fn.to_string();
     let de_name = de_fn.to_string();
-    let attrs = if field.nullable {
+    let attrs = if field.stored_optional() {
         // Option<T> needs option adapters — deserialize Option via default + inner.
         // For v0.1 required JsonAs is the primary path; optional uses default None
         // without custom with (plain Option<T> Deserialize).

@@ -31,6 +31,8 @@ pub fn generate_struct(schema: &SchemaContext) -> Result<TokenStream, Box<dyn st
         let field_type_str = field.field_type.as_str();
         let is_primary_key = field.primary;
         let is_required = !field.nullable;
+        // Required on create, but some viewers read the row without it.
+        let read_hidable_required = is_required && field.read_hidable();
 
         // Generate inline enums for enum: variants.
         if field_type_str.starts_with("enum:")
@@ -44,7 +46,16 @@ pub fn generate_struct(schema: &SchemaContext) -> Result<TokenStream, Box<dyn st
         let field_type = rust_type_tokens(field, &model_name);
 
         let mut serde_attrs = quote! {};
-        if field_type_str == "datetime" {
+        if read_hidable_required {
+            // Absent for a viewer the field's read policy denies; never written as null.
+            serde_attrs = if field_type_str == "datetime" {
+                quote! {
+                    #[serde(default, skip_serializing_if = "Option::is_none", with = "valence::datetime_unix::option")]
+                }
+            } else {
+                quote! { #[serde(default, skip_serializing_if = "Option::is_none")] }
+            };
+        } else if field_type_str == "datetime" {
             serde_attrs = if is_required {
                 quote! { #[serde(with = "valence::datetime_unix")] }
             } else {
@@ -75,7 +86,33 @@ pub fn generate_struct(schema: &SchemaContext) -> Result<TokenStream, Box<dyn st
             continue;
         }
 
-        if is_required {
+        if read_hidable_required {
+            let storage_ty = if field_type_str == "datetime" {
+                quote! { Option<chrono::DateTime<chrono::Utc>> }
+            } else {
+                quote! { Option<#field_type> }
+            };
+            field_defs.push(quote! {
+                #serde_attrs
+                #field_name: #storage_ty
+            });
+
+            getter_methods.push(quote! {
+                /// `None` when the viewer that loaded this row can't read the field.
+                pub fn #field_name(&self) -> Option<&#field_type> {
+                    self.#field_name.as_ref()
+                }
+            });
+
+            constructor_params.push(quote! { #field_name: #field_type });
+
+            let validation_code = generate_validation_code(field_name_str, &field.validations);
+            if !validation_code.is_empty() {
+                constructor_validations.push(validation_code);
+            }
+
+            constructor_inits.push(quote! { #field_name: Some(#field_name) });
+        } else if is_required {
             field_defs.push(quote! {
                 #serde_attrs
                 #field_name: #field_type

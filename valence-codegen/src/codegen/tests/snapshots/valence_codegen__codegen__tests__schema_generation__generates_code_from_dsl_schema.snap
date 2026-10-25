@@ -190,6 +190,7 @@ impl valence::Model for TestEntity {
         let _ = purpose;
         data.check_create_privacy(valence).await?;
         let record = serde_json::to_value(&data).map_err(valence::Error::from)?;
+        Self::__reject_unset_read_hidable(&record)?;
         Self::__assert_unique_constraints_for_record(&record, None, valence).await?;
         let created: Self = valence::retry_on_database_tx_conflict(
                 "Model::create",
@@ -298,6 +299,11 @@ impl valence::Model for TestEntity {
             data.check_create_privacy(valence).await?;
         }
         let record = serde_json::to_value(&data).map_err(valence::Error::from)?;
+        if before_snapshot.is_none() {
+            Self::__reject_unset_read_hidable(&record)?;
+        }
+        let merge_existing = before_snapshot.is_some()
+            && Self::__lacks_read_hidable(&record);
         Self::__assert_unique_constraints_for_record(&record, Some(id), valence).await?;
         let id = id.to_string();
         let upserted: Self = valence::retry_on_database_tx_conflict(
@@ -317,9 +323,15 @@ impl valence::Model for TestEntity {
                                 &mut record,
                             )?;
                         }
-                        let row = backend
-                            .upsert_record(Self::table_name(), id.as_str(), record)
-                            .await?;
+                        let row = if merge_existing {
+                            backend
+                                .merge_record(Self::table_name(), id.as_str(), record)
+                                .await?
+                        } else {
+                            backend
+                                .upsert_record(Self::table_name(), id.as_str(), record)
+                                .await?
+                        };
                         serde_json::from_value(row).map_err(valence::Error::from)
                     }
                 },
@@ -435,6 +447,36 @@ impl TestEntity {
             );
         }
         Ok(())
+    }
+    /// Required fields this model holds as `None` when the viewer that loaded it
+    /// couldn't read them.
+    fn __read_hidable_required_fields() -> &'static [&'static str] {
+        &[]
+    }
+    /// Refuse to create a row that leaves out a required read-hidable field.
+    fn __reject_unset_read_hidable(record: &serde_json::Value) -> valence::Result<()> {
+        match valence::first_unset_field(
+            record,
+            Self::__read_hidable_required_fields(),
+        ) {
+            Some(field) => {
+                Err(
+                    valence::Error::Validation(
+                        format!(
+                            "{}.{field} is required", < Self as valence::Model >
+                            ::table_name()
+                        ),
+                    ),
+                )
+            }
+            None => Ok(()),
+        }
+    }
+    /// True when `record` came from a viewer who couldn't read some required
+    /// field. Writes then merge, so the stored value is kept.
+    fn __lacks_read_hidable(record: &serde_json::Value) -> bool {
+        valence::first_unset_field(record, Self::__read_hidable_required_fields())
+            .is_some()
     }
     async fn check_read_privacy(
         &self,
@@ -577,13 +619,23 @@ impl TestEntity {
                             async move {
                                 let backend = valence
                                     .backend_for_table(<Self as valence::Model>::table_name())?;
-                                let row = backend
-                                    .update_record(
-                                        <Self as valence::Model>::table_name(),
-                                        id.as_str(),
-                                        record,
-                                    )
-                                    .await?;
+                                let row = if Self::__lacks_read_hidable(&record) {
+                                    backend
+                                        .merge_record(
+                                            <Self as valence::Model>::table_name(),
+                                            id.as_str(),
+                                            record,
+                                        )
+                                        .await?
+                                } else {
+                                    backend
+                                        .update_record(
+                                            <Self as valence::Model>::table_name(),
+                                            id.as_str(),
+                                            record,
+                                        )
+                                        .await?
+                                };
                                 serde_json::from_value(row).map_err(valence::Error::from)
                             }
                         },

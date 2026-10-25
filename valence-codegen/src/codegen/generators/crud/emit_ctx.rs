@@ -13,6 +13,8 @@ pub(super) struct CrudEmitCtx<'a> {
     pub version_lit: &'a str,
     pub field_changes_name: proc_macro2::Ident,
     pub unique_field_names: Vec<LitStr>,
+    /// Required fields with a field-level read policy (stored as `Option`).
+    pub read_hidable_required_names: Vec<LitStr>,
     pub parts: &'a MutablePartStreams,
     pub composite_key_methods: TokenStream,
     /// Skip ownership hooks for platform ownership tables.

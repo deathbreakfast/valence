@@ -129,6 +129,33 @@ fn schema_metadata_fn_tokens(table_name_lit: &str) -> TokenStream {
     }
 }
 
+fn read_hidable_helpers_tokens(names: &[LitStr]) -> TokenStream {
+    quote! {
+        /// Required fields this model holds as `None` when the viewer that loaded it
+        /// couldn't read them.
+        fn __read_hidable_required_fields() -> &'static [&'static str] {
+            &[#(#names),*]
+        }
+
+        /// Refuse to create a row that leaves out a required read-hidable field.
+        fn __reject_unset_read_hidable(record: &serde_json::Value) -> valence::Result<()> {
+            match valence::first_unset_field(record, Self::__read_hidable_required_fields()) {
+                Some(field) => Err(valence::Error::Validation(format!(
+                    "{}.{field} is required",
+                    <Self as valence::Model>::table_name()
+                ))),
+                None => Ok(()),
+            }
+        }
+
+        /// True when `record` came from a viewer who couldn't read some required
+        /// field. Writes then merge, so the stored value is kept.
+        fn __lacks_read_hidable(record: &serde_json::Value) -> bool {
+            valence::first_unset_field(record, Self::__read_hidable_required_fields()).is_some()
+        }
+    }
+}
+
 fn unique_constraint_helpers_tokens(unique_field_names: &[LitStr]) -> TokenStream {
     quote! {
         async fn __assert_unique_constraints_for_record(
@@ -245,6 +272,7 @@ pub(super) fn emit_model_privacy_and_unique_impl(cx: &CrudEmitCtx<'_>) -> TokenS
 
     let meta = schema_metadata_fn_tokens(table_name_lit);
     let unique = unique_constraint_helpers_tokens(unique_field_names);
+    let read_hidable = read_hidable_helpers_tokens(&cx.read_hidable_required_names);
     let privacy = entity_privacy_check_tokens();
     let update_with_before = model_update_with_before_inherent_tokens(field_changes_name);
 
@@ -252,6 +280,7 @@ pub(super) fn emit_model_privacy_and_unique_impl(cx: &CrudEmitCtx<'_>) -> TokenS
         impl #struct_name {
             #meta
             #unique
+            #read_hidable
             #privacy
             #update_with_before
         }

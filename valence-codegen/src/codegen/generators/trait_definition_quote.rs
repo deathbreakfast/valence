@@ -69,7 +69,7 @@ fn collect_trait_definition_pieces(trait_def: &ParsedTraitDef) -> TraitDefinitio
         .map(|f| {
             let getter = format_ident!("{}", f.name);
             let rtype = rust_type_for_field(f, trait_name);
-            if f.nullable {
+            if f.stored_optional() {
                 quote! { fn #getter(&self) -> Option<&#rtype>; }
             } else {
                 quote! { fn #getter(&self) -> &#rtype; }
@@ -81,7 +81,7 @@ fn collect_trait_definition_pieces(trait_def: &ParsedTraitDef) -> TraitDefinitio
         .map(|f| {
             let name = format_ident!("{}", f.name);
             let rtype = rust_type_for_field(f, trait_name);
-            if f.nullable {
+            if f.stored_optional() {
                 quote! { #name: Option<#rtype> }
             } else {
                 quote! { #name: #rtype }
@@ -93,7 +93,7 @@ fn collect_trait_definition_pieces(trait_def: &ParsedTraitDef) -> TraitDefinitio
         .map(|f| {
             let getter = format_ident!("{}", f.name);
             let rtype = rust_type_for_field(f, trait_name);
-            if f.nullable {
+            if f.stored_optional() {
                 quote! {
                     fn #getter(&self) -> Option<&#rtype> { self.#getter.as_ref() }
                 }

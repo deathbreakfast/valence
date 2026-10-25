@@ -19,6 +19,7 @@ pub(super) fn model_create_method_tokens(cx: &CrudEmitCtx<'_>) -> TokenStream {
             data.check_create_privacy(valence).await?;
             let record = serde_json::to_value(&data)
                 .map_err(valence::Error::from)?;
+            Self::__reject_unset_read_hidable(&record)?;
             Self::__assert_unique_constraints_for_record(&record, None, valence).await?;
 
             let created: Self = valence::retry_on_database_tx_conflict("Model::create", || {
@@ -82,6 +83,10 @@ pub(super) fn model_upsert_method_tokens(cx: &CrudEmitCtx<'_>) -> TokenStream {
             }
             let record = serde_json::to_value(&data)
                 .map_err(valence::Error::from)?;
+            if before_snapshot.is_none() {
+                Self::__reject_unset_read_hidable(&record)?;
+            }
+            let merge_existing = before_snapshot.is_some() && Self::__lacks_read_hidable(&record);
             Self::__assert_unique_constraints_for_record(&record, Some(id), valence).await?;
 
             let id = id.to_string();
@@ -99,9 +104,15 @@ pub(super) fn model_upsert_method_tokens(cx: &CrudEmitCtx<'_>) -> TokenStream {
                             &mut record,
                         )?;
                     }
-                    let row = backend
-                        .upsert_record(Self::table_name(), id.as_str(), record)
-                        .await?;
+                    let row = if merge_existing {
+                        backend
+                            .merge_record(Self::table_name(), id.as_str(), record)
+                            .await?
+                    } else {
+                        backend
+                            .upsert_record(Self::table_name(), id.as_str(), record)
+                            .await?
+                    };
                     serde_json::from_value(row)
                         .map_err(valence::Error::from)
                 }

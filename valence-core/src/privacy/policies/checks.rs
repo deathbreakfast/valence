@@ -8,7 +8,7 @@ pub(super) fn public_read_check(_record: &JsonValue, _viewer: &Actor) -> bool {
 }
 
 pub(super) fn authenticated_check(_record: &JsonValue, viewer: &Actor) -> bool {
-    viewer.is_user() || viewer.is_system()
+    viewer.is_user() || viewer.is_system() || viewer.is_service_user()
 }
 
 pub(super) fn system_only_check(_record: &JsonValue, viewer: &Actor) -> bool {

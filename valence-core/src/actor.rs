@@ -20,6 +20,10 @@ impl Actor {
         matches!(self, Actor::System { .. })
     }
 
+    pub fn is_service_user(&self) -> bool {
+        matches!(self, Actor::ServiceUser { .. })
+    }
+
     pub fn is_anonymous(&self) -> bool {
         matches!(self, Actor::Anonymous)
     }
@@ -27,6 +31,13 @@ impl Actor {
     pub fn user_id(&self) -> Option<&str> {
         match self {
             Actor::User { user_id, .. } => Some(user_id),
+            _ => None,
+        }
+    }
+
+    pub fn service_name(&self) -> Option<&str> {
+        match self {
+            Actor::ServiceUser { service_name } => Some(service_name),
             _ => None,
         }
     }
@@ -57,5 +68,21 @@ mod tests {
         assert!(system.is_system());
 
         assert!(Actor::Anonymous.is_anonymous());
+    }
+
+    #[test]
+    fn service_user_kind() {
+        let service_user = Actor::ServiceUser {
+            service_name: "svc:spectra-ingest".into(),
+        };
+        assert!(service_user.is_service_user());
+        assert_eq!(service_user.service_name(), Some("svc:spectra-ingest"));
+        assert_eq!(service_user.user_id(), None);
+
+        let user = Actor::User {
+            user_id: "u1".into(),
+        };
+        assert!(!user.is_service_user());
+        assert_eq!(user.service_name(), None);
     }
 }

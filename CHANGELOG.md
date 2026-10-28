@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `Actor::is_service_user()` and `Actor::service_name()`. `RejectExternalSystemActor` is
+  renamed to `RejectExternalPrivilegedActor` (old name kept as a deprecated alias).
+  Behavior change: the `AUTHENTICATED` privacy rule now allows `Actor::ServiceUser`
+  as well as `Actor::User` and `Actor::System` — a service user is authenticated by
+  definition; exclude it by writing a custom rule whose check is `viewer.is_user()`
+  on its own instead of reusing `AUTHENTICATED`.
+
 ### Fixed
 
 - The document-row filter shared by the mem, IndraDB, Redis, MongoDB and hybrid backends

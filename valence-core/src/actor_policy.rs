@@ -44,9 +44,9 @@ pub trait ActorJsonPolicy: Send + Sync {
 /// # Examples
 ///
 /// ```
-/// use valence_core::{ActorJsonPolicy, ActorTrust, RejectExternalSystemActor};
+/// use valence_core::{ActorJsonPolicy, ActorTrust, RejectExternalPrivilegedActor};
 ///
-/// let policy = RejectExternalSystemActor;
+/// let policy = RejectExternalPrivilegedActor;
 /// let registered = serde_json::json!({"ServiceUser": {"service_name": "svc:7c9e6679-7425-40de-944b-e07fc1f90ae7"}});
 /// let user = serde_json::json!({"User": {"user_id": "u1"}});
 ///
@@ -56,9 +56,13 @@ pub trait ActorJsonPolicy: Send + Sync {
 /// assert!(policy.validate(ActorTrust::Internal, &registered).is_ok());
 /// ```
 #[derive(Debug, Default, Clone, Copy)]
-pub struct RejectExternalSystemActor;
+pub struct RejectExternalPrivilegedActor;
 
-impl ActorJsonPolicy for RejectExternalSystemActor {
+/// Deprecated name for [`RejectExternalPrivilegedActor`].
+#[deprecated(since = "0.1.5", note = "renamed to `RejectExternalPrivilegedActor`")]
+pub use RejectExternalPrivilegedActor as RejectExternalSystemActor;
+
+impl ActorJsonPolicy for RejectExternalPrivilegedActor {
     fn validate(&self, trust: ActorTrust, actor_json: &Value) -> Result<()> {
         if trust == ActorTrust::External
             && (is_system_shaped_actor(actor_json) || is_service_user_shaped_actor(actor_json))
@@ -89,7 +93,7 @@ mod tests {
 
     #[test]
     fn reject_external_system() {
-        let policy = RejectExternalSystemActor;
+        let policy = RejectExternalPrivilegedActor;
         let system = serde_json::json!({"System": {"operation": "x"}});
         assert!(policy
             .validate(ActorTrust::External, &system)
@@ -101,7 +105,7 @@ mod tests {
 
     #[test]
     fn reject_external_service_user() {
-        let policy = RejectExternalSystemActor;
+        let policy = RejectExternalPrivilegedActor;
         let registered = serde_json::json!({"ServiceUser": {"service_name": "svc:7c9e6679-7425-40de-944b-e07fc1f90ae7"}});
         let infra = serde_json::json!({"ServiceUser": {"service_name": "spectra-ingest"}});
         for actor in [&registered, &infra] {
@@ -119,14 +123,14 @@ mod tests {
 
     #[test]
     fn allow_internal_service_user() {
-        let policy = RejectExternalSystemActor;
+        let policy = RejectExternalPrivilegedActor;
         let registered = serde_json::json!({"ServiceUser": {"service_name": "svc:7c9e6679-7425-40de-944b-e07fc1f90ae7"}});
         assert!(policy.validate(ActorTrust::Internal, &registered).is_ok());
     }
 
     #[test]
     fn allow_external_anonymous() {
-        let policy = RejectExternalSystemActor;
+        let policy = RejectExternalPrivilegedActor;
         assert!(policy
             .validate(ActorTrust::External, &serde_json::json!("Anonymous"))
             .is_ok());
@@ -149,9 +153,16 @@ mod tests {
 
     #[test]
     fn allow_external_user() {
-        let policy = RejectExternalSystemActor;
+        let policy = RejectExternalPrivilegedActor;
         let user = serde_json::json!({"User": {"user_id": "u1"}});
         assert!(!is_system_shaped_actor(&user));
         assert!(policy.validate(ActorTrust::External, &user).is_ok());
+    }
+
+    #[test]
+    fn deprecated_alias_still_works() {
+        let policy = RejectExternalSystemActor;
+        let system = serde_json::json!({"System": {"operation": "x"}});
+        assert!(policy.validate(ActorTrust::External, &system).is_err());
     }
 }

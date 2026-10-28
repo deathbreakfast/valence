@@ -41,7 +41,7 @@
 //! - **Query paging clamps** — [`MAX_QUERY_LIMIT`] / [`MAX_QUERY_OFFSET`] on [`QueryCore`]
 //! - **Dual-key privacy bypass** — bench/test only: `VALENCE_PRIVACY_BYPASS` +
 //!   `VALENCE_PRIVACY_BYPASS_FORCE_ON` (never in production; see repository `SECURITY.md`)
-//! - **Actor JSON policy** — optional [`RejectExternalSystemActor`] on factory builds
+//! - **Actor JSON policy** — optional [`RejectExternalPrivilegedActor`] on factory builds
 //! - **Declared data uses** — Pairs purpose-required Model / trait / [`QueryCore`] methods with
 //!   [`use_!`] so purpose markdown is catalogued for valence-uf-app Data uses surfaces.
 //!   Every schema and trait requires a `repository:` URL for View source links.

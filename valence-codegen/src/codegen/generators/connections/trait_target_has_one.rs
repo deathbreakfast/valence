@@ -28,7 +28,7 @@ pub(super) fn push_has_one_trait_target_methods(
         .fields
         .iter()
         .find(|f| f.name == *from_field)
-        .is_some_and(|f| f.nullable);
+        .is_some_and(valence_core::SchemaField::stored_optional);
 
     if field_is_nullable {
         methods.push(quote! {

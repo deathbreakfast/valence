@@ -44,6 +44,13 @@ pub fn generate_crud_operations(
         .map(|field| LitStr::new(field.name.as_str(), proc_macro2::Span::call_site()))
         .collect();
 
+    let read_hidable_required_names: Vec<LitStr> = schema
+        .fields
+        .iter()
+        .filter(|field| !field.primary && !field.nullable && field.read_hidable())
+        .map(|field| LitStr::new(field.name.as_str(), proc_macro2::Span::call_site()))
+        .collect();
+
     let composite_key_methods = generate_composite_key_methods(schema)?;
 
     let table = schema.table_name.as_str();
@@ -89,6 +96,7 @@ pub fn generate_crud_operations(
         version_lit,
         field_changes_name,
         unique_field_names,
+        read_hidable_required_names,
         parts: &parts,
         composite_key_methods,
         ownership_skip,

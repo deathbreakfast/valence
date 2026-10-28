@@ -24,7 +24,7 @@ fn schema_trait_field_getter_impls(
         .map(|f| {
             let getter = format_ident!("{}", f.name);
             let rtype = rust_type_for_field(f, trait_name);
-            if f.nullable {
+            if f.stored_optional() {
                 quote! {
                     fn #getter(&self) -> Option<&#rtype> { self.#getter.as_ref() }
                 }

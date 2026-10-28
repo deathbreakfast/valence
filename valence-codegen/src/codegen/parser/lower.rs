@@ -157,7 +157,9 @@ fn lower_fields(fields: &[ParsedField]) -> (Vec<SchemaField>, Vec<SchemaEdge>) {
             default: field.default.clone(),
             fk,
             validations: field.validations.clone(),
-            policies: None,
+            // Names only (evaluators are emitted from the AST); generators use it to
+            // tell which fields a viewer may not be able to read.
+            policies: field.policies.as_ref().map(lower_policies_names_only),
             encrypted: field.encrypted,
             enum_variants,
             enum_type,

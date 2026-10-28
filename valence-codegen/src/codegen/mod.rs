@@ -25,11 +25,30 @@ pub fn generate_from_schema_file(
     let content = fs::read_to_string(path)?;
 
     let mut parsed_file = parser::extract_schema_from_macro(&content)?;
+    drop_field_reads_that_never_hide(&mut parsed_file.schema);
 
     // Merge trait fields and connections into the schema
     for trait_name in &parsed_file.schema.traits.clone() {
         if let Some(trait_def) = trait_defs.get(trait_name) {
             for field in &trait_def.fields {
+                // The trait's getter must hold for every implementor, so a schema can't
+                // hide a field the trait promises is always there.
+                if let Some(own) = parsed_file
+                    .schema
+                    .fields
+                    .iter()
+                    .find(|f| f.name == field.name)
+                {
+                    if own.read_hidable() && !field.stored_optional() {
+                        return Err(format!(
+                            "{}.{}: the field has a read policy, but trait {} declares it required \
+                             with none, so its getter can't return a value for viewers the policy \
+                             denies. Declare the read policy on the trait field.",
+                            parsed_file.schema.name, field.name, trait_name
+                        )
+                        .into());
+                    }
+                }
                 if !parsed_file
                     .schema
                     .fields
@@ -97,4 +116,50 @@ pub fn generate_from_trait_file(path: &Path) -> Result<String, Box<dyn std::erro
     Ok(prettyplease::unparse(&syn::parse_file(
         &tokens.to_string(),
     )?))
+}
+
+/// Clear, in codegen's copy of the schema only, field `read` policies that can't hide
+/// the field from anyone who can read the row, so the generated model keeps the field
+/// required. Runtime metadata keeps and enforces every policy; this only decides the
+/// Rust shape.
+///
+/// A field policy is redundant when nothing blocks it, every rule that lets a viewer
+/// read the row also lets them read the field, System passes it (System reads rows
+/// without entity checks; owner rules always admit System), and the row read doesn't defer to an edge parent (that
+/// admits viewers no allow rule names).
+fn drop_field_reads_that_never_hide(schema: &mut valence_core::Schema) {
+    fn short(rule: &valence_core::SchemaPolicyRule) -> &str {
+        rule.name.rsplit("::").next().unwrap_or(&rule.name)
+    }
+    let entity_read = schema.policies.as_ref().and_then(|p| p.read.as_ref());
+    if entity_read.is_some_and(|r| r.defer_to_edge.is_some()) {
+        return;
+    }
+    let row_admits: Vec<&str> = entity_read
+        .map(|r| r.always_allow.iter().chain(&r.allow).map(short).collect())
+        .unwrap_or_default();
+    for field in &mut schema.fields {
+        let Some(read) = field.policies.as_ref().and_then(|p| p.read.as_ref()) else {
+            continue;
+        };
+        let field_admits: Vec<&str> = read
+            .always_allow
+            .iter()
+            .chain(&read.allow)
+            .map(short)
+            .collect();
+        let system_passes = field_admits.iter().any(|n| {
+            matches!(*n, "SYSTEM_ONLY" | "PUBLIC_READ" | "AUTHENTICATED")
+                || n.starts_with("OWNER_BY_")
+        });
+        let redundant = read.block.is_empty()
+            && read.always_block.is_empty()
+            && system_passes
+            && row_admits.iter().all(|n| field_admits.contains(n));
+        if redundant {
+            if let Some(p) = field.policies.as_mut() {
+                p.read = None;
+            }
+        }
+    }
 }

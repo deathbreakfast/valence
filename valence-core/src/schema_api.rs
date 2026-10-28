@@ -89,6 +89,48 @@ pub struct SchemaField {
     pub model_path: Option<String>,
 }
 
+impl SchemaField {
+    /// True when the field has its own `read` policy that can deny a viewer, so
+    /// some viewers get the row without it
+    /// ([`PrivacyEvaluator::filter_entity_fields`](crate::privacy::PrivacyEvaluator::filter_entity_fields)
+    /// leaves it out). A read policy that allows `PUBLIC_READ` and blocks nothing
+    /// never hides the field.
+    #[must_use]
+    pub fn read_hidable(&self) -> bool {
+        let Some(read) = self.policies.as_ref().and_then(|p| p.read.as_ref()) else {
+            return false;
+        };
+        let public = |r: &SchemaPolicyRule| {
+            r.name == "public_read" || r.name.rsplit("::").next() == Some("PUBLIC_READ")
+        };
+        let never_denies = read.block.is_empty()
+            && read.always_block.is_empty()
+            && (read.allow.iter().any(public) || read.always_allow.iter().any(public));
+        !never_denies
+    }
+
+    /// True when generated models store this field as `Option`: it is nullable, or
+    /// it is [read-hidable](Self::read_hidable) and may be absent for this viewer.
+    /// A required read-hidable field is still required on create.
+    #[must_use]
+    pub fn stored_optional(&self) -> bool {
+        self.nullable || self.read_hidable()
+    }
+}
+
+/// The first of `fields` that `record` leaves out or sets to `null`.
+///
+/// Generated models call this with their required read-hidable fields before a
+/// write. A model read by a viewer who can't see such a field holds `None` for
+/// it, and writing that `None` would erase the stored value.
+#[must_use]
+pub fn first_unset_field<'a>(record: &serde_json::Value, fields: &[&'a str]) -> Option<&'a str> {
+    fields
+        .iter()
+        .copied()
+        .find(|f| record.get(*f).is_none_or(serde_json::Value::is_null))
+}
+
 /// Edge/relationship definition retained for older schema shapes.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SchemaEdge {

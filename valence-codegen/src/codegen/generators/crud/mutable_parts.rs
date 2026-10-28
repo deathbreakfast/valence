@@ -61,9 +61,18 @@ pub(super) fn collect_mutable_part_streams(schema: &SchemaContext) -> MutablePar
                 }
             });
 
-            commit_updates.push(quote! {
-                if let Some(val) = self.#field_name.take() {
-                    self.model.#field_name = val;
+            // A read-hidable required field is stored as Option on the model.
+            commit_updates.push(if field.read_hidable() {
+                quote! {
+                    if let Some(val) = self.#field_name.take() {
+                        self.model.#field_name = Some(val);
+                    }
+                }
+            } else {
+                quote! {
+                    if let Some(val) = self.#field_name.take() {
+                        self.model.#field_name = val;
+                    }
                 }
             });
         } else {

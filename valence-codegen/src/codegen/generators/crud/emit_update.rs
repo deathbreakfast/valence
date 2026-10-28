@@ -84,9 +84,17 @@ pub(super) fn model_update_with_before_body_tokens(
                     let record = record.clone();
                     async move {
                         let backend = valence.backend_for_table(<Self as valence::Model>::table_name())?;
-                        let row = backend
-                            .update_record(<Self as valence::Model>::table_name(), id.as_str(), record)
-                            .await?;
+                        // A field this viewer couldn't read is absent from `record`;
+                        // merge so the stored value survives.
+                        let row = if Self::__lacks_read_hidable(&record) {
+                            backend
+                                .merge_record(<Self as valence::Model>::table_name(), id.as_str(), record)
+                                .await?
+                        } else {
+                            backend
+                                .update_record(<Self as valence::Model>::table_name(), id.as_str(), record)
+                                .await?
+                        };
                         serde_json::from_value(row)
                             .map_err(valence::Error::from)
                     }

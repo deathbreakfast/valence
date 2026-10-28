@@ -5,7 +5,8 @@ Re-run after test or CI changes.
 ## PR CI parity (run before push / opening a PR)
 
 Matches [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) job **`quality-gates`**
-on `main`. Re-run after workflow changes.
+on `main`, plus its **`deny`** and **`audit`** jobs (same PR gate, run as separate
+jobs). Re-run after workflow changes.
 
 | CI step | Local command |
 |--------|----------------|
@@ -17,6 +18,8 @@ on `main`. Re-run after workflow changes.
 | Doctests | `cargo test --doc -p uf-valence-core -p uf-valence-backend-mem -p uf-valence-telemetry -p uf-valence` |
 | Test workspace | `cargo test --workspace -- --test-threads=1` |
 | Dependency hygiene | `cargo machete` |
+| Dependency advisories/licenses (`deny` job) | `cargo deny check` |
+| Security audit (`audit` job) | `cargo audit` |
 
 Environment (match CI):
 

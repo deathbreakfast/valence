@@ -140,9 +140,9 @@ fn csv_row_carries_new_codes_and_header_is_stable() {
     );
     let hit = ScanHit {
         purpose: "We decide what to do next in this workflow; not necessarily shown.".to_string(),
-        file: "gluon/src/a.rs".to_string(),
+        file: "shop/src/a.rs".to_string(),
         line: 3,
-        crate_name: "gluon".to_string(),
+        crate_name: "shop".to_string(),
         repository: String::new(),
         target: valence_data_use_scan::TargetKind::Unscoped,
         op: valence_data_use_scan::OpKind::Read,
@@ -156,7 +156,7 @@ fn csv_row_carries_new_codes_and_header_is_stable() {
     assert!(line.contains("BAN_TEMPLATE"), "{line}");
     assert!(line.contains("HEDGE"), "{line}");
     assert!(
-        line.starts_with("gluon/src/a.rs:3,gluon,get,S1,Fail,"),
+        line.starts_with("shop/src/a.rs:3,shop,get,S1,Fail,"),
         "{line}"
     );
 }

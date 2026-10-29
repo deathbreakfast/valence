@@ -107,7 +107,7 @@ mod tests {
     fn reject_external_service_user() {
         let policy = RejectExternalPrivilegedActor;
         let registered = serde_json::json!({"ServiceUser": {"service_name": "svc:7c9e6679-7425-40de-944b-e07fc1f90ae7"}});
-        let infra = serde_json::json!({"ServiceUser": {"service_name": "spectra-ingest"}});
+        let infra = serde_json::json!({"ServiceUser": {"service_name": "metrics-ingest"}});
         for actor in [&registered, &infra] {
             let err = policy
                 .validate(ActorTrust::External, actor)

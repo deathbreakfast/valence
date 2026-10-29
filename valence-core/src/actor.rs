@@ -73,10 +73,10 @@ mod tests {
     #[test]
     fn service_user_kind() {
         let service_user = Actor::ServiceUser {
-            service_name: "svc:spectra-ingest".into(),
+            service_name: "svc:metrics-ingest".into(),
         };
         assert!(service_user.is_service_user());
-        assert_eq!(service_user.service_name(), Some("svc:spectra-ingest"));
+        assert_eq!(service_user.service_name(), Some("svc:metrics-ingest"));
         assert_eq!(service_user.user_id(), None);
 
         let user = Actor::User {

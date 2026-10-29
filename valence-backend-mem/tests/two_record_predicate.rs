@@ -84,8 +84,14 @@ async fn team_and_user_returns_exactly_the_matching_edge() {
 #[tokio::test]
 async fn user_not_on_the_team_returns_nothing() {
     let v = seeded().await;
-    assert!(lookup(&v, Some("team2"), Some("userB")).await.is_empty());
-    assert!(lookup(&v, Some("team1"), Some("userC")).await.is_empty());
+    assert_eq!(
+        lookup(&v, Some("team2"), Some("userB")).await,
+        Vec::<String>::new()
+    );
+    assert_eq!(
+        lookup(&v, Some("team1"), Some("userC")).await,
+        Vec::<String>::new()
+    );
 }
 
 #[tokio::test]

@@ -38,38 +38,36 @@ impl OwnershipService {
         }
     }
 
+    /// Batched lookup; `None` when the ownership backend's engine has no compiled form.
     async fn pending_deletion_ids_via_in_query(
         valence_model: &str,
         bare_record_ids: &[String],
         v: &Valence,
-    ) -> Result<HashSet<String>> {
+    ) -> Result<Option<HashSet<String>>> {
         let sys = system_valence(v);
         let backend = Self::ownership_backend(valence_model, &sys)?;
-        let q = concat!(
-            "SELECT VALUE record_id FROM valence_data_ownership ",
-            "WHERE valence_model = $model AND status = 'pending_deletion' AND record_id IN $ids"
-        );
-        let compiled = crate::compiled_query::CompiledQuery::new(
-            q.to_string(),
-            vec![
-                (
-                    "model".to_string(),
-                    Value::String(valence_model.to_string()),
-                ),
-                (
-                    "ids".to_string(),
-                    Value::Array(bare_record_ids.iter().cloned().map(Value::String).collect()),
-                ),
-            ],
-        );
+        let Some(compiled) = crate::compiled_query_factory::pending_deletion_record_ids(
+            backend.engine_id(),
+            valence_model,
+            bare_record_ids,
+        )?
+        else {
+            return Ok(None);
+        };
         let rows = backend
             .execute_compiled_query(&compiled)
             .await
             .map_err(|e| Error::database(e.to_string()))?;
-        Ok(rows
-            .into_iter()
-            .filter_map(|v| v.as_str().map(normalize_pending_deletion_query_value))
-            .collect())
+        Ok(Some(
+            rows.into_iter()
+                .filter_map(|row| {
+                    // SurrealQL `SELECT VALUE` yields the string; SQL yields `{ record_id }`.
+                    row.as_str()
+                        .or_else(|| row.get("record_id").and_then(Value::as_str))
+                        .map(normalize_pending_deletion_query_value)
+                })
+                .collect(),
+        ))
     }
 
     /// Load ownership JSON for a row, if present.
@@ -102,37 +100,36 @@ impl OwnershipService {
         if skip_ownership_for_table(valence_model) || bare_record_ids.is_empty() {
             return Ok(HashSet::new());
         }
-        if ownership_colocate_enabled() {
-            return Self::pending_deletion_ids_via_in_query(valence_model, bare_record_ids, v)
-                .await;
+        const POINT_LOOKUP_MAX: usize = 64;
+        if ownership_colocate_enabled() || bare_record_ids.len() > POINT_LOOKUP_MAX {
+            if let Some(ids) =
+                Self::pending_deletion_ids_via_in_query(valence_model, bare_record_ids, v).await?
+            {
+                return Ok(ids);
+            }
         }
 
         let sys = system_valence(v);
-        const POINT_LOOKUP_MAX: usize = 64;
-        if bare_record_ids.len() <= POINT_LOOKUP_MAX {
-            let mut out = HashSet::with_capacity(bare_record_ids.len());
-            let backend = Self::ownership_backend(valence_model, &sys)?;
-            for bare_id in bare_record_ids {
-                let id = ownership_row_id(valence_model, bare_id);
-                let Some(json) = backend
-                    .get_record("valence_data_ownership", &id)
-                    .await
-                    .map_err(|e| Error::database(e.to_string()))?
-                else {
-                    continue;
-                };
-                if json
-                    .get("status")
-                    .and_then(|s| s.as_str())
-                    .is_some_and(|s| s == "pending_deletion")
-                {
-                    out.insert(bare_id.clone());
-                }
+        let mut out = HashSet::with_capacity(bare_record_ids.len());
+        let backend = Self::ownership_backend(valence_model, &sys)?;
+        for bare_id in bare_record_ids {
+            let id = ownership_row_id(valence_model, bare_id);
+            let Some(json) = backend
+                .get_record("valence_data_ownership", &id)
+                .await
+                .map_err(|e| Error::database(e.to_string()))?
+            else {
+                continue;
+            };
+            if json
+                .get("status")
+                .and_then(|s| s.as_str())
+                .is_some_and(|s| s == "pending_deletion")
+            {
+                out.insert(bare_id.clone());
             }
-            return Ok(out);
         }
-
-        Self::pending_deletion_ids_via_in_query(valence_model, bare_record_ids, v).await
+        Ok(out)
     }
 
     async fn count_ownership_rows_for_schema(

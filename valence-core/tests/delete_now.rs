@@ -157,6 +157,7 @@ fn ensure_dn_schemas() {
         "dn_id",
         "dn_pgp",
         "dn_pending",
+        "dn_pending_q",
         "dn_missing",
         "dn_se",
         "dn_own",
@@ -382,6 +383,11 @@ valence_core::inventory::submit! {
 }
 valence_core::inventory::submit! {
     valence_core::schema::SchemaMetadataInit(|| public_delete_schema("dn_pending", vec![]))
+}
+valence_core::inventory::submit! {
+    valence_core::schema::SchemaMetadataInit(|| {
+        schema_with_policies("dn_pending_q", vec![], &PUBLIC_READ, "PUBLIC", Some(&PUBLIC_READ))
+    })
 }
 valence_core::inventory::submit! {
     valence_core::schema::SchemaMetadataInit(|| public_delete_schema("dn_missing", vec![]))
@@ -771,6 +777,43 @@ async fn delete_now_rejects_pending_queued_root() {
         .await
         .unwrap()
         .is_some());
+}
+
+#[tokio::test]
+async fn query_skips_rows_pending_deletion() {
+    ensure_dn_schemas();
+    let (v, backend) = mem_valence(Actor::User {
+        user_id: "u1".into(),
+    });
+    for id in ["live", "queued"] {
+        backend
+            .create_record("dn_pending_q", json!({"id": id}))
+            .await
+            .unwrap();
+        OwnershipService::ensure_active_ownership("dn_pending_q", id, OwnerRef::system(), &v)
+            .await
+            .unwrap();
+    }
+    OwnershipService::mark_pending_deletion("dn_pending_q", "queued", &v)
+        .await
+        .unwrap();
+
+    let rows: Vec<serde_json::Value> = QueryCore::new("dn_pending_q".into())
+        .execute(&v, DataUsePurpose::new(r"**Test:** Lists fixture rows so the Valence suite can check that a row queued for deletion drops out of query results, as it does from a get. CI and developers running the suite only.", file!(), line!()))
+        .await
+        .unwrap();
+    // The schema declares no fields, so entity privacy returns each row as `{}`; the count
+    // shows the queued row is gone.
+    assert_eq!(rows.len(), 1, "rows: {rows:?}");
+
+    OwnershipService::mark_pending_deletion("dn_pending_q", "live", &v)
+        .await
+        .unwrap();
+    let rows: Vec<serde_json::Value> = QueryCore::new("dn_pending_q".into())
+        .execute(&v, DataUsePurpose::new(r"**Test:** Lists fixture rows so the Valence suite can check that a row queued for deletion drops out of query results, as it does from a get. CI and developers running the suite only.", file!(), line!()))
+        .await
+        .unwrap();
+    assert!(rows.is_empty(), "rows: {rows:?}");
 }
 
 #[tokio::test]

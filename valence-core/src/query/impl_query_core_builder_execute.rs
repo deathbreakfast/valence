@@ -165,26 +165,36 @@ impl QueryCore {
             );
         }
 
-        // Entity-level read privacy for every list/query row (HasMany / Model::query inherit this).
-        let filtered = self.post_filter_entity_privacy(filtered, valence).await?;
-        let rows_after_entity = filtered.len();
-        if rows_after_hop > rows_after_entity {
+        // `Model::get` hides rows queued for deletion; lists and trait queries match it. This runs
+        // before entity privacy, which drops undeclared fields such as `id` from the row.
+        let filtered = self.post_filter_pending_deletion(filtered, valence).await?;
+        let rows_after_pending = filtered.len();
+        if rows_after_hop > rows_after_pending {
             crate::instrumentation::metrics::record_query_rows_filtered(
                 table.split(',').next().unwrap_or(&table).trim(),
-                "entity_privacy",
-                (rows_after_hop - rows_after_entity) as i64,
+                "pending_deletion",
+                (rows_after_hop - rows_after_pending) as i64,
             );
         }
 
-        let rows_after_pending = filtered.len();
+        // Entity-level read privacy for every list/query row (HasMany / Model::query inherit this).
+        let filtered = self.post_filter_entity_privacy(filtered, valence).await?;
+        let rows_after_entity = filtered.len();
+        if rows_after_pending > rows_after_entity {
+            crate::instrumentation::metrics::record_query_rows_filtered(
+                table.split(',').next().unwrap_or(&table).trim(),
+                "entity_privacy",
+                (rows_after_pending - rows_after_entity) as i64,
+            );
+        }
         let wall_ms = timer.elapsed_ms();
         record_query_success(
             &self,
             query_target,
             &trait_name,
             rows_db as i64,
+            rows_after_hop as i64,
             rows_after_entity as i64,
-            rows_after_pending as i64,
             wall_ms,
         );
 
@@ -332,6 +342,76 @@ impl QueryCore {
             return Ok(results);
         }
         self.filter_rows_by_entity_read(results, valence).await
+    }
+
+    /// Drop rows whose ownership status is `pending_deletion`, as `Model::get` does.
+    ///
+    /// Each row's table comes from its record id, so trait-union queries check every member
+    /// table. Ownership lookup errors fail closed, like the `get` gate.
+    async fn post_filter_pending_deletion<T>(
+        &self,
+        results: Vec<T>,
+        valence: &Valence,
+    ) -> Result<Vec<T>>
+    where
+        T: Serialize + DeserializeOwned,
+    {
+        use crate::ownership::{normalize_record_id_for_ownership, OwnershipService};
+        use std::collections::{HashMap, HashSet};
+
+        if results.is_empty() {
+            return Ok(results);
+        }
+        let default_table = backend_schema_table(self.table.as_str()).to_string();
+        let mut keys: Vec<Option<(String, String)>> = Vec::with_capacity(results.len());
+        let mut by_table: HashMap<String, Vec<String>> = HashMap::new();
+        for row in &results {
+            let row_json = serde_json::to_value(row).map_err(|e| Error::Internal(e.to_string()))?;
+            let key = match row_json.get("id") {
+                // Same normalization as the `get` gate: `table:` is stripped only for a known table.
+                Some(serde_json::Value::String(raw)) => {
+                    let bare = normalize_record_id_for_ownership(raw);
+                    let table = raw
+                        .trim()
+                        .strip_suffix(bare.as_str())
+                        .and_then(|head| head.strip_suffix(':'))
+                        .filter(|head| !head.is_empty())
+                        .map_or_else(|| default_table.clone(), str::to_string);
+                    Some((table, bare))
+                }
+                Some(id) => serde_json::from_value::<crate::record_id::RecordId>(id.clone())
+                    .ok()
+                    .map(|rid| {
+                        let table = if rid.table().is_empty() {
+                            default_table.clone()
+                        } else {
+                            rid.table().to_string()
+                        };
+                        (table, rid.id().to_string())
+                    }),
+                None => None,
+            };
+            if let Some((table, bare)) = &key {
+                by_table.entry(table.clone()).or_default().push(bare.clone());
+            }
+            keys.push(key);
+        }
+
+        let mut pending: HashSet<(String, String)> = HashSet::new();
+        for (table, ids) in by_table {
+            for bare in OwnershipService::pending_deletion_bare_ids_subset(&table, &ids, valence).await? {
+                pending.insert((table.clone(), bare));
+            }
+        }
+        if pending.is_empty() {
+            return Ok(results);
+        }
+        Ok(results
+            .into_iter()
+            .zip(keys)
+            .filter(|(_, key)| key.as_ref().is_none_or(|k| !pending.contains(k)))
+            .map(|(row, _)| row)
+            .collect())
     }
 
     async fn filter_rows_by_entity_read<T>(

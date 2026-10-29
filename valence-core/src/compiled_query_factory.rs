@@ -325,6 +325,69 @@ pub fn count_ownership_rows_for_schema(
     ))
 }
 
+/// Ownership `record_id`s among `record_ids` whose status is `pending_deletion`.
+///
+/// Returns `None` for engines without a compiler here; callers fall back to point lookups.
+///
+/// # Errors
+///
+/// Returns an error when the requested operation cannot be completed.
+pub fn pending_deletion_record_ids(
+    engine_id: &str,
+    valence_model: &str,
+    record_ids: &[String],
+) -> Result<Option<CompiledQuery>> {
+    if !is_surreal(engine_id) && !is_sql_family(engine_id) {
+        return Ok(None);
+    }
+    require_compiler(engine_id, "pending_deletion_record_ids")?;
+    let model = (
+        "model".to_string(),
+        Value::String(valence_model.to_string()),
+    );
+    if is_surreal(engine_id) {
+        let q = concat!(
+            "SELECT VALUE record_id FROM valence_data_ownership ",
+            "WHERE valence_model = $model AND status = 'pending_deletion' AND record_id IN $ids"
+        );
+        return Ok(Some(CompiledQuery::new(
+            q.to_string(),
+            vec![
+                model,
+                (
+                    "ids".to_string(),
+                    Value::Array(record_ids.iter().cloned().map(Value::String).collect()),
+                ),
+            ],
+        )));
+    }
+    let mut params = vec![
+        model,
+        (
+            "status".to_string(),
+            Value::String("pending_deletion".to_string()),
+        ),
+    ];
+    let mut ors = Vec::with_capacity(record_ids.len());
+    for (i, record_id) in record_ids.iter().enumerate() {
+        let key = format!("record_id_{i}");
+        ors.push(format!("record_id = ${key}"));
+        params.push((key, Value::String(record_id.clone())));
+    }
+    let id_clause = match ors.as_slice() {
+        [] => "0".to_string(),
+        [only] => only.clone(),
+        many => format!("({})", many.join(" OR ")),
+    };
+    let q = format!(
+        "SELECT record_id FROM valence_data_ownership \
+         WHERE valence_model = $model \
+           AND status = $status \
+           AND {id_clause}"
+    );
+    Ok(Some(CompiledQuery::new(q, params)))
+}
+
 const ACTIVE_DELETION_STATUSES: &[&str] = &["queued", "scanning", "processing"];
 
 /// Count in-flight deletion runs for a requester JSON string.

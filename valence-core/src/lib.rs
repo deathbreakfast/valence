@@ -106,7 +106,8 @@ pub mod __internal {
 
 pub use actor::Actor;
 pub use actor_policy::{
-    is_system_shaped_actor, ActorJsonPolicy, ActorTrust, RejectExternalSystemActor,
+    is_service_user_shaped_actor, is_system_shaped_actor, ActorJsonPolicy, ActorTrust,
+    RejectExternalPrivilegedActor, RejectExternalSystemActor,
 };
 pub use admin_entity_delete::{queue_delete_entity, queue_delete_entity_returning_run_id};
 #[cfg(feature = "compiler-indradb")]

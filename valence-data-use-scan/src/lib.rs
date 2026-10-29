@@ -22,8 +22,10 @@
 //! - **Target classification** — Sorts each use into Schema, Trait, or Unscoped so
 //!   the ops UI can show it on the right schema card, trait card, or Unscoped page.
 //!   [Get started](#getting-started)
-//! - **Purpose quality lint** — [`lint_purpose()`] checks trust-copy banlists and
-//!   tier depth so migration templates cannot re-land. [Get started](#lint-a-purpose-string)
+//! - **Purpose quality lint** — [`lint_purpose()`] checks trust-copy banlists (eight
+//!   migration template phrases, two hedges) and tier depth so migration templates cannot
+//!   re-land. The `valence-purpose-lint` binary counts hits per file across a checkout.
+//!   [Get started](#lint-a-purpose-string)
 //! - **Test exclusion** — When [`Config::exclude_tests_from_snapshot`] is set, omits
 //!   test modules inside `src/` (`tests.rs`, `*_test.rs`, `tests/` directories) from
 //!   the generated catalog so fixture twins stay out of operator views.
@@ -151,6 +153,25 @@
 //!
 //! Observable outcome: empty gap list means Pass; gap codes name the failure.
 //!
+//! `BAN_TEMPLATE` fires on any of [`TEMPLATE_PHRASES`] and `HEDGE` on any of
+//! [`HEDGE_PHRASES`] ("not necessarily", "unless that feature"). Both match after
+//! [`lint_purpose::phrase_text`] drops markdown `*` and straightens curly apostrophes,
+//! so `not **necessarily**` and `feature’s` are caught. To fix either, follow the result
+//! to its consumer and say what data is read or written, why, and which product feature
+//! serves it.
+//!
+//! To count hits across a checkout (contributors rewriting purposes), use
+//! [`lint_tree`] and [`HitSummary`], or run the `valence-purpose-lint` binary:
+//!
+//! ```rust,no_run
+//! use std::path::Path;
+//! use valence_data_use_scan::{lint_tree, HitSummary};
+//!
+//! let tree = lint_tree(Path::new("path/to/checkout"))?;
+//! println!("{}", HitSummary::from_rows(&tree.rows));
+//! # Ok::<(), valence_data_use_scan::DataUseScanError>(())
+//! ```
+//!
 //! ### Exclude tests from the snapshot
 //!
 //! Set [`Config::exclude_tests_from_snapshot`] to `true` when unit-test modules under
@@ -228,8 +249,14 @@ mod repo_path;
 mod scan;
 
 pub use discover::HostPackage;
-pub use inventory::{inventory_csv_header, inventory_csv_row, lint_scan_hits, InventoryRow};
-pub use lint_purpose::{lint_purpose, purpose_passes, GapCode, PurposeTier};
+pub use inventory::{
+    inventory_csv_header, inventory_csv_row, lint_scan_hits, lint_tree, HitSummary, InventoryRow,
+    TreeLint,
+};
+pub use lint_purpose::{
+    lint_purpose, matching_phrases, matching_phrases_for, purpose_passes, GapCode, PurposeTier,
+    HEDGE_PHRASES, TEMPLATE_PHRASES,
+};
 
 use std::path::{Path, PathBuf};
 use std::time::Instant;
@@ -562,7 +589,11 @@ fn scan_package(config: &Config, package: &PackageInfo) -> Result<Vec<ScanHit>, 
     Ok(hits)
 }
 
-fn hit_from_found(found: FoundUse, repository: &str, edges: &[ConnectionEdge]) -> ScanHit {
+pub(crate) fn hit_from_found(
+    found: FoundUse,
+    repository: &str,
+    edges: &[ConnectionEdge],
+) -> ScanHit {
     let op = classify_method(&found.method);
     let target = classify_target(&found.receiver, &found.method);
     let hop = classify_connection_hop(&found.method);

@@ -3,7 +3,7 @@
 //! [`RouterValenceFactory::build`] deserializes `actor_json` into a typed [`crate::actor::Actor`]
 //! and attaches it to the returned [`Valence`]. Pass only host-trusted JSON (session-derived);
 //! never deserialize untrusted client payloads as [`Actor::System`](crate::actor::Actor::System).
-//! Install [`crate::actor_policy::RejectExternalSystemActor`] on external paths.
+//! Install [`crate::actor_policy::RejectExternalPrivilegedActor`] on external paths.
 
 use std::sync::Arc;
 
@@ -41,7 +41,7 @@ pub struct RouterValenceFactoryConfig {
     pub actor_factory: Option<Arc<dyn ActorFactory>>,
     /// Optional endpoint resolver override (defaults to no-op).
     pub endpoint_resolver: Option<Arc<dyn DatabaseEndpointResolver>>,
-    /// Optional policy for validating `actor_json` (see [`RejectExternalSystemActor`](crate::actor_policy::RejectExternalSystemActor)).
+    /// Optional policy for validating `actor_json` (see [`RejectExternalPrivilegedActor`](crate::actor_policy::RejectExternalPrivilegedActor)).
     pub actor_json_policy: Option<Arc<dyn ActorJsonPolicy>>,
     /// Trust level passed to [`ActorJsonPolicy`] (default [`ActorTrust::External`]).
     pub actor_trust: ActorTrust,
@@ -256,14 +256,14 @@ mod tests {
 
     #[test]
     fn build_rejects_external_system_when_policy_installed() {
-        use crate::actor_policy::RejectExternalSystemActor;
+        use crate::actor_policy::RejectExternalPrivilegedActor;
         let valence = Valence::builder()
             .add_backend("default", Arc::new(MockBackend))
             .build()
             .expect("build");
         let router = Arc::clone(valence.database_router());
-        let config =
-            RouterValenceFactoryConfig::new("default").actor_json_policy(RejectExternalSystemActor);
+        let config = RouterValenceFactoryConfig::new("default")
+            .actor_json_policy(RejectExternalPrivilegedActor);
         let f = RouterValenceFactory::new(router, config);
         let system = serde_json::to_value(Actor::System {
             operation: "x".into(),
@@ -271,5 +271,45 @@ mod tests {
         .expect("json");
         let err = f.build(&system).expect_err("system");
         assert!(err.to_string().contains("System"));
+    }
+
+    #[test]
+    fn build_rejects_external_service_user_when_policy_installed() {
+        use crate::actor_policy::RejectExternalPrivilegedActor;
+        let valence = Valence::builder()
+            .add_backend("default", Arc::new(MockBackend))
+            .build()
+            .expect("build");
+        let router = Arc::clone(valence.database_router());
+        let config = RouterValenceFactoryConfig::new("default")
+            .actor_json_policy(RejectExternalPrivilegedActor);
+        let f = RouterValenceFactory::new(router, config);
+        let registered = serde_json::to_value(Actor::ServiceUser {
+            service_name: "svc:7c9e6679-7425-40de-944b-e07fc1f90ae7".into(),
+        })
+        .expect("json");
+        let err = f.build(&registered).expect_err("external service user");
+        assert!(err.to_string().contains("ServiceUser"));
+    }
+
+    #[test]
+    fn build_allows_internal_service_user() {
+        use crate::actor_policy::{ActorTrust, RejectExternalPrivilegedActor};
+        let valence = Valence::builder()
+            .add_backend("default", Arc::new(MockBackend))
+            .build()
+            .expect("build");
+        let router = Arc::clone(valence.database_router());
+        let mut config = RouterValenceFactoryConfig::new("default")
+            .actor_json_policy(RejectExternalPrivilegedActor);
+        config.actor_trust = ActorTrust::Internal;
+        let f = RouterValenceFactory::new(router, config);
+        let registered = Actor::ServiceUser {
+            service_name: "svc:7c9e6679-7425-40de-944b-e07fc1f90ae7".into(),
+        };
+        let built = f
+            .build(&serde_json::to_value(&registered).expect("json"))
+            .expect("internal service user");
+        assert_eq!(built.actor(), &registered);
     }
 }

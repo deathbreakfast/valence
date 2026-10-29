@@ -21,6 +21,23 @@ pub mod common {
         check: public_read_check,
     };
 
+    /// Allows any non-anonymous actor.
+    ///
+    /// That includes signed-in users, [`crate::actor::Actor::System`], and
+    /// [`crate::actor::Actor::ServiceUser`] — a service user is authenticated by definition.
+    /// To require a human user instead, write a custom [`PrivacyRule`] whose `check` is
+    /// `viewer.is_user()` on its own, rather than reusing `AUTHENTICATED`.
+    ///
+    /// ```
+    /// use valence_core::actor::Actor;
+    /// use valence_core::privacy_policies::common::AUTHENTICATED;
+    ///
+    /// let service_user = Actor::ServiceUser {
+    ///     service_name: "svc:ingest".into(),
+    /// };
+    /// assert!((AUTHENTICATED.check)(&serde_json::json!({}), &service_user));
+    /// assert!(!(AUTHENTICATED.check)(&serde_json::json!({}), &Actor::Anonymous));
+    /// ```
     pub const AUTHENTICATED: PrivacyRule = PrivacyRule {
         name: "authenticated",
         description: Some("Allow authenticated users (not anonymous)"),

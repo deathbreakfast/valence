@@ -9,6 +9,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `Actor::is_service_user()` and `Actor::service_name()`. `RejectExternalSystemActor` is
+  renamed to `RejectExternalPrivilegedActor` (old name kept as a deprecated alias).
+  Behavior change: the `AUTHENTICATED` privacy rule now allows `Actor::ServiceUser`
+  as well as `Actor::User` and `Actor::System` — a service user is authenticated by
+  definition; exclude it by writing a custom rule whose check is `viewer.is_user()`
+  on its own instead of reusing `AUTHENTICATED`.
+
+### Fixed
+
+- The document-row filter shared by the mem, IndraDB, Redis, MongoDB and hybrid backends
+  flattened `(a = $x) AND (b = $y)` into one `OR`. A query filtering two record fields at
+  once (a team and a user, say) returned every row matching either field, so a lookup for a
+  user who is not on a team could return another member's edge. Every `AND` group must now
+  match, and a term the filter cannot read excludes the row.
+
+### Added
+
+- `uf-valence-data-use-scan` purpose lint bans six more migration template sentences
+  under `BAN_TEMPLATE` and adds `HEDGE` for "not necessarily" and "unless that feature".
+  New `valence-purpose-lint` binary, `lint_tree` and `HitSummary` count hits per file.
+  `GapCode` is now `#[non_exhaustive]`; matches on it need a wildcard arm.
+  Behavior change: purposes that carry any of the eight template phrases or the two
+  hedges now fail `lint_purpose` and `lint_scan_hits`, so a downstream test or CI gate
+  on this crate goes red until those `use_!` purposes are rewritten from the code.
+
 - Purpose quality lint in `uf-valence-data-use-scan` (`lint_purpose`, tier-aware gap
   codes, inventory helpers) so migration template purposes cannot re-land unnoticed.
   Fleet call-site `use_!` strings rewritten toward stranger-readable trust narratives

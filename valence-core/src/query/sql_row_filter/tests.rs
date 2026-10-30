@@ -451,4 +451,59 @@ mod clause_matching {
             ["r2", "r3"]
         );
     }
+
+    #[test]
+    fn quoted_literal_next_to_or_group_matches_like_a_param() {
+        // The ownership pending-deletion lookup has this shape.
+        let literal = "SELECT * FROM t WHERE a = $p0 AND b = 'p' AND (t = $p1 OR t = $p2)";
+        let param = "SELECT * FROM t WHERE a = $p0 AND b = $p3 AND (t = $p1 OR t = $p2)";
+        let params = || {
+            vec![
+                ("p0", "x".into()),
+                ("p1", "alpha".into()),
+                ("p2", "gamma".into()),
+                ("p3", "p".into()),
+            ]
+        };
+        assert_eq!(run(literal, params()), ["r1"]);
+        assert_eq!(run(literal, params()), run(param, params()));
+    }
+
+    #[test]
+    fn quoted_literal_that_does_not_match_drops_the_row() {
+        let sql = "SELECT * FROM t WHERE b = 'zz' AND (a = $p0 OR a = $p1)";
+        assert!(run(sql, vec![("p0", "x".into()), ("p1", "y".into())]).is_empty());
+    }
+
+    #[test]
+    fn numeric_literal_next_to_or_group() {
+        let sql = "SELECT * FROM t WHERE n >= 9 AND (a = $p0 OR a = $p1)";
+        assert_eq!(
+            run(sql, vec![("p0", "x".into()), ("p1", "zz".into())]),
+            ["r2"]
+        );
+        let eq = "SELECT * FROM t WHERE n = 5 OR b = $p0";
+        assert_eq!(run(eq, vec![("p0", "q".into())]), ["r1", "r2"]);
+    }
+
+    #[test]
+    fn quoted_literal_with_escaped_quote_or_keywords_inside() {
+        let rows = vec![
+            serde_json::json!({"id": "r1", "a": "it's", "b": "p AND q"}),
+            serde_json::json!({"id": "r2", "a": "its", "b": "p"}),
+        ];
+        let compiled = CompiledQuery::new(
+            "SELECT * FROM t WHERE (a = 'it''s' OR a = $p0) AND b = 'p AND q'".into(),
+            vec![("p0".to_string(), "none".into())],
+        );
+        assert_eq!(ids(&apply_equality_where(rows, &compiled)), ["r1"]);
+    }
+
+    #[test]
+    fn unquoted_non_numeric_rhs_still_excludes_every_row() {
+        let sql = "SELECT * FROM t WHERE a = b AND (b = $p0 OR b = $p1)";
+        assert!(run(sql, vec![("p0", "p".into()), ("p1", "q".into())]).is_empty());
+        let null = "SELECT * FROM t WHERE a = NULL OR b = $p0";
+        assert_eq!(run(null, vec![("p0", "q".into())]), ["r2"]);
+    }
 }

@@ -64,8 +64,9 @@ fn strip_wrapping_parens(s: &str) -> Option<&str> {
 /// Whether `row` satisfies `clause`. `OR` binds looser than `AND`, as in SQL.
 ///
 /// Fails closed: a term this matcher cannot read (unknown operator, `IS NULL`, a `$key`
-/// missing from `params`, unbalanced parens or quotes) does not match, so it excludes the row
-/// instead of being skipped.
+/// missing from `params`, a right-hand side that is not a `$key`, quoted literal or number,
+/// unbalanced parens or quotes) does not match, so it excludes the row instead of being
+/// skipped.
 pub(super) fn clause_matches(row: &serde_json::Value, clause: &str, params: &Params) -> bool {
     let Some(or_parts) = split_top_level(clause, " OR ") else {
         return false;
@@ -85,19 +86,13 @@ pub(super) fn clause_matches(row: &serde_json::Value, clause: &str, params: &Par
     }
 }
 
-/// One `field {=,>,>=,<,<=} $key` or `field LIKE $key` term.
+/// One `field {=,>,>=,<,<=} rhs` or `field LIKE rhs` term, where `rhs` is a `$key`, a
+/// `'quoted'` string literal or a number.
 fn term_matches(row: &serde_json::Value, term: &str, params: &Params) -> bool {
-    let Some(dollar) = term.rfind('$') else {
+    let Some((before, value)) = split_rhs(term, params) else {
         return false;
     };
-    let key = term[dollar + 1..].trim();
-    if key.is_empty() || !key.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_') {
-        return false;
-    }
-    let Some((_, value)) = params.iter().find(|(k, _)| k == key) else {
-        return false;
-    };
-    let before = term[..dollar].trim_end();
+    let value = &value;
 
     let upper = before.to_ascii_uppercase();
     if upper.ends_with(" LIKE") {
@@ -127,4 +122,45 @@ fn term_matches(row: &serde_json::Value, term: &str, params: &Params) -> bool {
         };
     }
     false
+}
+
+/// Split a term into the text before its right-hand side and the value that side stands for.
+/// `None` for a `$key` missing from `params` or a right-hand side that is not a `$key`, a
+/// `'quoted'` literal (`''` is an escaped quote) or a number.
+fn split_rhs<'a>(term: &'a str, params: &Params) -> Option<(&'a str, serde_json::Value)> {
+    let term = term.trim_end();
+    if let Some(body) = term.strip_suffix('\'') {
+        // Walk back to the opening quote, stepping over `''` pairs.
+        let bytes = body.as_bytes();
+        let mut i = bytes.len();
+        while i > 0 {
+            i -= 1;
+            if bytes[i] == b'\'' {
+                if i > 0 && bytes[i - 1] == b'\'' {
+                    i -= 1;
+                    continue;
+                }
+                let literal = body[i + 1..].replace("''", "'");
+                return Some((body[..i].trim_end(), serde_json::Value::String(literal)));
+            }
+        }
+        return None;
+    }
+
+    let start = term
+        .rfind(|c: char| c.is_whitespace() || matches!(c, '=' | '<' | '>'))
+        .map_or(0, |at| at + 1);
+    let (before, token) = (term[..start].trim_end(), &term[start..]);
+    if let Some(key) = token.strip_prefix('$') {
+        if key.is_empty() || !key.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_') {
+            return None;
+        }
+        let (_, value) = params.iter().find(|(k, _)| k == key)?;
+        return Some((before, value.clone()));
+    }
+    if let Ok(n) = token.parse::<i64>() {
+        return Some((before, n.into()));
+    }
+    let n = token.parse::<f64>().ok()?;
+    Some((before, serde_json::Number::from_f64(n)?.into()))
 }

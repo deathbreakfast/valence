@@ -31,5 +31,5 @@ fn auto_discover_has_no_databases_for_unknown_table() {
     let registry = SchemaRegistry::auto_discover();
     assert!(registry.get_schema("no_such_table").is_none());
     assert!(!registry.has_schema("no_such_table"));
-    assert!(SchemaRegistry::new().list_schemas().is_empty());
+    assert_eq!(SchemaRegistry::new().list_schemas().len(), 0);
 }

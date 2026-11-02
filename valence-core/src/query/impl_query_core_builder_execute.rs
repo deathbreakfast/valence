@@ -66,7 +66,9 @@ impl QueryCore {
     ///
     /// # Errors
     ///
-    /// Returns an error when the requested operation cannot be completed.
+    /// Fails when no query compiler or backend is registered for the table, when the
+    /// backend query fails, when a row does not deserialize into `T`, or when a privacy
+    /// or ownership lookup errors. Rows the actor may not read are dropped, not errors.
     #[tracing::instrument(
         name = "valence.query.execute_with_stats",
         skip(self, valence, purpose),

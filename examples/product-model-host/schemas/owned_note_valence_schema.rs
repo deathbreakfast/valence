@@ -1,5 +1,7 @@
 use valence::prelude::*;
 
+// Test fixture for `fetch_with_stats`: `user` is a bare String id with no connection or
+// `on_delete`. Do not copy it as a model for user-owned data.
 valence_schema! {
     OwnedNote {
         repository: "https://github.com/unified-field-dev/valence",

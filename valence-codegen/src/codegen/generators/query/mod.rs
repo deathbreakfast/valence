@@ -107,6 +107,18 @@ pub fn generate_query_builder(
                 let mut results = self.limit(1).await?;
                 Ok(results.pop())
             }
+
+            /// Execute the query and also return [`valence::QueryStats`].
+            ///
+            /// Rows match `.await`. `fetched` counts rows the backend returned for this
+            /// window before read privacy, so it can exceed the rows returned; page
+            /// until `fetched < limit`. Do not show it to users: it can reveal that
+            /// hidden rows exist.
+            pub async fn fetch_with_stats(self) -> valence::Result<(Vec<#struct_name>, valence::QueryStats)> {
+                self.inner
+                    .execute_with_stats(self.valence, valence::DataUsePurpose::framework_nested())
+                    .await
+            }
         }
 
         impl<'a> std::future::IntoFuture for #query_name<'a> {

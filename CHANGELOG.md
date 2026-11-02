@@ -16,7 +16,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   SQLite. Columns that are missing from the schema and not listed still fail sync as
   before. `Schema` gains `retired_fields` and `StorageLayout` gains `retired`, so code that
   builds either with a struct literal must add the field (`Vec::new()`).
-
+- `QueryCore::execute_with_stats` and generated `fetch_with_stats` return a `QueryStats`
+  whose `fetched` is the number of rows the backend returned for the window, before read
+  privacy. Page until `fetched < limit` to tell the end of a table from a window privacy
+  hid. It is not for display, and is an upper bound for trait-union queries.
 - `Actor::is_service_user()` and `Actor::service_name()`. `RejectExternalSystemActor` is
   renamed to `RejectExternalPrivilegedActor` (old name kept as a deprecated alias).
   Behavior change: the `AUTHENTICATED` privacy rule now allows `Actor::ServiceUser`

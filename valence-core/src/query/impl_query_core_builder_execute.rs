@@ -21,7 +21,7 @@ impl QueryCore {
         fields(table = %self.table)
     )]
     pub async fn execute<T>(
-        mut self,
+        self,
         valence: &Valence,
         purpose: crate::data_use::DataUsePurpose,
     ) -> Result<Vec<T>>
@@ -29,6 +29,67 @@ impl QueryCore {
         T: DeserializeOwned + Serialize,
     {
         let _ = purpose;
+        let (rows, _) = self.execute_inner(valence).await?;
+        Ok(rows)
+    }
+
+    /// Like [`Self::execute`], but also reports how many rows the backend returned.
+    ///
+    /// [`super::QueryStats::fetched`] counts the rows the backend returned for this window
+    /// *before* connection, hop, pending-deletion and entity read privacy, so it can
+    /// be larger than the returned `Vec`. A caller paging in fixed windows can stop
+    /// when `fetched < limit` (the table ended) and keep going when the window was
+    /// full but privacy hid every row.
+    ///
+    /// `fetched` counts rows the caller may not read. Do not show it to users: it
+    /// can reveal that hidden rows exist.
+    ///
+    /// For a trait-union query (several tables) `fetched` is the sum of each
+    /// table's backend rows before the merge window, so it is an upper bound.
+    ///
+    /// ```ignore
+    /// let limit = 100;
+    /// let mut offset = 0;
+    /// loop {
+    ///     let (rows, stats) = QueryCore::new("notes".into())
+    ///         .limit(limit)
+    ///         .offset(offset)
+    ///         .execute_with_stats::<Note>(&valence, purpose.clone())
+    ///         .await?;
+    ///     handle(rows);
+    ///     if stats.fetched < limit as usize {
+    ///         break;
+    ///     }
+    ///     offset += limit;
+    /// }
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the requested operation cannot be completed.
+    #[tracing::instrument(
+        name = "valence.query.execute_with_stats",
+        skip(self, valence, purpose),
+        fields(table = %self.table)
+    )]
+    pub async fn execute_with_stats<T>(
+        self,
+        valence: &Valence,
+        purpose: crate::data_use::DataUsePurpose,
+    ) -> Result<(Vec<T>, super::QueryStats)>
+    where
+        T: DeserializeOwned + Serialize,
+    {
+        let _ = purpose;
+        let (rows, fetched) = self.execute_inner(valence).await?;
+        Ok((rows, super::QueryStats { fetched }))
+    }
+
+    /// Shared body of `execute` and `execute_with_stats`: rows plus backend row count.
+    async fn execute_inner<T>(mut self, valence: &Valence) -> Result<(Vec<T>, usize)>
+    where
+        T: DeserializeOwned + Serialize,
+    {
         self.apply_query_window_clamps();
         let tables: Vec<String> = self
             .table
@@ -48,10 +109,13 @@ impl QueryCore {
             branch_core.offset = None;
 
             let mut merged_json = Vec::new();
+            let mut fetched = 0usize;
             for tbl in tables {
                 let mut branch = branch_core.clone();
                 branch.table = tbl;
-                let rows: Vec<T> = Self::execute_on_table(branch, valence).await?;
+                let (rows, branch_fetched): (Vec<T>, usize) =
+                    Self::execute_on_table(branch, valence).await?;
+                fetched += branch_fetched;
                 for row in rows {
                     merged_json.push(
                         serde_json::to_value(&row)
@@ -74,7 +138,7 @@ impl QueryCore {
                         .map_err(Error::from)?,
                 );
             }
-            return Ok(results);
+            return Ok((results, fetched));
         }
 
         Self::execute_on_table(self, valence).await
@@ -86,7 +150,7 @@ impl QueryCore {
         skip(self, valence),
         fields(table = %self.table)
     )]
-    async fn execute_on_table<T>(self, valence: &Valence) -> Result<Vec<T>>
+    async fn execute_on_table<T>(self, valence: &Valence) -> Result<(Vec<T>, usize)>
     where
         T: DeserializeOwned + Serialize,
     {
@@ -198,7 +262,7 @@ impl QueryCore {
             wall_ms,
         );
 
-        Ok(filtered)
+        Ok((filtered, rows_db))
     }
 
     /// Execute as a distinct-value query, returning a flat `Vec<String>`.

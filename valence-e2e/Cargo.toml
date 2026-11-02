@@ -57,5 +57,10 @@ name = "model_runtime_catalog"
 path = "tests/model_runtime_catalog.rs"
 harness = true
 
+[[test]]
+name = "schema_registry_databases"
+path = "tests/schema_registry_databases.rs"
+harness = true
+
 [lints]
 workspace = true

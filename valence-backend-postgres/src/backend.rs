@@ -7,11 +7,12 @@ use valence_backend_sql::{
     delete_record_postgres, ensure_edges_postgres, ensure_table_postgres,
     ensure_typed_table_postgres, execute_select_postgres, get_edge_sources_postgres,
     get_edge_targets_postgres, get_record_postgres, inspect_typed_layout_postgres,
-    merge_record_postgres, read_schema_version_postgres, relate_edge_postgres, sql_capabilities,
-    sync_typed_table_postgres, ttl_deferred, unrelate_edge_postgres, update_record_postgres,
-    write_schema_version_postgres, WriteEnsureCache,
+    merge_record_postgres, read_schema_version_postgres, relate_edge_postgres, scan_edges_postgres,
+    scan_table_typed_postgres, sql_capabilities, sync_typed_table_postgres, ttl_deferred,
+    unrelate_edge_postgres, update_record_postgres, write_schema_version_postgres,
+    WriteEnsureCache,
 };
-use valence_core::backend::DatabaseBackend;
+use valence_core::backend::{DatabaseBackend, EdgeRow};
 use valence_core::compiled_query::CompiledQuery;
 use valence_core::error::{Error, Result};
 use valence_core::record_id::RecordId;
@@ -223,6 +224,24 @@ impl DatabaseBackend for PostgresBackend {
 
     async fn define_unique_index(&self, table: &str, field: &str) -> Result<()> {
         define_unique_index_postgres(&self.pool, table, field, &self.layout_ensured).await
+    }
+
+    async fn scan_table(
+        &self,
+        table: &str,
+        after: Option<&str>,
+        limit: usize,
+    ) -> Result<Vec<serde_json::Value>> {
+        scan_table_typed_postgres(&self.pool, table, after, limit).await
+    }
+
+    async fn scan_edges(
+        &self,
+        edge_type: Option<&str>,
+        after: Option<&EdgeRow>,
+        limit: usize,
+    ) -> Result<Vec<EdgeRow>> {
+        scan_edges_postgres(&self.pool, edge_type, after, limit).await
     }
 
     fn ttl_capability(&self) -> valence_core::ttl::BackendTtlCapability {

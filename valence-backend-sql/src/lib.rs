@@ -25,7 +25,8 @@ pub use postgres_ops::{
     apply_ttl_policy_postgres, create_record_postgres, define_unique_index_postgres,
     delete_record_postgres, ensure_edges_postgres, ensure_table_postgres, execute_select_postgres,
     get_edge_sources_postgres, get_edge_targets_postgres, get_record_postgres,
-    merge_record_postgres, relate_edge_postgres, unrelate_edge_postgres, update_record_postgres,
+    merge_record_postgres, relate_edge_postgres, scan_edges_postgres, unrelate_edge_postgres,
+    update_record_postgres,
 };
 pub use query::{
     decode_select_rows, extract_ids, first_count, prepare_compiled, prepare_compiled_postgres,
@@ -39,11 +40,11 @@ pub use sqlite_ops::{
     apply_ttl_policy_sqlite, assert_safe_table, create_record_sqlite, define_unique_index_sqlite,
     delete_record_sqlite, ensure_edges_sqlite, ensure_table_sqlite, execute_select_sqlite,
     get_edge_sources_sqlite, get_edge_targets_sqlite, get_record_sqlite, merge_record_sqlite,
-    relate_edge_sqlite, sql_capabilities, storage_id, ttl_deferred, unrelate_edge_sqlite,
-    update_record_sqlite,
+    relate_edge_sqlite, scan_edges_sqlite, sql_capabilities, storage_id, ttl_deferred,
+    unrelate_edge_sqlite, update_record_sqlite,
 };
 pub use typed_table::{
     ensure_typed_table_postgres, ensure_typed_table_sqlite, inspect_typed_layout_postgres,
-    inspect_typed_layout_sqlite, sync_typed_table_postgres, sync_typed_table_sqlite,
-    WriteEnsureCache,
+    inspect_typed_layout_sqlite, scan_table_typed_postgres, scan_table_typed_sqlite,
+    sync_typed_table_postgres, sync_typed_table_sqlite, WriteEnsureCache,
 };

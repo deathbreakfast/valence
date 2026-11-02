@@ -20,6 +20,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   whose `fetched` is the number of rows the backend returned for the window, before read
   privacy. Page until `fetched < limit` to tell the end of a table from a window privacy
   hid. It is not for display, and is an upper bound for trait-union queries.
+- `DatabaseBackend::scan_table` and `scan_edges`: keyset-paged enumeration of a table's
+  rows and of all edges, implemented for SQLite and Postgres (other engines return an
+  unsupported error by default). `EdgeRow` is the edge row and cursor type.
 - `Actor::is_service_user()` and `Actor::service_name()`. `RejectExternalSystemActor` is
   renamed to `RejectExternalPrivilegedActor` (old name kept as a deprecated alias).
   Behavior change: the `AUTHENTICATED` privacy rule now allows `Actor::ServiceUser`

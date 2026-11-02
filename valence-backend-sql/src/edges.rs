@@ -60,3 +60,33 @@ pub fn get_edge_targets(from: &RecordId, edge_table: &str) -> (String, Vec<Strin
         ],
     )
 }
+
+/// Keyset page over `valence_edges` (SQLite `?` placeholders).
+///
+/// Binds, in order: edge type filter (twice), cursor flag, then the five cursor columns, then limit.
+pub fn scan_edges_sqlite_sql() -> &'static str {
+    "SELECT from_table, from_id, edge_type, to_table, to_id FROM valence_edges \
+     WHERE (? IS NULL OR edge_type = ?) \
+     AND (? = 0 OR (from_table, from_id, edge_type, to_table, to_id) > (?, ?, ?, ?, ?)) \
+     ORDER BY from_table, from_id, edge_type, to_table, to_id LIMIT ?"
+}
+
+/// Keyset page over `valence_edges` (Postgres `$n` placeholders).
+pub fn scan_edges_postgres_sql() -> &'static str {
+    "SELECT from_table, from_id, edge_type, to_table, to_id FROM valence_edges \
+     WHERE ($1::text IS NULL OR edge_type = $1) \
+     AND (NOT $2 OR (from_table, from_id, edge_type, to_table, to_id) > ($3, $4, $5, $6, $7)) \
+     ORDER BY from_table, from_id, edge_type, to_table, to_id LIMIT $8"
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn scan_sql_orders_by_full_primary_key() {
+        for sql in [scan_edges_sqlite_sql(), scan_edges_postgres_sql()] {
+            assert!(sql.contains("ORDER BY from_table, from_id, edge_type, to_table, to_id"));
+        }
+    }
+}

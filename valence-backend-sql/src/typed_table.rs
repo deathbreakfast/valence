@@ -808,6 +808,75 @@ pub async fn get_record_typed_postgres(
     Ok(row.map(|r| row_from_sqlx_postgres(table, &layout, &r)))
 }
 
+/// One page of typed rows ordered by primary key (SQLite). Missing table → empty.
+pub async fn scan_table_typed_sqlite(
+    pool: &sqlx::SqlitePool,
+    table: &str,
+    after: Option<&str>,
+    limit: usize,
+) -> Result<Vec<Value>> {
+    assert_safe_table(table)?;
+    let Some(live) = inspect_typed_layout_sqlite(pool, table).await? else {
+        return Ok(Vec::new());
+    };
+    if live.fields.is_empty() {
+        return Ok(Vec::new());
+    }
+    let layout = layout_with_registry_storage(table, live);
+    let q = format!(
+        "SELECT {} FROM {} WHERE (? IS NULL OR {id} > ?) ORDER BY {id} LIMIT ?",
+        column_list(&layout),
+        quote_sql_ident(table),
+        id = quote_sql_ident("id")
+    );
+    let limit = i64::try_from(limit).unwrap_or(i64::MAX);
+    let rows = sqlx::query(&q)
+        .bind(after)
+        .bind(after)
+        .bind(limit)
+        .fetch_all(pool)
+        .await
+        .map_err(|e| Error::database(e.to_string()))?;
+    Ok(rows
+        .iter()
+        .map(|r| row_from_sqlx_sqlite(table, &layout, r))
+        .collect())
+}
+
+/// One page of typed rows ordered by primary key (Postgres). Missing table → empty.
+pub async fn scan_table_typed_postgres(
+    pool: &sqlx::PgPool,
+    table: &str,
+    after: Option<&str>,
+    limit: usize,
+) -> Result<Vec<Value>> {
+    assert_safe_table(table)?;
+    let Some(live) = inspect_typed_layout_postgres(pool, table).await? else {
+        return Ok(Vec::new());
+    };
+    if live.fields.is_empty() {
+        return Ok(Vec::new());
+    }
+    let layout = layout_with_registry_storage(table, live);
+    let q = format!(
+        "SELECT {} FROM {} WHERE ($1::text IS NULL OR {id} > $1) ORDER BY {id} LIMIT $2",
+        column_list(&layout),
+        quote_sql_ident(table),
+        id = quote_sql_ident("id")
+    );
+    let limit = i64::try_from(limit).unwrap_or(i64::MAX);
+    let rows = sqlx::query(&q)
+        .bind(after)
+        .bind(limit)
+        .fetch_all(pool)
+        .await
+        .map_err(|e| Error::database(e.to_string()))?;
+    Ok(rows
+        .iter()
+        .map(|r| row_from_sqlx_postgres(table, &layout, r))
+        .collect())
+}
+
 fn row_from_sqlx_sqlite(
     table: &str,
     layout: &StorageLayout,

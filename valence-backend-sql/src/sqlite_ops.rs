@@ -2,6 +2,7 @@
 
 use serde_json::Value;
 use sqlx::{Column, Row};
+use valence_core::backend::EdgeRow;
 use valence_core::compiled_query::CompiledQuery;
 use valence_core::error::{Error, Result};
 use valence_core::record_id::RecordId;
@@ -291,6 +292,38 @@ pub async fn get_edge_sources_sqlite(
         .iter()
         .map(|r| RecordId::new(r.get::<String, _>(0), r.get::<String, _>(1)))
         .collect())
+}
+
+pub async fn scan_edges_sqlite(
+    pool: &sqlx::SqlitePool,
+    edge_type: Option<&str>,
+    after: Option<&EdgeRow>,
+    limit: usize,
+) -> Result<Vec<EdgeRow>> {
+    ensure_edges_sqlite(pool).await?;
+    let limit = i64::try_from(limit).unwrap_or(i64::MAX);
+    let rows = sqlx::query(crate::edges::scan_edges_sqlite_sql())
+        .bind(edge_type)
+        .bind(edge_type)
+        .bind(i64::from(after.is_some()))
+        .bind(after.map_or("", |a| a.from.table()))
+        .bind(after.map_or("", |a| a.from.id()))
+        .bind(after.map_or("", |a| a.edge_type.as_str()))
+        .bind(after.map_or("", |a| a.to.table()))
+        .bind(after.map_or("", |a| a.to.id()))
+        .bind(limit)
+        .fetch_all(pool)
+        .await
+        .map_err(|e| Error::database(e.to_string()))?;
+    Ok(rows.iter().map(edge_row_sqlite).collect())
+}
+
+fn edge_row_sqlite(r: &sqlx::sqlite::SqliteRow) -> EdgeRow {
+    EdgeRow {
+        from: RecordId::new(r.get::<String, _>(0), r.get::<String, _>(1)),
+        edge_type: r.get::<String, _>(2),
+        to: RecordId::new(r.get::<String, _>(3), r.get::<String, _>(4)),
+    }
 }
 
 pub async fn define_unique_index_sqlite(

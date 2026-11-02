@@ -29,6 +29,20 @@ impl BackendCapabilities {
     }
 }
 
+/// One directed edge as stored by a backend (`from --edge_type--> to`).
+///
+/// Also used as the keyset cursor for [`DatabaseBackend::scan_edges`]: pass the last
+/// row of a page as `after` to fetch the next one.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct EdgeRow {
+    /// Source record.
+    pub from: RecordId,
+    /// Edge table / type name.
+    pub edge_type: String,
+    /// Target record.
+    pub to: RecordId,
+}
+
 /// Storage engine behind Valence: CRUD, compiled queries, and graph edges.
 ///
 /// `valence-core` defines this trait only — no engine SDKs. Third-party adapters
@@ -231,6 +245,50 @@ pub trait DatabaseBackend: Send + Sync + std::fmt::Debug + 'static {
     async fn get_edge_sources(&self, to: &RecordId, edge_table: &str) -> Result<Vec<RecordId>> {
         let _ = (to, edge_table);
         Ok(Vec::new())
+    }
+
+    /// Enumerate one page of rows in `table`, ordered by primary key.
+    ///
+    /// Rows are returned in the same wire shape as [`Self::get_record`]. `after` is the
+    /// last primary key of the previous page (exclusive); `None` starts at the beginning.
+    /// A missing table returns `Ok(vec![])`. A page shorter than `limit` is the last one.
+    ///
+    /// This reads below privacy policy, like the rest of the port: the caller owns the
+    /// actor and privacy decision.
+    ///
+    /// **Contract:** default returns `Error::Internal` — override for engines that can
+    /// enumerate a table (SQLite and Postgres do).
+    async fn scan_table(
+        &self,
+        table: &str,
+        after: Option<&str>,
+        limit: usize,
+    ) -> Result<Vec<serde_json::Value>> {
+        let _ = (table, after, limit);
+        Err(Error::Internal(format!(
+            "scan_table not supported for {}",
+            self.engine_id()
+        )))
+    }
+
+    /// Enumerate one page of edges, ordered by `(from table, from id, edge type, to table, to id)`.
+    ///
+    /// `edge_type` restricts the scan to one edge table; `after` is the last row of the
+    /// previous page (exclusive). A page shorter than `limit` is the last one.
+    ///
+    /// **Contract:** default returns `Error::Internal` — override for engines that store
+    /// edges in an enumerable form.
+    async fn scan_edges(
+        &self,
+        edge_type: Option<&str>,
+        after: Option<&EdgeRow>,
+        limit: usize,
+    ) -> Result<Vec<EdgeRow>> {
+        let _ = (edge_type, after, limit);
+        Err(Error::Internal(format!(
+            "scan_edges not supported for {}",
+            self.engine_id()
+        )))
     }
 
     /// Define a unique index on `table.field` when the engine supports DDL.

@@ -43,6 +43,7 @@ mod matrix;
 mod model_contract;
 mod on_delete;
 mod runner;
+mod scan_contract;
 mod scenario;
 
 #[cfg(feature = "surreal-mem")]
@@ -88,6 +89,7 @@ pub use on_delete::{
     run_on_delete_restrict_blocks, run_on_delete_set_null, run_on_delete_set_null_cross_engine,
 };
 pub use runner::{RunMode, ScenarioResult, ScenarioRunner, StepTiming};
+pub use scan_contract::run_scan_contract;
 pub use scenario::{ScenarioSpec, ScenarioStep};
 
 pub use fixtures::{CATALOG_TTL_PROBE_SECONDS, CATALOG_TTL_PROBE_TABLE};

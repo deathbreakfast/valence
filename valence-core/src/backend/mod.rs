@@ -16,7 +16,7 @@ mod sql_compiler;
 #[cfg(feature = "compiler-surreal")]
 mod surreal_compiler;
 
-pub use port::{BackendCapabilities, DatabaseBackend};
+pub use port::{BackendCapabilities, DatabaseBackend, EdgeRow};
 pub use used::{
     create_record, delete_record, get_record, merge_record, update_record, upsert_record,
 };

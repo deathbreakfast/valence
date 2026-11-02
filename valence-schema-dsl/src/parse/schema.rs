@@ -43,6 +43,8 @@ pub struct ParsedSchema {
     pub iters: Vec<String>,
     pub composite_key: Vec<String>,
     pub traits: Vec<String>,
+    /// `retired_fields: ["old"]` — live columns the schema no longer declares.
+    pub retired_fields: Vec<String>,
     pub ownership: Option<ParsedOwnershipConfig>,
 }
 
@@ -82,6 +84,8 @@ pub enum SchemaItem {
     Iters(SideEffectsConfig),
     CompositeKey(CompositeKeyConfig),
     Traits(TraitsConfig),
+    /// `retired_fields: ["old_column"]` — columns kept in storage but no longer declared.
+    RetiredFields(RetiredFieldsConfig),
     Database(DatabaseConfig),
     Ownership(OwnershipConfigBlock),
 }
@@ -98,6 +102,22 @@ impl Parse for TraitsConfig {
         Ok(TraitsConfig {
             _bracket: bracketed!(content in input),
             traits: content.parse_terminated(Ident::parse, Token![,])?,
+        })
+    }
+}
+
+/// Retired field list: `retired_fields: ["project", "legacy_flag"]`
+pub struct RetiredFieldsConfig {
+    _bracket: token::Bracket,
+    pub names: Punctuated<LitStr, Token![,]>,
+}
+
+impl Parse for RetiredFieldsConfig {
+    fn parse(input: ParseStream) -> Result<Self> {
+        let content;
+        Ok(RetiredFieldsConfig {
+            _bracket: bracketed!(content in input),
+            names: content.parse_terminated(<LitStr as Parse>::parse, Token![,])?,
         })
     }
 }
@@ -122,6 +142,7 @@ impl Parse for SchemaItem {
             "iters" => Ok(SchemaItem::Iters(input.parse()?)),
             "composite_key" => Ok(SchemaItem::CompositeKey(input.parse()?)),
             "traits" => Ok(SchemaItem::Traits(input.parse()?)),
+            "retired_fields" => Ok(SchemaItem::RetiredFields(input.parse()?)),
             "database" => Ok(SchemaItem::Database(input.parse()?)),
             "ownership" => Ok(SchemaItem::Ownership(input.parse()?)),
             _ => Err(syn::Error::new(
@@ -286,6 +307,7 @@ impl SchemaSpec {
         let mut iters = Vec::new();
         let mut composite_key = Vec::new();
         let mut traits = Vec::new();
+        let mut retired: Option<&RetiredFieldsConfig> = None;
         let mut database = None;
         let mut ownership: Option<ParsedOwnershipConfig> = None;
 
@@ -340,6 +362,15 @@ impl SchemaSpec {
                 SchemaItem::Traits(t) => {
                     traits = t.traits.iter().map(|i| i.to_string()).collect();
                 }
+                SchemaItem::RetiredFields(r) => {
+                    if retired.is_some() {
+                        return Err(syn::Error::new(
+                            self.name.span(),
+                            "duplicate `retired_fields:` in valence_schema!",
+                        ));
+                    }
+                    retired = Some(r);
+                }
                 SchemaItem::Privacy(_) => {}
                 SchemaItem::Connections(c) => connections = parse_connections(c)?,
                 SchemaItem::Database(d) => {
@@ -381,6 +412,11 @@ impl SchemaSpec {
             ));
         }
 
+        let retired_fields = match retired {
+            Some(r) => lower_retired_fields(r, &fields)?,
+            None => Vec::new(),
+        };
+
         Ok(ParsedSchema {
             table_name,
             version,
@@ -397,7 +433,47 @@ impl SchemaSpec {
             iters,
             composite_key,
             traits,
+            retired_fields,
             ownership,
         })
     }
+}
+
+/// Validate `retired_fields:` names against the declared fields.
+fn lower_retired_fields(
+    config: &RetiredFieldsConfig,
+    fields: &[ParsedField],
+) -> Result<Vec<String>> {
+    let mut names: Vec<String> = Vec::with_capacity(config.names.len());
+    for lit in &config.names {
+        let name = lit.value();
+        if syn::parse_str::<Ident>(&name).is_err() {
+            return Err(syn::Error::new(
+                lit.span(),
+                format!("`retired_fields` entry \"{name}\" is not a valid field identifier"),
+            ));
+        }
+        if name == "id" {
+            return Err(syn::Error::new(
+                lit.span(),
+                "`retired_fields` cannot retire `id`",
+            ));
+        }
+        if names.contains(&name) {
+            return Err(syn::Error::new(
+                lit.span(),
+                format!("`retired_fields` lists \"{name}\" twice"),
+            ));
+        }
+        if fields.iter().any(|f| f.name == name) {
+            return Err(syn::Error::new(
+                lit.span(),
+                format!(
+                    "`retired_fields` entry \"{name}\" is still declared in `fields`; remove the field or drop it from `retired_fields`"
+                ),
+            ));
+        }
+        names.push(name);
+    }
+    Ok(names)
 }

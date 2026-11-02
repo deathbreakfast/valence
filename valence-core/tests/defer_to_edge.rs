@@ -42,6 +42,7 @@ fn base_schema(name: &str, policies: SchemaPolicies, fields: Vec<SchemaField>) -
         iters: Vec::new(),
         composite_key: Vec::new(),
         traits: Vec::new(),
+        retired_fields: Vec::new(),
         ttl: None,
         ownership: None,
         meta: SchemaMeta {
@@ -201,6 +202,7 @@ fn history_defer_schema(table: &str, parent_table: &str) -> &'static SchemaMetad
         iters: Vec::new(),
         composite_key: Vec::new(),
         traits: Vec::new(),
+        retired_fields: Vec::new(),
         ttl: None,
         ownership: None,
         meta: SchemaMeta {
@@ -491,6 +493,7 @@ async fn defer_cycle_denies_sad() {
         iters: vec![],
         composite_key: vec![],
         traits: vec![],
+        retired_fields: Vec::new(),
         ttl: None,
         ownership: None,
         meta: SchemaMeta {
@@ -538,6 +541,7 @@ async fn defer_cycle_denies_sad() {
         iters: vec![],
         composite_key: vec![],
         traits: vec![],
+        retired_fields: Vec::new(),
         ttl: None,
         ownership: None,
         meta: SchemaMeta {
@@ -1013,6 +1017,7 @@ async fn validate_unknown_edge_errors() {
         iters: vec![],
         composite_key: vec![],
         traits: vec![],
+        retired_fields: Vec::new(),
         ttl: None,
         ownership: None,
         meta: SchemaMeta {

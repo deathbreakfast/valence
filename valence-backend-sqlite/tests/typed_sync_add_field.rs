@@ -33,6 +33,7 @@ async fn sqlite_sync_adds_column() {
                 record_table: None,
             },
         ],
+        retired: Vec::new(),
     };
     backend
         .ensure_typed_table(&layout_v1)
@@ -114,6 +115,7 @@ async fn sqlite_get_decodes_by_column_name_after_added_field() {
             field("id", FieldStorage::String, true),
             field("name", FieldStorage::String, false),
         ],
+        retired: Vec::new(),
     };
     backend
         .ensure_typed_table(&layout_v1)
@@ -165,6 +167,7 @@ async fn sqlite_concurrent_schema_growth_does_not_panic_gets() {
             field("id", FieldStorage::String, true),
             field("name", FieldStorage::String, false),
         ],
+        retired: Vec::new(),
     };
     backend.ensure_typed_table(&base).await.expect("ensure");
     backend
@@ -216,6 +219,7 @@ async fn sqlite_missing_column_name_is_null_not_panic() {
             field("id", FieldStorage::String, true),
             field("name", FieldStorage::String, false),
         ],
+        retired: Vec::new(),
     };
     backend.ensure_typed_table(&layout).await.expect("ensure");
     backend
@@ -243,6 +247,7 @@ async fn sqlite_create_accepts_decimal_numeric_string() {
             field("id", FieldStorage::String, true),
             field("price", FieldStorage::Decimal, false),
         ],
+        retired: Vec::new(),
     };
     backend.ensure_typed_table(&layout).await.expect("ensure");
     backend

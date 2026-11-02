@@ -43,6 +43,7 @@ fn leak_ttl_schema(table: &str, seconds: u64) -> &'static Schema {
         iters: Vec::new(),
         composite_key: Vec::new(),
         traits: Vec::new(),
+        retired_fields: Vec::new(),
         ttl: Some(SchemaTtlPolicy {
             seconds,
             mode: "backend_capability".into(),

@@ -42,6 +42,7 @@ pub fn empty_policies_schema() -> &'static SchemaMetadata {
             iters: Vec::new(),
             composite_key: Vec::new(),
             traits: Vec::new(),
+            retired_fields: Vec::new(),
             ttl: None,
             ownership: None,
             meta: SchemaMeta {
@@ -97,6 +98,7 @@ pub fn authenticated_only_schema() -> &'static SchemaMetadata {
             iters: Vec::new(),
             composite_key: Vec::new(),
             traits: Vec::new(),
+            retired_fields: Vec::new(),
             ttl: None,
             ownership: None,
             meta: SchemaMeta {
@@ -198,6 +200,7 @@ pub fn system_only_field_schema() -> &'static SchemaMetadata {
             iters: Vec::new(),
             composite_key: Vec::new(),
             traits: Vec::new(),
+            retired_fields: Vec::new(),
             ttl: None,
             ownership: None,
             meta: SchemaMeta {
@@ -272,6 +275,7 @@ fn catalog_ttl_probe_schema() -> &'static Schema {
             iters: Vec::new(),
             composite_key: Vec::new(),
             traits: Vec::new(),
+            retired_fields: Vec::new(),
             ttl: Some(valence_core::ttl::SchemaTtlPolicy {
                 seconds: CATALOG_TTL_PROBE_SECONDS,
                 mode: "backend_capability".into(),
@@ -359,6 +363,7 @@ fn catalog_iter_probe_schema() -> &'static Schema {
             iters: Vec::new(),
             composite_key: Vec::new(),
             traits: Vec::new(),
+            retired_fields: Vec::new(),
             ttl: None,
             ownership: None,
             meta: SchemaMeta {

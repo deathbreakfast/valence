@@ -72,6 +72,9 @@ fn engine_supports_default_tweaks(engine_id: &str) -> bool {
 /// Compute additive ops + safe tweaks to bring `live` toward `desired`.
 ///
 /// Ship policy: refuse drops / renames / type changes (orphan live fields → Validation).
+/// A live field listed in [`StorageLayout::retired`] is kept as is (no DDL) unless it is
+/// `NOT NULL` without a DEFAULT: Postgres relaxes it with [`SafeTweak::SetNullable`],
+/// SQLite refuses because new rows could not be inserted.
 /// SQLite cannot change nullability without a table rebuild → Validation.
 ///
 /// # Errors
@@ -92,8 +95,25 @@ pub fn layout_diff(
     live: &StorageLayout,
     engine_id: &str,
 ) -> Result<LayoutDiff> {
+    let mut tweaks = Vec::new();
     for live_f in &live.fields {
         if !desired.fields.iter().any(|d| d.name == live_f.name) {
+            if desired.retired.contains(&live_f.name) {
+                if !live_f.nullable && live_f.default.is_none() {
+                    if !engine_supports_nullability_tweaks(engine_id) {
+                        return Err(Error::Validation(format!(
+                            "sync_typed_table refuses retired NOT NULL column {}.{} without a DEFAULT \
+                             on engine {engine_id} (new rows could not be inserted; relaxing NOT NULL \
+                             requires a table rebuild — Future)",
+                            live.table, live_f.name
+                        )));
+                    }
+                    tweaks.push(SafeTweak::SetNullable {
+                        field: live_f.name.clone(),
+                    });
+                }
+                continue;
+            }
             return Err(Error::Validation(format!(
                 "sync_typed_table refuses drop of live field {}.{} (destructive sync is Future)",
                 live.table, live_f.name
@@ -113,7 +133,6 @@ pub fn layout_diff(
     }
 
     let mut ops = Vec::new();
-    let mut tweaks = Vec::new();
     for d in &desired.fields {
         if !live.fields.iter().any(|l| l.name == d.name) {
             ops.push(AdditiveOp::AddField(d.clone()));
@@ -204,10 +223,12 @@ mod tests {
                 field("name", true),
                 field("score", true),
             ],
+            retired: Vec::new(),
         };
         let live = StorageLayout {
             table: "t".into(),
             fields: vec![field("id", false), field("name", true)],
+            retired: Vec::new(),
         };
         let diff = layout_diff(&desired, &live, KnownEngines::SQLITE).unwrap();
         assert!(matches!(diff.ops[0], AdditiveOp::AddField(ref f) if f.name == "score"));
@@ -219,6 +240,7 @@ mod tests {
         let desired = StorageLayout {
             table: "t".into(),
             fields: vec![field("id", false), field("name", true)],
+            retired: Vec::new(),
         };
         let live = StorageLayout {
             table: "t".into(),
@@ -227,8 +249,73 @@ mod tests {
                 field("name", true),
                 field("legacy", true),
             ],
+            retired: Vec::new(),
         };
         let err = layout_diff(&desired, &live, KnownEngines::SQLITE).unwrap_err();
+        assert!(err.to_string().contains("refuses drop"));
+    }
+
+    fn retired_layouts(live_b: LayoutField) -> (StorageLayout, StorageLayout) {
+        let desired = StorageLayout {
+            table: "t".into(),
+            fields: vec![field("id", false), field("a", true)],
+            retired: vec!["b".into()],
+        };
+        let live = StorageLayout {
+            table: "t".into(),
+            fields: vec![field("id", false), field("a", true), live_b],
+            retired: Vec::new(),
+        };
+        (desired, live)
+    }
+
+    #[test]
+    fn layout_diff_retired_field_sqlite_happy() {
+        let (desired, live) = retired_layouts(field("b", true));
+        let diff = layout_diff(&desired, &live, KnownEngines::SQLITE).unwrap();
+        assert_eq!(diff, LayoutDiff::default());
+    }
+
+    #[test]
+    fn layout_diff_retired_field_postgres_happy() {
+        let (desired, live) = retired_layouts(field("b", true));
+        let diff = layout_diff(&desired, &live, KnownEngines::POSTGRES).unwrap();
+        assert_eq!(diff, LayoutDiff::default());
+    }
+
+    #[test]
+    fn layout_diff_retired_not_null_postgres_set_nullable_happy() {
+        let (desired, live) = retired_layouts(field("b", false));
+        let diff = layout_diff(&desired, &live, KnownEngines::POSTGRES).unwrap();
+        assert_eq!(diff.ops, Vec::<AdditiveOp>::new());
+        assert_eq!(
+            diff.tweaks,
+            vec![SafeTweak::SetNullable { field: "b".into() }]
+        );
+    }
+
+    #[test]
+    fn layout_diff_retired_not_null_sqlite_refused_sad() {
+        let (desired, live) = retired_layouts(field("b", false));
+        let err = layout_diff(&desired, &live, KnownEngines::SQLITE).unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.contains("retired NOT NULL column t.b"), "{msg}");
+    }
+
+    #[test]
+    fn layout_diff_retired_not_null_with_default_sqlite_happy() {
+        let mut b = field("b", false);
+        b.default = Some("''".into());
+        let (desired, live) = retired_layouts(b);
+        let diff = layout_diff(&desired, &live, KnownEngines::SQLITE).unwrap();
+        assert_eq!(diff, LayoutDiff::default());
+    }
+
+    #[test]
+    fn layout_diff_unlisted_orphan_refused_with_retired_sad() {
+        let (mut desired, live) = retired_layouts(field("b", true));
+        desired.retired = vec!["c".into()];
+        let err = layout_diff(&desired, &live, KnownEngines::POSTGRES).unwrap_err();
         assert!(err.to_string().contains("refuses drop"));
     }
 
@@ -237,12 +324,14 @@ mod tests {
         let desired = StorageLayout {
             table: "t".into(),
             fields: vec![field("id", false), field("name", true)],
+            retired: Vec::new(),
         };
         let mut live_name = field("name", false);
         live_name.nullable = false;
         let live = StorageLayout {
             table: "t".into(),
             fields: vec![field("id", false), live_name],
+            retired: Vec::new(),
         };
         let diff = layout_diff(&desired, &live, KnownEngines::POSTGRES).unwrap();
         assert_eq!(
@@ -258,12 +347,14 @@ mod tests {
         let desired = StorageLayout {
             table: "t".into(),
             fields: vec![field("id", false), field("name", true)],
+            retired: Vec::new(),
         };
         let mut live_name = field("name", false);
         live_name.nullable = false;
         let live = StorageLayout {
             table: "t".into(),
             fields: vec![field("id", false), live_name],
+            retired: Vec::new(),
         };
         let err = layout_diff(&desired, &live, KnownEngines::SQLITE).unwrap_err();
         assert!(err.to_string().contains("nullability"));
@@ -286,6 +377,7 @@ mod tests {
                     record_table: None,
                 },
             ],
+            retired: Vec::new(),
         };
         let live = StorageLayout {
             table: "t".into(),
@@ -302,6 +394,7 @@ mod tests {
                     record_table: None,
                 },
             ],
+            retired: Vec::new(),
         };
         let err = layout_diff(&desired, &live, KnownEngines::SQLITE).unwrap_err();
         assert!(

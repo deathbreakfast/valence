@@ -41,6 +41,7 @@ async fn sqlite_version_stamp_skips_second_sync() {
     let layout = StorageLayout {
         table: "ver_stamp_demo".into(),
         fields: vec![id_field(), string_field("name", true)],
+        retired: Vec::new(),
     };
     backend.ensure_typed_table(&layout).await.expect("ensure");
     backend
@@ -71,6 +72,7 @@ async fn sqlite_bump_adds_column_via_sync() {
     let layout_v1 = StorageLayout {
         table: "ver_bump_demo".into(),
         fields: vec![id_field(), string_field("name", true)],
+        retired: Vec::new(),
     };
     backend
         .ensure_typed_table(&layout_v1)
@@ -203,6 +205,7 @@ async fn registry_version_gate_adds_missing_column() {
         .ensure_typed_table(&StorageLayout {
             table: table.into(),
             fields: vec![id_field()],
+            retired: Vec::new(),
         })
         .await
         .expect("id-only ensure");
@@ -236,12 +239,14 @@ async fn sqlite_nullability_change_refused_on_sync() {
     let live = StorageLayout {
         table: "ver_null_refuse".into(),
         fields: vec![id_field(), string_field("name", false)],
+        retired: Vec::new(),
     };
     backend.ensure_typed_table(&live).await.expect("ensure");
 
     let desired = StorageLayout {
         table: "ver_null_refuse".into(),
         fields: vec![id_field(), string_field("name", true)],
+        retired: Vec::new(),
     };
     let err = backend
         .sync_typed_table(&desired)
@@ -274,6 +279,7 @@ async fn registry_write_missing_column_refuses() {
         .ensure_typed_table(&StorageLayout {
             table: table.into(),
             fields: vec![id_field()],
+            retired: Vec::new(),
         })
         .await
         .expect("id-only");

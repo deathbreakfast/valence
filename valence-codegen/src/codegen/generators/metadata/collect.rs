@@ -30,6 +30,7 @@ pub(super) struct SchemaMetadataPieces {
     pub owner_lit: LitStr,
     pub policies_code: TokenStream,
     pub trait_names_code: TokenStream,
+    pub retired_fields_code: TokenStream,
     pub side_effects_code: TokenStream,
     pub iters_code: TokenStream,
     pub ttl_code: TokenStream,
@@ -99,6 +100,7 @@ pub(super) fn collect_schema_metadata_pieces(schema: &SchemaContext) -> SchemaMe
     let policies_code = generate_policies_code(schema.policies.as_ref());
 
     let trait_names_code = string_names_to_vec_code(&schema.traits);
+    let retired_fields_code = string_names_to_vec_code(&schema.schema.retired_fields);
     let side_effects_code = string_names_to_vec_code(&schema.side_effects);
     let iters_code = string_names_to_vec_code(&schema.iters);
     let composite_key_code = string_names_to_vec_code(&schema.composite_key);
@@ -156,6 +158,7 @@ pub(super) fn collect_schema_metadata_pieces(schema: &SchemaContext) -> SchemaMe
         owner_lit,
         policies_code,
         trait_names_code,
+        retired_fields_code,
         side_effects_code,
         iters_code,
         ttl_code,

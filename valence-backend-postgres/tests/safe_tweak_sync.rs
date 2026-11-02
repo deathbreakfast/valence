@@ -67,6 +67,7 @@ async fn postgres_safe_tweak_set_nullable_and_default() {
                 record_table: None,
             },
         ],
+        retired: Vec::new(),
     };
     backend.ensure_typed_table(&v1).await.expect("ensure v1");
     backend
@@ -92,6 +93,7 @@ async fn postgres_safe_tweak_set_nullable_and_default() {
                 record_table: None,
             },
         ],
+        retired: Vec::new(),
     };
     backend.sync_typed_table(&v2).await.expect("safe tweaks");
     backend

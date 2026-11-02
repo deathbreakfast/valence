@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `retired_fields: ["old"]` in `valence_schema!` (and `Schema::retired_fields`). A product
+  can now remove a field whose column still exists: SQLite and Postgres boot sync keeps the
+  column instead of refusing to start, typed reads leave it out, and new rows leave it NULL.
+  A `NOT NULL` retired column without a default is relaxed on Postgres and refused on
+  SQLite. Columns that are missing from the schema and not listed still fail sync as
+  before. `Schema` gains `retired_fields` and `StorageLayout` gains `retired`, so code that
+  builds either with a struct literal must add the field (`Vec::new()`).
+
 - `Actor::is_service_user()` and `Actor::service_name()`. `RejectExternalSystemActor` is
   renamed to `RejectExternalPrivilegedActor` (old name kept as a deprecated alias).
   Behavior change: the `AUTHENTICATED` privacy rule now allows `Actor::ServiceUser`

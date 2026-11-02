@@ -330,6 +330,7 @@ pub async fn define_unique_index_sqlite(
                     record_table: None,
                 },
             ],
+            retired: Vec::new(),
         };
         ensure_layout_for_write_sqlite(pool, &layout, ensured).await?;
     }
@@ -377,6 +378,7 @@ pub async fn apply_ttl_policy_sqlite(
                     record_table: None,
                 },
             ],
+            retired: Vec::new(),
         };
         ensure_layout_for_write_sqlite(pool, &layout, ensured).await?;
     }

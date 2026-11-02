@@ -59,6 +59,7 @@ pub fn lower_parsed_schema(parsed: &ParsedSchema) -> Schema {
         iters: parsed.iters.clone(),
         composite_key: parsed.composite_key.clone(),
         traits: parsed.traits.clone(),
+        retired_fields: parsed.retired_fields.clone(),
         ttl: parsed.ttl.as_ref().map(lower_ttl),
         ownership: parsed.ownership.as_ref().map(lower_ownership),
         meta: SchemaMeta {

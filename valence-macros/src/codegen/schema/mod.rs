@@ -94,6 +94,7 @@ then `database: crate::MY_DB`.",
     let iters_code = string_vec_tokens(&parsed.iters);
     let composite_key_code = string_vec_tokens(&parsed.composite_key);
     let traits_code = string_vec_tokens(&parsed.traits);
+    let retired_fields_code = string_vec_tokens(&parsed.retired_fields);
 
     let ownership_code = match &parsed.ownership {
         None => quote! { None },
@@ -134,6 +135,7 @@ then `database: crate::MY_DB`.",
             iters: #iters_code,
             composite_key: #composite_key_code,
             traits: #traits_code,
+            retired_fields: #retired_fields_code,
             ttl: #ttl_code,
             ownership: #ownership_code,
             meta: valence::SchemaMeta {

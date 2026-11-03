@@ -256,6 +256,7 @@ impl DatabaseBackend for MongoBackend {
         BackendCapabilities {
             supports_merge: true,
             supports_graph_edges: true,
+            supports_transactions: false,
             telemetry_label: "mongodb",
         }
     }

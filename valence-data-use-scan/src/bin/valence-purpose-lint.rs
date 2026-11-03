@@ -2,9 +2,10 @@
 //!
 //! For contributors rewriting purposes. A hit is a `use_!` site whose purpose
 //! carries `BAN_TEMPLATE` (a migration template sentence) or `HEDGE` ("not
-//! necessarily", "unless that feature"). To fix one, follow the result to its
-//! consumer and say what data is read or written, why, and which product
-//! feature serves it. Other gaps, such as `TOO_THIN`, show only in `--csv`.
+//! necessarily", "unless that feature", "might be used", "where
+//! applicable"). To fix one, follow the result to its consumer and say what
+//! data is read or written, why, and which product feature serves it. Other
+//! gaps, such as `TOO_THIN`, show only in `--csv`.
 //!
 //! Exit codes: 0 on success, even with hits (inventory, not a gate); 1 if any
 //! file could not be read or parsed; 2 on a usage error or an unreadable root.

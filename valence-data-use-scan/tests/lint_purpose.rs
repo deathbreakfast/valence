@@ -36,6 +36,8 @@ fn full_hedge_wordings_are_flagged() {
         "The value is not necessarily displayed on a page unless that feature's UI shows it, so the operator sees the plan name and the invoice total.",
         "The value is not necessarily displayed on a page unless that feature\u{2019}s UI shows it, so the operator sees the plan name and the invoice total.",
         "The value is not **necessarily** shown, so the operator sees the plan name and the invoice total on the console.",
+        "We load the plan name, which might be used on the invoice page, so the operator sees the plan name and the invoice total.",
+        "We load the invoice total, where **applicable**, so the operator sees the plan name and the invoice total on the console.",
     ] {
         assert!(
             lint_purpose(p, PurposeTier::S1).contains(&GapCode::Hedge),
@@ -63,6 +65,7 @@ fn specific_purposes_pass() {
     for p in [
         "When an operator opens the **Applications** page, we **load each application's name, image and desired instance count** so the table can list them. Only operators with access to that console see this list, and reconcile reads the same rows to start containers.",
         "When a user **changes their display name**, we **save the new name** so it appears in the page header and in the member list on their next visit. Other members of the workspace see it; it is not sent anywhere else.",
+        "When an operator opens the results page, we **list the sealed ballots** to count the votes once results may be shown, and only totals leave this call.",
         "When you **cancel a pending invite**, we **delete the invite row** unless the invitee already accepted it, so the link stops working. The invitee never needs to be contacted and nothing is necessarily kept.",
     ] {
         assert!(

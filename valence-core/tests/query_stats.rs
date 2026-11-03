@@ -200,7 +200,7 @@ async fn query_stats_all_hidden_window_sad() {
     let v = seed("qs_all_hidden").await;
     // r05..r07 belong to bob.
     let (rows, fetched) = run(&v, "qs_all_hidden", 5, 3).await;
-    assert!(rows.is_empty());
+    assert_eq!(rows.len(), 0);
     assert_eq!(fetched, 3);
 }
 

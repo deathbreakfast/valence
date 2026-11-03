@@ -39,6 +39,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `valence_codegen::build()` and `generate_models` now return an error when a schema or
+  trait file fails codegen, naming the file. They used to print a `cargo:warning` (which
+  Cargo hides for git dependencies) and skip the model, so consumers only saw an
+  unresolved import.
+
 - The document-row filter shared by the mem, IndraDB, Redis, MongoDB and hybrid backends
   flattened `(a = $x) AND (b = $y)` into one `OR`. A query filtering two record fields at
   once (a team and a user, say) returned every row matching either field, so a lookup for a

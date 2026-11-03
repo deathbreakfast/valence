@@ -74,7 +74,8 @@ impl Default for BuildOptions<'static> {
 ///
 /// # Errors
 ///
-/// Returns an error when env vars, schema paths, or codegen steps fail.
+/// Returns an error when env vars or schema paths are bad, or a schema or trait file fails
+/// codegen. Return it from `build.rs` (or `.expect` it) so the build fails with the message.
 pub fn build() -> anyhow::Result<()> {
     build_with(BuildOptions::default())
 }
@@ -95,7 +96,8 @@ pub fn build() -> anyhow::Result<()> {
 ///
 /// # Errors
 ///
-/// Returns an error when env vars, schema paths, or codegen steps fail.
+/// Returns an error when env vars or schema paths are bad, or a schema or trait file fails
+/// codegen. Return it from `build.rs` (or `.expect` it) so the build fails with the message.
 pub fn build_with(options: BuildOptions<'_>) -> anyhow::Result<()> {
     let manifest_dir = match options.manifest_dir {
         Some(path) => path,
@@ -145,7 +147,8 @@ pub struct CodegenConfig<'a> {
 ///
 /// # Errors
 ///
-/// Returns an error when the schemas directory is missing or generation/write fails.
+/// Returns an error when the schemas directory is missing, a schema or trait file fails
+/// codegen (the message names the file), or the write fails.
 pub fn generate_models(config: &CodegenConfig<'_>) -> anyhow::Result<()> {
     validate_schemas_dir(&config.schemas_dir)?;
 
@@ -155,7 +158,7 @@ pub fn generate_models(config: &CodegenConfig<'_>) -> anyhow::Result<()> {
 
     // Pass 2: collect + generate schema code (with trait context)
     let schema_files = collect_files_with_suffix(&config.schemas_dir, config.file_suffix)?;
-    let generated_code = build_generated_code(&schema_files, &trait_files, &trait_defs);
+    let generated_code = build_generated_code(&schema_files, &trait_files, &trait_defs)?;
 
     // Write
     write_generated_code(&config.out_dir, &generated_code)
@@ -236,7 +239,7 @@ fn build_generated_code(
     schema_files: &[PathBuf],
     trait_files: &[PathBuf],
     trait_defs: &HashMap<String, ParsedTraitDef>,
-) -> String {
+) -> anyhow::Result<String> {
     let mut generated_code = String::new();
 
     // Header
@@ -251,21 +254,11 @@ fn build_generated_code(
 
     // Emit trait definitions first (types must exist before schema impls)
     for path in trait_files {
-        match codegen::generate_from_trait_file(path) {
-            Ok(code) => {
-                generated_code.push_str(&code);
-                generated_code.push_str("\n\n");
-            }
-            Err(e) => {
-                #[allow(clippy::print_stderr)] // cargo build-script protocol
-                {
-                    eprintln!(
-                        "cargo:warning=Failed to generate trait code for {}: {e}",
-                        path.display()
-                    );
-                }
-            }
-        }
+        let code = codegen::generate_from_trait_file(path).map_err(|e| {
+            anyhow::anyhow!("Failed to generate trait code for {}: {e}", path.display())
+        })?;
+        generated_code.push_str(&code);
+        generated_code.push_str("\n\n");
     }
 
     // Emit schema code
@@ -275,24 +268,13 @@ fn build_generated_code(
             println!("cargo:rerun-if-changed={}", path.display());
         }
 
-        match codegen::generate_from_schema_file(path, trait_defs) {
-            Ok(code) => {
-                generated_code.push_str(&code);
-                generated_code.push_str("\n\n");
-            }
-            Err(e) => {
-                #[allow(clippy::print_stderr)] // cargo build-script protocol
-                {
-                    eprintln!(
-                        "cargo:warning=Failed to generate code for {}: {e}",
-                        path.display()
-                    );
-                }
-            }
-        }
+        let code = codegen::generate_from_schema_file(path, trait_defs)
+            .map_err(|e| anyhow::anyhow!("Failed to generate code for {}: {e}", path.display()))?;
+        generated_code.push_str(&code);
+        generated_code.push_str("\n\n");
     }
 
-    generated_code
+    Ok(generated_code)
 }
 
 /// Write `generated_models.rs` into the configured output directory (typically `OUT_DIR`).
@@ -423,6 +405,51 @@ valence_schema! {
         .expect_err("missing schemas dir should fail");
 
         assert!(format!("{err:#}").contains("Schemas directory does not exist"));
+    }
+
+    #[test]
+    fn build_with_fails_on_invalid_schema() {
+        let root = TempRoot::new("invalid-schema");
+        let schemas = root.path().join("schemas");
+        fs::create_dir_all(&schemas).expect("schemas dir");
+        fs::write(
+            schemas.join("broken_valence_schema.rs"),
+            "valence_schema! { Broken { table: \"broken\", } }",
+        )
+        .expect("schema");
+        let out = root.path().join("out");
+        fs::create_dir_all(&out).expect("out dir");
+
+        let err = build_with(BuildOptions {
+            manifest_dir: Some(root.path().to_path_buf()),
+            out_dir: Some(out.clone()),
+            ..BuildOptions::default()
+        })
+        .expect_err("invalid schema should fail the build");
+
+        let msg = format!("{err:#}");
+        assert!(msg.contains("broken_valence_schema.rs"), "{msg}");
+        assert!(!out.join("generated_models.rs").exists());
+    }
+
+    #[test]
+    fn build_with_fails_on_invalid_trait() {
+        let root = TempRoot::new("invalid-trait");
+        let schemas = root.path().join("schemas");
+        fs::create_dir_all(&schemas).expect("schemas dir");
+        fs::write(schemas.join("broken_valence_trait.rs"), "not a trait").expect("trait");
+        let out = root.path().join("out");
+        fs::create_dir_all(&out).expect("out dir");
+
+        let err = build_with(BuildOptions {
+            manifest_dir: Some(root.path().to_path_buf()),
+            out_dir: Some(out.clone()),
+            ..BuildOptions::default()
+        })
+        .expect_err("invalid trait should fail the build");
+
+        assert!(format!("{err:#}").contains("broken_valence_trait.rs"));
+        assert!(!out.join("generated_models.rs").exists());
     }
 
     #[test]

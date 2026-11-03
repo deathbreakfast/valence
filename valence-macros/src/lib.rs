@@ -87,7 +87,7 @@ pub fn use_(input: TokenStream) -> TokenStream {
 ///   `.serde_error(JsonAsSerdeError::Panic|Error)` (default `Error`)
 /// - `FieldType::Record("table")` — `RecordId`; optional `.target("path::Model")` for hops
 /// - `FieldType::Currency` — `valence::Currency` (`CurrencyCode` + `amount_minor`)
-/// - `FieldType::DateTime` — Model API `chrono::DateTime<Utc>`; storage is **UTC unix seconds**
+/// - `FieldType::DateTime` — Model API `chrono::DateTime<Utc>`; storage is **UTC unix milliseconds**; legacy seconds still read
 ///
 /// Connections accept `model:` or `target:` (aliases) for an explicit model path.
 ///
@@ -161,7 +161,7 @@ pub fn valence_schema(input: TokenStream) -> TokenStream {
 ///
 /// | Attribute | Required | Description |
 /// |-----------|----------|-------------|
-/// | `r#type` (or `type`) | yes | `FieldType` expression. Supported variants include `String`, `Integer`, `Boolean`, `DateTime` (Model API `DateTime<Utc>`; storage is **UTC unix seconds**), `Json` (`serde_json::Value`), `JsonAs("path::Type")` (typed JSON; optional `.serde_error(JsonAsSerdeError::Panic\|Error)`, default `Error`), `Record("table")` (optional `.target("path::Model")` for connection hops), `Currency` (`valence::Currency` / ISO-4217 `CurrencyCode`), `Enum` / `ExternalEnum`. |
+/// | `r#type` (or `type`) | yes | `FieldType` expression. Supported variants include `String`, `Integer`, `Boolean`, `DateTime` (Model API `DateTime<Utc>`; storage is **UTC unix milliseconds**; legacy seconds still read), `Json` (`serde_json::Value`), `JsonAs("path::Type")` (typed JSON; optional `.serde_error(JsonAsSerdeError::Panic\|Error)`, default `Error`), `Record("table")` (optional `.target("path::Model")` for connection hops), `Currency` (`valence::Currency` / ISO-4217 `CurrencyCode`), `Enum` / `ExternalEnum`. |
 /// | `required` | no | Whether the field must be present (default `false`) |
 /// | `primary_key` | no | Whether the field is a primary key (default `false`) |
 /// | `unique` | no | Whether values must be unique (default `false`) |

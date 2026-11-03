@@ -1,4 +1,4 @@
-//! Backend round-trips for JsonAs, Currency, and DateTime unix-seconds shapes.
+//! Backend round-trips for JsonAs, Currency, and DateTime unix-millisecond shapes.
 
 #![cfg(test)]
 #![allow(clippy::unwrap_used, clippy::expect_used)]
@@ -54,7 +54,7 @@ async fn mem_round_trip_json_as_currency_datetime() {
     let backend: Arc<dyn DatabaseBackend> = Arc::new(InMemoryBackend::new());
     backend.ensure_schemaless_table("typed_row").await.unwrap();
 
-    let at = Utc.timestamp_opt(1_700_000_000, 0).unwrap();
+    let at = Utc.timestamp_millis_opt(1_700_000_000_123).unwrap();
     let row = TypedRow {
         id: "r1".into(),
         payload: Payload {
@@ -69,7 +69,7 @@ async fn mem_round_trip_json_as_currency_datetime() {
         .await
         .unwrap();
 
-    assert_eq!(created["at"], serde_json::json!(1_700_000_000i64));
+    assert_eq!(created["at"], serde_json::json!(1_700_000_000_123i64));
     assert_eq!(
         created["price"],
         serde_json::json!({ "code": "USD", "amount_minor": 12345 })

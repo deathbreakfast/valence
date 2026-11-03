@@ -34,6 +34,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   without it still write raw, and deletion's edge cleanup stays unchecked. The attribute on
   any other cardinality is a compile error. `SchemaConnection` gains `edge_policy`, so code
   that builds it with a struct literal must add the field (`None`).
+- `DatabaseBackend::apply_batch` and `Valence::apply_batch` apply several writes (`WriteOp`:
+  create, update, merge, upsert, delete) as one all-or-nothing unit on a single backend.
+  `BackendCapabilities` gains `supports_transactions`; the in-memory backend implements it and
+  every other adapter keeps the default "unsupported" error. Batches that span backends are
+  rejected. The batch is a raw write: it skips model privacy policies and side effects.
 - `retired_fields: ["old"]` in `valence_schema!` (and `Schema::retired_fields`). A product
   can now remove a field whose column still exists: SQLite and Postgres boot sync keeps the
   column instead of refusing to start, typed reads leave it out, and new rows leave it NULL.

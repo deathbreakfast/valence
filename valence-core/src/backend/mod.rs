@@ -1,6 +1,7 @@
 //! Pluggable database backends for Valence.
 
 mod port;
+mod transfer;
 mod used;
 
 #[cfg(feature = "compiler-hybrid")]
@@ -17,6 +18,7 @@ mod sql_compiler;
 mod surreal_compiler;
 
 pub use port::{BackendCapabilities, DatabaseBackend, EdgeRow};
+pub use transfer::{TableTransfer, TransferCheckpoint, TransferPhase, TransferReport};
 pub use used::{
     create_record, delete_record, get_record, merge_record, update_record, upsert_record,
 };

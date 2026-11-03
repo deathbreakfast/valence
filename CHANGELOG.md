@@ -55,6 +55,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   out of its source. Code that builds a `Schema` with a struct literal must add the field
   (`None`). Valence only records the opt-in; Chronon registration and the export executor
   live in other crates.
+- `TableTransfer` (in `valence_core::backend`) copies a set of tables, then the edges that
+  start in them, from one backend to another: SQLite to Postgres is the case it was built
+  for. Row ids, history rows and edge identity come across unchanged, along with each
+  table's layout and schema version stamp. It pages through `scan_table` / `scan_edges` and
+  writes with `upsert_record` / `relate_edge`, so a run that fails partway leaves a
+  `TransferCheckpoint` to resume from. `EdgeRow` now derives `Serialize` / `Deserialize`.
+  `valence-testkit` gains `run_transfer_contract` and `run_transfer_resume_contract`.
 - `retired_fields: ["old"]` in `valence_schema!` (and `Schema::retired_fields`). A product
   can now remove a field whose column still exists: SQLite and Postgres boot sync keeps the
   column instead of refusing to start, typed reads leave it out, and new rows leave it NULL.

@@ -453,3 +453,63 @@ fn retired_fields_invalid_ident_compile_error_sad() {
     let err = retired_err(r#"["not a name"]"#);
     assert!(err.contains("not a valid field identifier"), "{err}");
 }
+
+fn edge_policy_schema(connection: &str) -> String {
+    format!(
+        r#"
+            Doc {{
+                repository: "https://github.com/unified-field-dev/valence",
+                table: "doc",
+                version: "0.1.0",
+                fields: [
+                    id: {{ r#type: FieldType::String, primary_key: true, required: true }},
+                    owner: {{ r#type: FieldType::Record("user"), required: true }}
+                ],
+                connections: [ {connection} ]
+            }}
+        "#
+    )
+}
+
+fn edge_policy_err(connection: &str) -> String {
+    let schema = syn::parse_str::<SchemaSpec>(&edge_policy_schema(connection)).expect("parse");
+    match schema.to_schema() {
+        Ok(_) => panic!("expected edge_policy error for {connection}"),
+        Err(e) => e.to_string(),
+    }
+}
+
+#[test]
+fn edge_policy_parses_on_many_to_many_happy() {
+    let schema = syn::parse_str::<SchemaSpec>(&edge_policy_schema(
+        r#"labels: { table: "label", cardinality: ManyToMany, edge_table: "doc_label",
+                     edge_policy: SourceUpdateTargetRead, on_delete: Cascade }"#,
+    ))
+    .expect("parse");
+    let parsed = schema.to_schema().expect("to_schema");
+    assert_eq!(
+        parsed.connections[0].edge_policy.as_deref(),
+        Some("SourceUpdateTargetRead")
+    );
+}
+
+#[test]
+fn edge_policy_on_has_one_compile_error_sad() {
+    let err = edge_policy_err(
+        r#"owner: { table: "user", edge_policy: SourceUpdateTargetRead, on_delete: Cascade }"#,
+    );
+    assert!(
+        err.contains("only applies to cardinality ManyToMany"),
+        "{err}"
+    );
+    assert!(err.contains("HasOne"), "{err}");
+}
+
+#[test]
+fn edge_policy_unknown_value_compile_error_sad() {
+    let err = edge_policy_err(
+        r#"labels: { table: "label", cardinality: ManyToMany, edge_table: "doc_label",
+                     edge_policy: AnyoneMayLink, on_delete: Cascade }"#,
+    );
+    assert!(err.contains("unknown edge_policy `AnyoneMayLink`"), "{err}");
+}

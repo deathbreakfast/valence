@@ -67,6 +67,7 @@ fn public_cascade_root() -> &'static SchemaMetadata {
             model_path: None,
             reverse_field: Some("parent_id".into()),
             edge_table: None,
+            edge_policy: None,
             target_trait: None,
         }],
         side_effects: Vec::new(),

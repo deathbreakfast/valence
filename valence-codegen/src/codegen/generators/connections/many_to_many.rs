@@ -29,7 +29,7 @@ pub(super) fn push_many_to_many_concrete_methods(
         ) -> valence::Result<Vec<#target_type>> {
             let from_rid = self.id().ok_or_else(|| valence::Error::Validation("Record has no id".into()))?;
             let ids = valence
-                .get_many_to_many_target_record_ids(&from_rid, #edge_table_lit, purpose)
+                .get_many_to_many_target_record_ids(from_rid, #edge_table_lit, purpose)
                 .await?;
             let mut results = Vec::new();
             for out_rid in ids {
@@ -61,7 +61,7 @@ pub(super) fn push_many_to_many_concrete_methods(
             let from_rid = self.id().ok_or_else(|| valence::Error::Validation("Record has no id".into()))?;
             let to_rid = target.id().ok_or_else(|| valence::Error::Validation("Target has no id".into()))?;
             valence
-                .relate_edge(#edge_table_lit, &from_rid, &to_rid, purpose)
+                .relate_edge(#edge_table_lit, from_rid, to_rid, purpose)
                 .await
         }
 
@@ -75,7 +75,7 @@ pub(super) fn push_many_to_many_concrete_methods(
             let from_rid = self.id().ok_or_else(|| valence::Error::Validation("Record has no id".into()))?;
             let to_rid = target.id().ok_or_else(|| valence::Error::Validation("Target has no id".into()))?;
             valence
-                .unrelate_edge(#edge_table_lit, &from_rid, &to_rid, purpose)
+                .unrelate_edge(#edge_table_lit, from_rid, to_rid, purpose)
                 .await
         }
     });
@@ -108,7 +108,7 @@ pub(super) fn push_many_to_many_trait_target_methods(
                 .map(str::to_string)
                 .collect::<std::collections::HashSet<_>>();
             let ids = valence
-                .get_many_to_many_target_record_ids(&from_rid, #edge_table_lit, purpose)
+                .get_many_to_many_target_record_ids(from_rid, #edge_table_lit, purpose)
                 .await?;
             Ok(ids
                 .into_iter()
@@ -140,7 +140,7 @@ pub(super) fn push_many_to_many_trait_target_methods(
                 )));
             }
             valence
-                .relate_edge(#edge_table_lit, &from_rid, target, purpose)
+                .relate_edge(#edge_table_lit, from_rid, target, purpose)
                 .await
         }
 
@@ -153,7 +153,7 @@ pub(super) fn push_many_to_many_trait_target_methods(
         ) -> valence::Result<()> {
             let from_rid = self.id().ok_or_else(|| valence::Error::Validation("Record has no id".into()))?;
             valence
-                .unrelate_edge(#edge_table_lit, &from_rid, target, purpose)
+                .unrelate_edge(#edge_table_lit, from_rid, target, purpose)
                 .await
         }
     });

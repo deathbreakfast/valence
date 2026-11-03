@@ -174,4 +174,102 @@ mod tests {
         };
         assert_eq!(ids(&rows), ids(&awaited));
     }
+
+    /// Raw-seed one `edge_doc` owned by alice and an `edge_label` each for alice and bob.
+    async fn seed_edge_rows() -> std::sync::Arc<dyn valence::DatabaseBackend> {
+        use valence::DatabaseBackend;
+
+        let backend: Arc<dyn DatabaseBackend> = Arc::new(InMemoryBackend::new());
+        backend
+            .create_record(
+                "edge_doc",
+                serde_json::json!({"id": {"table": "edge_doc", "id": "d1"}, "user": "alice"}),
+            )
+            .await
+            .unwrap();
+        for (id, owner) in [("mine", "alice"), ("bobs", "bob")] {
+            backend
+                .create_record(
+                    "edge_label",
+                    serde_json::json!({"id": {"table": "edge_label", "id": id}, "user": owner}),
+                )
+                .await
+                .unwrap();
+        }
+        backend
+    }
+
+    fn edge_valence(backend: &Arc<dyn valence::DatabaseBackend>, user_id: &str) -> Valence {
+        Valence::builder()
+            .add_backend("default", Arc::clone(backend))
+            .with_actor(Actor::User {
+                user_id: user_id.into(),
+            })
+            .build()
+            .expect("build")
+    }
+
+    #[tokio::test]
+    async fn edge_policy_generated_relate_to_checked_happy() {
+        use super::{EdgeDoc, EdgeLabel};
+
+        let backend = seed_edge_rows().await;
+        let alice = edge_valence(&backend, "alice");
+        let purpose = valence::use_!(
+            r"When the **product-model-host** suite links sample labels, we **load the doc and label** so the generated relate and unrelate methods can be checked against edge privacy. Developers running that example suite use this result."
+        );
+
+        let doc = EdgeDoc::get("d1", &alice, purpose)
+            .await
+            .unwrap()
+            .expect("doc");
+        let label = EdgeLabel::get("mine", &alice, purpose)
+            .await
+            .unwrap()
+            .expect("label");
+        doc.relate_to_label(&label, &alice, purpose)
+            .await
+            .expect("owner links a label they can read");
+        let linked = doc.get_labels(&alice, purpose).await.unwrap();
+        assert_eq!(linked.len(), 1);
+        assert_eq!(linked[0].id().expect("id").id(), "mine");
+
+        doc.unrelate_from_label(&label, &alice, purpose)
+            .await
+            .expect("owner unlinks");
+        assert_eq!(doc.get_labels(&alice, purpose).await.unwrap().len(), 0);
+    }
+
+    #[tokio::test]
+    async fn edge_policy_generated_relate_to_checked_sad() {
+        use valence::DatabaseBackend;
+
+        use super::{EdgeDoc, EdgeLabel};
+
+        let backend = seed_edge_rows().await;
+        let bob = edge_valence(&backend, "bob");
+        let purpose = valence::use_!(
+            r"When the **product-model-host** suite links sample labels, we **load the doc and label** so the generated relate and unrelate methods can be checked against edge privacy. Developers running that example suite use this result."
+        );
+
+        // Bob can read alice's doc and his own label, but can't update the doc.
+        let doc = EdgeDoc::get("d1", &bob, purpose)
+            .await
+            .unwrap()
+            .expect("doc");
+        let label = EdgeLabel::get("bobs", &bob, purpose)
+            .await
+            .unwrap()
+            .expect("label");
+        let err = doc
+            .relate_to_label(&label, &bob, purpose)
+            .await
+            .unwrap_err();
+        assert!(matches!(err, valence::Error::Privacy(_)), "{err:?}");
+        let targets = backend
+            .get_edge_targets(&RecordId::new("edge_doc", "d1"), "edge_doc_label")
+            .await
+            .unwrap();
+        assert_eq!(targets, Vec::<RecordId>::new());
+    }
 }

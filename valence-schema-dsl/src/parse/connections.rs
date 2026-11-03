@@ -15,6 +15,8 @@ pub struct ParsedConnection {
     pub model: Option<String>,
     pub reverse_field: Option<String>,
     pub edge_table: Option<String>,
+    /// Built-in privacy rule for edge writes (`SourceUpdateTargetRead`); ManyToMany only.
+    pub edge_policy: Option<String>,
     pub target_trait: Option<String>,
 }
 
@@ -42,6 +44,7 @@ pub enum ConnectionAttr {
     Model(LitStr),
     ReverseField(LitStr),
     EdgeTable(LitStr),
+    EdgePolicy(Ident),
     TargetTrait(LitStr),
 }
 
@@ -83,6 +86,7 @@ impl Parse for ConnectionAttr {
             "model" | "target" => Ok(ConnectionAttr::Model(input.parse()?)),
             "reverse_field" => Ok(ConnectionAttr::ReverseField(input.parse()?)),
             "edge_table" => Ok(ConnectionAttr::EdgeTable(input.parse()?)),
+            "edge_policy" => Ok(ConnectionAttr::EdgePolicy(input.parse()?)),
             "target_trait" => Ok(ConnectionAttr::TargetTrait(input.parse()?)),
             _ => Err(syn::Error::new(
                 key.span(),
@@ -104,6 +108,7 @@ pub fn parse_connections(config: &ConnectionsConfig) -> Result<Vec<ParsedConnect
         let mut model = None;
         let mut reverse_field = None;
         let mut edge_table = None;
+        let mut edge_policy: Option<Ident> = None;
         let mut target_trait = None;
 
         for attr in &conn.attrs {
@@ -115,6 +120,7 @@ pub fn parse_connections(config: &ConnectionsConfig) -> Result<Vec<ParsedConnect
                 ConnectionAttr::Model(v) => model = Some(v.value()),
                 ConnectionAttr::ReverseField(v) => reverse_field = Some(v.value()),
                 ConnectionAttr::EdgeTable(v) => edge_table = Some(v.value()),
+                ConnectionAttr::EdgePolicy(v) => edge_policy = Some(v.clone()),
                 ConnectionAttr::TargetTrait(v) => target_trait = Some(v.value()),
             }
         }
@@ -141,6 +147,27 @@ pub fn parse_connections(config: &ConnectionsConfig) -> Result<Vec<ParsedConnect
             )
         })?;
 
+        if let Some(policy) = &edge_policy {
+            if policy != "SourceUpdateTargetRead" {
+                return Err(syn::Error::new(
+                    policy.span(),
+                    format!(
+                        "Connection '{}' has unknown edge_policy `{policy}` (expected SourceUpdateTargetRead)",
+                        conn.name
+                    ),
+                ));
+            }
+            if cardinality != "ManyToMany" {
+                return Err(syn::Error::new(
+                    policy.span(),
+                    format!(
+                        "Connection '{}' sets edge_policy, which only applies to cardinality ManyToMany (found {cardinality})",
+                        conn.name
+                    ),
+                ));
+            }
+        }
+
         out.push(ParsedConnection {
             name: conn.name.to_string(),
             table,
@@ -150,6 +177,7 @@ pub fn parse_connections(config: &ConnectionsConfig) -> Result<Vec<ParsedConnect
             model,
             reverse_field,
             edge_table,
+            edge_policy: edge_policy.map(|p| p.to_string()),
             target_trait,
         });
     }

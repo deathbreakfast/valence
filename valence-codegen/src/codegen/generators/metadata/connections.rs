@@ -21,6 +21,7 @@ pub(super) fn schema_connection_tokens(conn: &SchemaConnection) -> TokenStream {
     let model_path_code = optional_string_lit_code(&conn.model_path);
     let reverse_field_code = optional_string_lit_code(&conn.reverse_field);
     let edge_table_code = optional_string_lit_code(&conn.edge_table);
+    let edge_policy_code = optional_string_lit_code(&conn.edge_policy);
     let target_trait_code = optional_string_lit_code(&conn.target_trait);
 
     quote! {
@@ -36,6 +37,7 @@ pub(super) fn schema_connection_tokens(conn: &SchemaConnection) -> TokenStream {
             model_path: #model_path_code,
             reverse_field: #reverse_field_code,
             edge_table: #edge_table_code,
+            edge_policy: #edge_policy_code,
             target_trait: #target_trait_code,
         }
     }

@@ -45,6 +45,7 @@ pub(super) fn connections_tokens(
                     model_path: #model_path_code,
                     reverse_field: None,
                     edge_table: None,
+                    edge_policy: None,
                     target_trait: None,
                 }
             })
@@ -77,6 +78,7 @@ fn parsed_connection_tokens(
     let model_code = optional_string_lit(conn.model.as_ref());
     let reverse_field_code = optional_string_lit(conn.reverse_field.as_ref());
     let edge_table_code = optional_string_lit(conn.edge_table.as_ref());
+    let edge_policy_code = optional_string_lit(conn.edge_policy.as_ref());
     let target_trait_code = optional_string_lit(conn.target_trait.as_ref());
 
     quote! {
@@ -92,6 +94,7 @@ fn parsed_connection_tokens(
             model_path: #model_code,
             reverse_field: #reverse_field_code,
             edge_table: #edge_table_code,
+            edge_policy: #edge_policy_code,
             target_trait: #target_trait_code,
         }
     }

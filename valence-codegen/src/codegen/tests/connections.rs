@@ -376,3 +376,47 @@ valence_schema! {
         result.err()
     );
 }
+
+#[test]
+fn edge_policy_emitted_in_connection_metadata_happy() {
+    let schema = r#"
+use valence::prelude::*;
+
+valence_schema! {
+    TestNote {
+        repository: "https://github.com/unified-field-dev/valence",
+        table: "test_note",
+        version: "0.1.0",
+        description: "Note whose ManyToMany tag edges are privacy-checked",
+
+        fields: [
+            id: { r#type: FieldType::String, primary_key: true, required: true },
+        ],
+        connections: [
+            tags: {
+                table: "test_tag",
+                cardinality: ManyToMany,
+                edge_table: "note_tag",
+                edge_policy: SourceUpdateTargetRead,
+                on_delete: Cascade,
+                model: "crate::generated::TestTag",
+            },
+        ],
+    }
+}
+"#;
+
+    let path = write_temp_schema_file(schema, "edge_policy_schema.rs");
+    let generated = generate_from_schema_file(&path, &HashMap::<String, ParsedTraitDef>::new())
+        .expect("codegen with edge_policy failed");
+    let compact: String = generated.chars().filter(|c| !c.is_whitespace()).collect();
+
+    assert!(
+        compact.contains(r#"edge_policy:Some("SourceUpdateTargetRead".to_string())"#),
+        "Expected edge_policy in SchemaConnection metadata"
+    );
+    assert!(
+        compact.contains(r#".relate_edge("note_tag",from_rid,to_rid,purpose)"#),
+        "Expected relate_to_tag to go through Valence::relate_edge"
+    );
+}

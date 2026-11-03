@@ -18,7 +18,8 @@ use crate::schema::SchemaRegistry;
 ///   cache invalidation, best-effort ownership completion, then queued Delete side effects.
 /// - [`DeletionAction::SetNull`]: `merge_record` with the FK field set to JSON `null`, then
 ///   cache invalidation.
-/// - [`DeletionAction::RemoveEdge`]: `unrelate_edge` between this endpoint and the peer.
+/// - [`DeletionAction::RemoveEdge`]: raw edge delete between this endpoint and the peer,
+///   with no `edge_policy` check: the root row already passed Delete privacy.
 ///
 /// Missing rows / missing edges are treated as success (idempotent).
 ///
@@ -107,30 +108,12 @@ async fn apply_remove_edge(
         .or_else(|_| valence.active_backend())?;
     for to in backend.get_edge_targets(&endpoint, edge_table).await? {
         valence
-            .unrelate_edge(
-                edge_table,
-                &endpoint,
-                &to,
-                crate::data_use::DataUsePurpose::new(
-                    "When Valence **applies a deletion plan**, we **remove outgoing graph edges** for this record so related links do not outlive the deleted row. This step runs only inside the deletion engine.",
-                    file!(),
-                    line!(),
-                ),
-            )
+            .unrelate_edge_unchecked(edge_table, &endpoint, &to)
             .await?;
     }
     for from in backend.get_edge_sources(&endpoint, edge_table).await? {
         valence
-            .unrelate_edge(
-                edge_table,
-                &from,
-                &endpoint,
-                crate::data_use::DataUsePurpose::new(
-                    "When Valence **applies a deletion plan**, we **remove incoming graph edges** for this record so related links do not outlive the deleted row. This step runs only inside the deletion engine.",
-                    file!(),
-                    line!(),
-                ),
-            )
+            .unrelate_edge_unchecked(edge_table, &from, &endpoint)
             .await?;
     }
     Ok(())

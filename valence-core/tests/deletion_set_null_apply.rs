@@ -295,6 +295,7 @@ async fn tm_s9_hasmany_restrict_blocks_compute() {
             model_path: None,
             reverse_field: Some("parent_id".into()),
             edge_table: None,
+            edge_policy: None,
             target_trait: None,
         }],
     );

@@ -50,6 +50,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   out of its source. Code that builds a `Schema` with a struct literal must add the field
   (`None`). Valence only records the opt-in; Chronon registration and the export executor
   live in other crates.
+- The in-memory backend now evaluates ManyToMany semi-joins, so `where_*_has_results` and
+  `where_connection_contains_many_to_many` filter against the backend's own edge store
+  instead of being ignored. A semi-join it cannot cut out of the WHERE clause (inside an `OR`
+  group) returns an error.
 - `retired_fields: ["old"]` in `valence_schema!` (and `Schema::retired_fields`). A product
   can now remove a field whose column still exists: SQLite and Postgres boot sync keeps the
   column instead of refusing to start, typed reads leave it out, and new rows leave it NULL.

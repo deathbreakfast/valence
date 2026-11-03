@@ -16,6 +16,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `ValenceBuilder::extension` and `Valence::extension` give each `Valence` a typed slot for
+  host ports that privacy evaluators consult. A host can keep something like a bot gate on
+  the handle instead of in a process-global, and two runtimes in one process no longer share
+  it. `with_actor` and `with_owner_override` keep the slot.
 - `retired_fields: ["old"]` in `valence_schema!` (and `Schema::retired_fields`). A product
   can now remove a field whose column still exists: SQLite and Postgres boot sync keeps the
   column instead of refusing to start, typed reads leave it out, and new rows leave it NULL.

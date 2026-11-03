@@ -12,6 +12,7 @@ use crate::error::Result;
 use crate::owner_ref::OwnerRef;
 use crate::ports::actor::ActorFactory;
 use crate::ports::endpoints::DatabaseEndpointResolver;
+use crate::ports::extensions::PortExtensions;
 use crate::ports::secrets::SecretProvider;
 use crate::record_id::RecordId;
 use crate::request_cache::RequestPermissionCache;
@@ -30,6 +31,7 @@ pub struct Valence {
     secret_provider: Arc<dyn SecretProvider>,
     actor_factory: Arc<dyn ActorFactory>,
     endpoint_resolver: Arc<dyn DatabaseEndpointResolver>,
+    port_extensions: PortExtensions,
     actor: Actor,
     owner_override: Option<OwnerRef>,
     permission_cache: Option<RequestPermissionCache>,
@@ -82,6 +84,14 @@ impl Valence {
 
     pub fn endpoint_resolver(&self) -> &Arc<dyn DatabaseEndpointResolver> {
         &self.endpoint_resolver
+    }
+
+    /// Host port registered with [`ValenceBuilder::extension`], if any.
+    ///
+    /// Handles made with [`Self::with_actor`] and [`Self::with_owner_override`] share the
+    /// same ports. Meant for [`crate::PolicyEvaluator::evaluate`], which receives this handle.
+    pub fn extension<T: Send + Sync + 'static>(&self) -> Option<Arc<T>> {
+        self.port_extensions.get::<T>()
     }
 
     pub fn actor(&self) -> &Actor {

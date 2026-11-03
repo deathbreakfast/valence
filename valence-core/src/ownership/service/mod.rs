@@ -15,7 +15,7 @@ pub use helpers::{
     RecordOwnershipBundle, SKIP_OWNERSHIP_TABLES,
 };
 
-use std::sync::Arc;
+use std::sync::{Arc, Mutex, PoisonError, Weak};
 
 use crate::backend::DatabaseBackend;
 use crate::error::{Error, Result};
@@ -27,18 +27,20 @@ use helpers::system_valence;
 /// Ownership persistence and transfer helpers.
 pub struct OwnershipService;
 
-/// Ensure ownership lookup indexes exist when the active backend supports them (idempotent).
+/// Fields every ownership filter pins: the pending-deletion check and the owner rollups
+/// both match on model and status before anything else.
+const LOOKUP_INDEX_FIELDS: &[&str] = &["valence_model", "status"];
+
+/// Ensure the ownership lookup index exists on every backend that stores ownership rows
+/// (idempotent).
+///
+/// Ownership reads create the index on first use, so hosts don't need to call this; it is
+/// for a host that wants the index in place before the first request.
 /// # Errors
 ///
-/// Returns an error when the requested operation cannot be completed.
+/// Returns an error when a backend fails to create the index.
 pub async fn ensure_lookup_indexes(v: &Valence) -> Result<()> {
     let sys = system_valence(v);
-    let q = concat!(
-        "DEFINE INDEX IF NOT EXISTS idx_valence_data_ownership_model_status ",
-        "ON TABLE valence_data_ownership COLUMNS valence_model, status"
-    );
-    let compiled = crate::compiled_query::CompiledQuery::new(q.to_string(), vec![]);
-
     let mut backends: Vec<Arc<dyn DatabaseBackend>> = Vec::new();
 
     let mut push_unique = |backend: Arc<dyn DatabaseBackend>| {
@@ -64,11 +66,147 @@ pub async fn ensure_lookup_indexes(v: &Valence) -> Result<()> {
 
     for backend in backends {
         backend
-            .execute_compiled_query(&compiled)
+            .define_index("valence_data_ownership", LOOKUP_INDEX_FIELDS)
             .await
             .map_err(|e| Error::database(e.to_string()))?;
     }
     Ok(())
+}
+
+/// Define the ownership lookup index on `backend` the first time this process uses it for
+/// ownership.
+///
+/// A failure is logged and not retried: ownership queries return the same rows without the
+/// index, they only scan the whole table.
+pub(crate) async fn ensure_lookup_index_once(backend: &Arc<dyn DatabaseBackend>) {
+    static SEEN: Mutex<Vec<Weak<dyn DatabaseBackend>>> = Mutex::new(Vec::new());
+    {
+        let mut seen = SEEN.lock().unwrap_or_else(PoisonError::into_inner);
+        // Drop dead backends first so a new one at a reused address still gets its index.
+        seen.retain(|w| w.strong_count() > 0);
+        if seen
+            .iter()
+            .any(|w| std::ptr::addr_eq(w.as_ptr(), Arc::as_ptr(backend)))
+        {
+            return;
+        }
+        seen.push(Arc::downgrade(backend));
+    }
+    if let Err(e) = backend
+        .define_index("valence_data_ownership", LOOKUP_INDEX_FIELDS)
+        .await
+    {
+        tracing::warn!(
+            engine = backend.engine_id(),
+            error = %e,
+            "valence ownership lookup index not created; ownership queries scan the whole table"
+        );
+    }
+}
+
+#[cfg(test)]
+mod lookup_index_tests {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Arc;
+
+    use async_trait::async_trait;
+
+    use super::ensure_lookup_index_once;
+    use crate::backend::{BackendCapabilities, DatabaseBackend};
+    use crate::compiled_query::CompiledQuery;
+    use crate::error::{Error, Result};
+    use crate::record_id::RecordId;
+
+    /// Counts `define_index` calls; optionally fails them.
+    #[derive(Debug, Default)]
+    struct CountingBackend {
+        defines: AtomicUsize,
+        fail: bool,
+    }
+
+    #[async_trait]
+    impl DatabaseBackend for CountingBackend {
+        fn engine_id(&self) -> &'static str {
+            "counting"
+        }
+        fn capabilities(&self) -> BackendCapabilities {
+            BackendCapabilities::mem()
+        }
+        async fn execute_compiled_query(
+            &self,
+            _: &CompiledQuery,
+        ) -> Result<Vec<serde_json::Value>> {
+            Ok(vec![])
+        }
+        async fn get_record(&self, _: &str, _: &str) -> Result<Option<serde_json::Value>> {
+            Ok(None)
+        }
+        async fn create_record(&self, _: &str, c: serde_json::Value) -> Result<serde_json::Value> {
+            Ok(c)
+        }
+        async fn update_record(
+            &self,
+            _: &str,
+            _: &str,
+            c: serde_json::Value,
+        ) -> Result<serde_json::Value> {
+            Ok(c)
+        }
+        async fn upsert_record(
+            &self,
+            _: &str,
+            _: &str,
+            c: serde_json::Value,
+        ) -> Result<serde_json::Value> {
+            Ok(c)
+        }
+        async fn delete_record(&self, _: &str, _: &str) -> Result<()> {
+            Ok(())
+        }
+        async fn relate_edge(&self, _: &RecordId, _: &str, _: &RecordId) -> Result<()> {
+            Ok(())
+        }
+        async fn unrelate_edge(&self, _: &RecordId, _: &str, _: &RecordId) -> Result<()> {
+            Ok(())
+        }
+        async fn get_edge_targets(&self, _: &RecordId, _: &str) -> Result<Vec<RecordId>> {
+            Ok(vec![])
+        }
+        async fn define_index(&self, table: &str, fields: &[&str]) -> Result<()> {
+            assert_eq!(table, "valence_data_ownership");
+            assert_eq!(fields, ["valence_model", "status"]);
+            self.defines.fetch_add(1, Ordering::SeqCst);
+            if self.fail {
+                return Err(Error::Internal("no index for you".into()));
+            }
+            Ok(())
+        }
+    }
+
+    #[tokio::test]
+    async fn defines_once_per_backend_happy() {
+        let a = Arc::new(CountingBackend::default());
+        let b = Arc::new(CountingBackend::default());
+        let (da, db): (Arc<dyn DatabaseBackend>, Arc<dyn DatabaseBackend>) = (a.clone(), b.clone());
+        for _ in 0..3 {
+            ensure_lookup_index_once(&da).await;
+            ensure_lookup_index_once(&db).await;
+        }
+        assert_eq!(a.defines.load(Ordering::SeqCst), 1);
+        assert_eq!(b.defines.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn failed_define_is_not_retried_sad() {
+        let a = Arc::new(CountingBackend {
+            fail: true,
+            ..CountingBackend::default()
+        });
+        let da: Arc<dyn DatabaseBackend> = a.clone();
+        ensure_lookup_index_once(&da).await;
+        ensure_lookup_index_once(&da).await;
+        assert_eq!(a.defines.load(Ordering::SeqCst), 1);
+    }
 }
 
 #[cfg(test)]

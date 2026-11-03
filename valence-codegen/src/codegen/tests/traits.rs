@@ -331,3 +331,53 @@ valence_schema! {
         "Expected Tagged refinement trait"
     );
 }
+
+#[test]
+fn trait_field_keeps_indexed_flag_on_the_model_happy() {
+    let trait_schema = r#"
+use valence::prelude::*;
+
+valence_trait_schema! {
+    NamedLookup {
+        repository: "https://github.com/unified-field-dev/valence",
+        fields: [
+            name: { r#type: FieldType::String, required: true, indexed: true },
+        ],
+    }
+}
+"#;
+    let schema = r#"
+use valence::prelude::*;
+
+valence_schema! {
+    LookupModel {
+        repository: "https://github.com/unified-field-dev/valence",
+        table: "lookup_model",
+        version: "0.1.0",
+
+        traits: [NamedLookup],
+
+        fields: [
+            id: { r#type: FieldType::String, primary_key: true, required: true },
+        ],
+    }
+}
+"#;
+    let trait_path = write_temp_schema_file(trait_schema, "named_lookup_valence_trait.rs");
+    let trait_def = extract_trait_from_file(&fs::read_to_string(&trait_path).expect("read trait"))
+        .expect("parse trait file");
+    let mut trait_defs = HashMap::new();
+    trait_defs.insert(trait_def.name.clone(), trait_def);
+    let schema_path = write_temp_schema_file(schema, "lookup_model_valence_schema.rs");
+    let generated = generate_from_schema_file(&schema_path, &trait_defs).expect("codegen");
+
+    let compact: String = generated.split_whitespace().collect();
+    let name_row = compact
+        .split("valence::SchemaField{")
+        .find(|row| row.starts_with(r#"name:"name""#))
+        .expect("SchemaField row for the trait's `name`");
+    assert!(
+        name_row.contains("indexed:true"),
+        "trait `name` should stay indexed"
+    );
+}

@@ -9,7 +9,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use valence_backend_sql::{
-    apply_ttl_policy_sqlite, create_record_sqlite, define_unique_index_sqlite,
+    apply_ttl_policy_sqlite, create_record_sqlite, define_index_sqlite, define_unique_index_sqlite,
     delete_record_sqlite, ensure_table_sqlite, ensure_typed_table_sqlite, execute_select_sqlite,
     get_edge_sources_sqlite, get_edge_targets_sqlite, get_record_sqlite,
     inspect_typed_layout_sqlite, merge_record_sqlite, read_schema_version_sqlite,
@@ -288,6 +288,10 @@ impl DatabaseBackend for SqliteBackend {
 
     async fn define_unique_index(&self, table: &str, field: &str) -> Result<()> {
         define_unique_index_sqlite(&self.pool, table, field, &self.layout_ensured).await
+    }
+
+    async fn define_index(&self, table: &str, fields: &[&str]) -> Result<()> {
+        define_index_sqlite(&self.pool, table, fields, &self.layout_ensured).await
     }
 
     fn ttl_capability(&self) -> valence_core::ttl::BackendTtlCapability {

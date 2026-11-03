@@ -83,6 +83,7 @@ pub(super) fn schema_field_and_edge_tokens(
 
     let encrypted = field.encrypted;
     let unique = field.unique;
+    let indexed = field.indexed;
     let policies_code = generate_policies_code(field_policies);
 
     let model_path_code = if let Some(ref path) = field.model_path {
@@ -98,7 +99,7 @@ pub(super) fn schema_field_and_edge_tokens(
             field_type: #field_type_lit.to_string(),
             primary: #is_primary,
             nullable: #nullable,
-            indexed: false,
+            indexed: #indexed,
             unique: #unique,
             default: #default_code,
             fk: #fk_ref_code,

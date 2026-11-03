@@ -244,6 +244,17 @@ pub trait DatabaseBackend: Send + Sync + std::fmt::Debug + 'static {
         )))
     }
 
+    /// Define a non-unique lookup index on `fields` of `table` (idempotent).
+    ///
+    /// Queries return the same rows with or without it; the index only makes equality
+    /// filters on these fields cheaper.
+    ///
+    /// **Contract:** default is a no-op, for engines without secondary indexes.
+    async fn define_index(&self, table: &str, fields: &[&str]) -> Result<()> {
+        let _ = (table, fields);
+        Ok(())
+    }
+
     /// Whether this adapter can apply schema TTL policies natively.
     fn ttl_capability(&self) -> BackendTtlCapability {
         BackendTtlCapability::Unsupported

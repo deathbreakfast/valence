@@ -289,6 +289,35 @@ mod imp {
             }
         }
 
+        async fn define_index(&self, table: &str, fields: &[&str]) -> Result<()> {
+            valence_core::safe_ident::assert_safe_ident(table)?;
+            if fields.is_empty() {
+                return Err(valence_core::Error::Internal(format!(
+                    "define_index on {table} needs at least one field"
+                )));
+            }
+            for f in fields {
+                valence_core::safe_ident::assert_safe_ident(f)?;
+            }
+            ensure_schemaless_table(&self.db, table).await?;
+            let index_name = format!("idx_{table}_{}", fields.join("_"));
+            let query = format!(
+                "DEFINE INDEX {index_name} ON TABLE {table} COLUMNS {}",
+                fields.join(", ")
+            );
+            match self.db.query(&query).await {
+                Ok(_) => Ok(()),
+                Err(e) => {
+                    let message = e.to_string().to_lowercase();
+                    if message.contains("already") && message.contains("index") {
+                        Ok(())
+                    } else {
+                        Err(db_err(e))
+                    }
+                }
+            }
+        }
+
         fn ttl_capability(&self) -> BackendTtlCapability {
             BackendTtlCapability::Deferred
         }

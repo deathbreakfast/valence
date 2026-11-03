@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `DatabaseBackend::define_index(table, fields)` declares a non-unique lookup index. The
+  default does nothing. The mem backend keeps a real equality index for it, and SQLite,
+  Postgres and Surreal create one (adding the columns first on a table with no registry
+  layout). Wrapping backends should forward it.
+- `indexed: true` on a schema or trait field asks the backend for a lookup index on it.
+  SQL backends create it with the typed table (bump the schema `version` so boot sync adds
+  it to existing tables), and the mem backend indexes `indexed` and `unique` fields when
+  boot sync runs.
 - `Actor::is_service_user()` and `Actor::service_name()`. `RejectExternalSystemActor` is
   renamed to `RejectExternalPrivilegedActor` (old name kept as a deprecated alias).
   Behavior change: the `AUTHENTICATED` privacy rule now allows `Actor::ServiceUser`
@@ -18,6 +26,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- The pending-deletion check that every query now runs no longer scans the whole
+  `valence_data_ownership` table. On the mem backend each check copied every ownership row
+  and filtered them, so list reads slowed down as data grew (a one-server Playwright run
+  went from about 1 s to over a minute per test). Ownership now defines an index on
+  `(valence_model, status)` on each backend the first time it reads ownership rows.
+  `ensure_lookup_indexes` uses the same index instead of SurrealQL that only Surreal
+  accepted.
 - The document-row filter shared by the mem, IndraDB, Redis, MongoDB and hybrid backends
   flattened `(a = $x) AND (b = $y)` into one `OR`. A query filtering two record fields at
   once (a team and a user, say) returned every row matching either field, so a lookup for a

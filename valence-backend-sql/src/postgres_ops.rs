@@ -318,6 +318,29 @@ pub async fn define_unique_index_postgres(
     define_unique_index_column_postgres(pool, table, field).await
 }
 
+/// Idempotent non-unique index over `fields`, adding the columns first when the table
+/// has no registry layout yet.
+pub async fn define_index_postgres(
+    pool: &PgPool,
+    table: &str,
+    fields: &[&str],
+    ensured: &WriteEnsureCache,
+) -> Result<()> {
+    let q = crate::sqlite_ops::composite_index_ddl(table, fields)?;
+    if let Ok(layout) = StorageLayout::from_registry_table(table) {
+        ensure_layout_for_write_postgres(pool, &layout, ensured).await?;
+    } else {
+        ensure_table_postgres(pool, table).await?;
+        let layout = crate::sqlite_ops::adhoc_index_layout(table, fields);
+        ensure_layout_for_write_postgres(pool, &layout, ensured).await?;
+    }
+    sqlx::query(&q)
+        .execute(pool)
+        .await
+        .map_err(|e| Error::database(e.to_string()))?;
+    Ok(())
+}
+
 /// Idempotent non-unique index on `__valence_expire_at` for platform TTL sweep discovery.
 pub async fn apply_ttl_policy_postgres(
     pool: &PgPool,

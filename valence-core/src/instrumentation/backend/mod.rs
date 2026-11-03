@@ -104,6 +104,10 @@ impl DatabaseBackend for InstrumentedBackend {
         self.inner.define_unique_index(table, field).await
     }
 
+    async fn define_index(&self, table: &str, fields: &[&str]) -> Result<()> {
+        self.inner.define_index(table, fields).await
+    }
+
     fn ttl_capability(&self) -> BackendTtlCapability {
         self.inner.ttl_capability()
     }

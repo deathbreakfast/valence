@@ -336,6 +336,85 @@ pub async fn define_unique_index_sqlite(
     define_unique_index_column_sqlite(pool, table, field).await
 }
 
+/// Columns for an index on a table with no registry layout: `id` plus each field as a
+/// nullable string, so the index can be created before the first write adds them.
+pub(crate) fn adhoc_index_layout(table: &str, fields: &[&str]) -> StorageLayout {
+    let mut layout_fields = vec![valence_core::storage_layout::LayoutField {
+        name: "id".into(),
+        storage: valence_core::storage_layout::FieldStorage::String,
+        primary_key: true,
+        nullable: false,
+        unique: true,
+        indexed: false,
+        default: None,
+        record_table: None,
+    }];
+    layout_fields.extend(
+        fields
+            .iter()
+            .map(|f| valence_core::storage_layout::LayoutField {
+                name: (*f).to_string(),
+                storage: valence_core::storage_layout::FieldStorage::String,
+                primary_key: false,
+                nullable: true,
+                unique: false,
+                indexed: false,
+                default: None,
+                record_table: None,
+            }),
+    );
+    StorageLayout {
+        table: table.to_string(),
+        fields: layout_fields,
+    }
+}
+
+/// `CREATE INDEX IF NOT EXISTS` over `fields` (same text for SQLite and Postgres).
+pub(crate) fn composite_index_ddl(table: &str, fields: &[&str]) -> Result<String> {
+    assert_safe_table(table)?;
+    if fields.is_empty() {
+        return Err(Error::Internal(format!(
+            "define_index on {table} needs at least one field"
+        )));
+    }
+    for f in fields {
+        valence_core::safe_ident::assert_safe_ident(f)?;
+    }
+    let idx = format!("valence_idx_{table}_{}", fields.join("_"));
+    let cols = fields
+        .iter()
+        .map(|f| quote_sql_ident(f))
+        .collect::<Vec<_>>()
+        .join(", ");
+    Ok(format!(
+        "CREATE INDEX IF NOT EXISTS {} ON {} ({cols})",
+        quote_sql_ident(&idx),
+        quote_sql_ident(table)
+    ))
+}
+
+/// Idempotent non-unique index over `fields`, adding the columns first when the table
+/// has no registry layout yet.
+pub async fn define_index_sqlite(
+    pool: &sqlx::SqlitePool,
+    table: &str,
+    fields: &[&str],
+    ensured: &WriteEnsureCache,
+) -> Result<()> {
+    let q = composite_index_ddl(table, fields)?;
+    if let Ok(layout) = StorageLayout::from_registry_table(table) {
+        ensure_layout_for_write_sqlite(pool, &layout, ensured).await?;
+    } else {
+        ensure_table_sqlite(pool, table).await?;
+        ensure_layout_for_write_sqlite(pool, &adhoc_index_layout(table, fields), ensured).await?;
+    }
+    sqlx::query(&q)
+        .execute(pool)
+        .await
+        .map_err(|e| Error::database(e.to_string()))?;
+    Ok(())
+}
+
 pub fn ttl_deferred() -> valence_core::ttl::BackendTtlCapability {
     valence_core::ttl::BackendTtlCapability::Deferred
 }

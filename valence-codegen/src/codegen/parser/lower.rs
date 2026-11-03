@@ -152,7 +152,7 @@ fn lower_fields(fields: &[ParsedField]) -> (Vec<SchemaField>, Vec<SchemaEdge>) {
             field_type: field.field_type.clone(),
             primary: field.primary_key,
             nullable: !field.required,
-            indexed: false,
+            indexed: field.indexed,
             unique: field.unique,
             default: field.default.clone(),
             fk,

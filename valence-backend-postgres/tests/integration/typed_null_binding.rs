@@ -5,10 +5,12 @@
 
 #![allow(clippy::expect_used, clippy::print_stderr)]
 
+use std::sync::OnceLock;
+
 use serde_json::{json, Value};
 use valence_backend_postgres::PostgresBackend;
 use valence_core::evaluator::DEFAULT_IN_MEMORY;
-use valence_core::schema::{SchemaMetadata, SchemaRegistry};
+use valence_core::schema::{SchemaMetadata, SchemaMetadataInit, SchemaRegistry};
 use valence_core::schema_api::{Schema, SchemaField, SchemaMeta, SchemaPrivacy};
 use valence_core::storage_layout::StorageLayout;
 use valence_core::DatabaseBackend;
@@ -108,16 +110,20 @@ fn assert_nulls(row: &Value) {
     }
 }
 
+/// Submitted through inventory, so the merged test binary's global registry
+/// holds this fixture whichever test reads the registry first.
+fn probe_meta() -> &'static SchemaMetadata {
+    static META: OnceLock<&'static SchemaMetadata> = OnceLock::new();
+    META.get_or_init(|| Box::leak(Box::new(SchemaMetadata::from_schema(leak_schema()))))
+}
+
+valence_core::inventory::submit! { SchemaMetadataInit(probe_meta) }
+
 #[tokio::test]
 async fn null_cells_bind_with_column_type_happy_path() {
     let Some(backend) = connect().await else {
         return;
     };
-    let mut registry = SchemaRegistry::new();
-    registry.register(Box::leak(Box::new(SchemaMetadata::from_schema(
-        leak_schema(),
-    ))));
-    SchemaRegistry::set_global(registry);
 
     reset_row(&backend).await;
     let layout = StorageLayout::from_registry_table(TABLE).expect("layout");

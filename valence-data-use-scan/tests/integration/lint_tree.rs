@@ -1,8 +1,6 @@
 //! `lint_tree` and `HitSummary` over a temp checkout.
 
-mod support;
-
-use support::{file_with, site, write, CLEAN};
+use crate::support::{file_with, site, write, CLEAN};
 use valence_data_use_scan::{
     inventory_csv_row, lint_tree, DataUseScanError, GapCode, HitSummary, HEDGE_PHRASES,
     TEMPLATE_PHRASES,

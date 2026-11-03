@@ -1,11 +1,9 @@
 //! The `valence-purpose-lint` binary end to end.
 
-mod support;
-
 use std::path::Path;
 use std::process::{Command, Output};
 
-use support::{file_with, site, write, CLEAN};
+use crate::support::{file_with, site, write, CLEAN};
 
 fn run(args: &[&str]) -> Output {
     Command::new(env!("CARGO_BIN_EXE_valence-purpose-lint"))

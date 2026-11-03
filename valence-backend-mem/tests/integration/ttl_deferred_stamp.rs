@@ -1,19 +1,14 @@
-//! Env-gated Mongo native TTL index + create stamp.
-#![allow(
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::print_stdout,
-    clippy::print_stderr
-)]
+//! Deferred TTL stamp on create (registry fixture + mem backend).
+#![allow(clippy::unwrap_used, clippy::expect_used)]
 
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
-use valence_backend_mongodb::MongoBackend;
+use valence_backend_mem::InMemoryBackend;
 use valence_core::evaluator::DEFAULT_IN_MEMORY;
-use valence_core::schema::{SchemaMetadata, SchemaRegistry};
+use valence_core::schema::{SchemaMetadata, SchemaMetadataInit, SchemaRegistry};
 use valence_core::schema_api::{Schema, SchemaField, SchemaMeta, SchemaPrivacy};
 use valence_core::ttl::{SchemaTtlPolicy, EXPIRE_AT_FIELD};
-use valence_core::DatabaseBackend;
+use valence_core::{DatabaseBackend, Valence};
 
 fn leak_ttl_schema(table: &str, seconds: u64) -> &'static Schema {
     Box::leak(Box::new(Schema {
@@ -66,53 +61,51 @@ fn leak_ttl_schema(table: &str, seconds: u64) -> &'static Schema {
     }))
 }
 
+/// Submitted through inventory, so the merged test binary's global registry
+/// holds this fixture whichever test reads the registry first.
+fn ttl_probe_meta() -> &'static SchemaMetadata {
+    static META: OnceLock<&'static SchemaMetadata> = OnceLock::new();
+    META.get_or_init(|| {
+        Box::leak(Box::new(SchemaMetadata::from_schema(leak_ttl_schema(
+            "ttl_mem_deferred_probe",
+            1800,
+        ))))
+    })
+}
+
+valence_core::inventory::submit! { SchemaMetadataInit(ttl_probe_meta) }
+
 #[tokio::test]
-async fn mongo_apply_ttl_policy_and_create_stamps() {
-    let backend = match MongoBackend::builder().from_env_defaults().build().await {
-        Ok(b) => b,
-        Err(e) => {
-            eprintln!("mongodb unavailable: {e} — skipping ttl native test");
-            return;
-        }
-    };
+async fn mem_create_stamps_expire_at_and_ensure_ok() {
+    let table = "ttl_mem_deferred_probe";
 
-    let table = "ttl_mongo_native_probe";
-    let mut registry = SchemaRegistry::new();
-    registry.register(Box::leak(Box::new(SchemaMetadata::from_schema(
-        leak_ttl_schema(table, 1800),
-    ))));
-    SchemaRegistry::set_global(registry);
+    let backend = Arc::new(InMemoryBackend::new());
+    let valence = Valence::builder()
+        .add_backend("default", backend.clone())
+        .build()
+        .unwrap();
 
-    let backend = Arc::new(backend);
-    assert_eq!(
-        backend.ttl_capability(),
-        valence_core::ttl::BackendTtlCapability::SupportedNative
-    );
-    let policy = SchemaTtlPolicy {
-        seconds: 1800,
-        mode: "backend_capability".into(),
-    };
-    backend.apply_ttl_policy(table, &policy).await.unwrap();
-    // Idempotent second call
-    backend.apply_ttl_policy(table, &policy).await.unwrap();
+    valence.ensure_ttl_for_all().await.unwrap();
+    valence.ensure_ttl_for_table(table).await.unwrap();
 
     let created = backend
-        .create_record(table, serde_json::json!({"id": "m1", "n": 1}))
+        .create_record(table, serde_json::json!({"id": "a1", "n": 1}))
         .await
         .unwrap();
-    assert!(
-        created.get(EXPIRE_AT_FIELD).is_some(),
-        "mongo create must stamp {EXPIRE_AT_FIELD}"
-    );
+    let expire = created
+        .get(EXPIRE_AT_FIELD)
+        .and_then(|v| v.as_str())
+        .expect("__valence_expire_at on create")
+        .to_string();
 
-    let first = created[EXPIRE_AT_FIELD].clone();
-    let updated = backend
-        .update_record(
-            table,
-            "m1",
-            serde_json::json!({"id": "m1", "n": 2, EXPIRE_AT_FIELD: first}),
-        )
+    // Merge does not call prepare_create_content; expire stamp must remain create-only.
+    let merged = backend
+        .merge_record(table, "a1", serde_json::json!({"n": 2}))
         .await
         .unwrap();
-    assert_eq!(updated.get(EXPIRE_AT_FIELD), created.get(EXPIRE_AT_FIELD));
+    assert_eq!(
+        merged.get(EXPIRE_AT_FIELD).and_then(|v| v.as_str()),
+        Some(expire.as_str()),
+        "merge must not refresh create-only expire"
+    );
 }

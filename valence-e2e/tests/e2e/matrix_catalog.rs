@@ -6,8 +6,6 @@
     clippy::print_stdout,
     clippy::print_stderr
 )]
-#[cfg(feature = "surreal-inventory")]
-mod support;
 
 use valence_testkit::{
     catalog_for_storage, embedded_catalog, run_catalog_entry, MatrixSpec, StorageAdapter, Topology,

@@ -27,8 +27,8 @@ use valence_data_use_scan::{
     TargetKind,
 };
 
-const PROD_LIB: &str = include_str!("fixtures/prod_lib.rs");
-const TEST_TWIN: &str = include_str!("fixtures/test_twin.rs");
+const PROD_LIB: &str = include_str!("../fixtures/prod_lib.rs");
+const TEST_TWIN: &str = include_str!("../fixtures/test_twin.rs");
 
 struct Fixture {
     dir: TempDir,

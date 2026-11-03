@@ -1,5 +1,6 @@
 ---
 source: valence-codegen/src/codegen/tests/schema_generation.rs
+assertion_line: 246
 expression: generated
 ---
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -435,6 +436,30 @@ impl PlainModel {
                 })?;
             if excluding_id.is_some_and(|id| id == matched_id) {
                 continue;
+            }
+            let readable = match valence
+                .backend_for_table(<Self as valence::Model>::table_name())?
+                .get_record(<Self as valence::Model>::table_name(), &matched_id)
+                .await
+            {
+                Ok(Some(existing)) => {
+                    match Self::__schema_metadata() {
+                        Ok(schema) => {
+                            valence::PrivacyEvaluator::check_entity_read(
+                                    schema,
+                                    &existing,
+                                    valence,
+                                )
+                                .await
+                                .is_ok()
+                        }
+                        Err(_) => false,
+                    }
+                }
+                Ok(None) | Err(_) => false,
+            };
+            if !readable {
+                return Err(valence::Error::conflict());
             }
             return Err(
                 valence::Error::unique_violation(

@@ -1,3 +1,12 @@
+/// Rows each privacy stage dropped from a query.
+#[derive(Default)]
+struct RowsDropped {
+    connection: usize,
+    hop: usize,
+    pending: usize,
+    entity: usize,
+}
+
 impl QueryCore {
     /// Clamp limit/offset; default missing limit to [`super::MAX_QUERY_LIMIT`].
     fn apply_query_window_clamps(&mut self) {
@@ -39,7 +48,12 @@ impl QueryCore {
     /// *before* connection, hop, pending-deletion and entity read privacy, so it can
     /// be larger than the returned `Vec`. A caller paging in fixed windows can stop
     /// when `fetched < limit` (the table ended) and keep going when the window was
-    /// full but privacy hid every row.
+    /// full but privacy hid every row. Since the query now refills the page itself, a page
+    /// shorter than `limit` also means the table (or the scan budget) ended.
+    ///
+    /// Read privacy runs before the caller's `limit` and `offset` count: the query pages
+    /// through backend windows until `limit` readable rows are found, the table ends, or
+    /// [`super::MAX_QUERY_HIDDEN_SCAN`] unreadable rows past the window have been scanned.
     ///
     /// `fetched` counts rows the caller may not read. Do not show it to users: it
     /// can reveal that hidden rows exist.
@@ -179,92 +193,136 @@ impl QueryCore {
         let schema_table = backend_schema_table(table.as_str());
         let backend = valence.backend_for_table(schema_table)?;
         let engine_id = backend.engine_id();
-        let compiled = match compile_for_engine(engine_id, &self) {
-            Ok(c) => c,
-            Err(e) => {
-                record_compile_error(&self, &e);
-                return Err(e);
-            }
-        };
-        let backend_span = tracing::info_span!(
-            "valence.backend.execute_compiled_query",
-            engine = engine_id,
-            table = %table
-        );
-        let json_rows: Vec<serde_json::Value> = backend
-            .execute_compiled_query(&compiled)
-            .instrument(backend_span)
-            .await?;
-        let rows_db = json_rows.len();
+        let table_label = table.split(',').next().unwrap_or(&table).trim().to_string();
 
-        let mut results = Vec::with_capacity(json_rows.len());
-        for row in json_rows {
-            match serde_json::from_value(row) {
-                Ok(v) => results.push(v),
+        // Read privacy runs after the backend applies LIMIT/OFFSET, so one backend window can
+        // come back short. Page through backend windows, filter each, and count the caller's
+        // OFFSET and LIMIT over rows the actor can read. Grouped queries have no row-level
+        // privacy and keep a single backend window.
+        let want = self.limit.unwrap_or(super::MAX_QUERY_LIMIT) as usize;
+        let skip = self.offset.unwrap_or(0) as usize;
+        let paged = self.group_by.is_empty();
+        let chunk = if paged {
+            (skip + want).clamp(1, super::MAX_QUERY_LIMIT as usize)
+        } else {
+            want
+        };
+        let scan_budget = skip + want + super::MAX_QUERY_HIDDEN_SCAN as usize;
+
+        let mut results: Vec<T> = Vec::new();
+        let mut to_skip = skip;
+        let mut raw_offset = if paged { 0 } else { skip };
+        let mut rows_db = 0usize;
+        let mut dropped = RowsDropped::default();
+        loop {
+            let mut window = self.clone();
+            window.limit = Some(u32::try_from(chunk).unwrap_or(super::MAX_QUERY_LIMIT));
+            window.offset = (raw_offset > 0).then(|| u32::try_from(raw_offset).unwrap_or(u32::MAX));
+            let compiled = match compile_for_engine(engine_id, &window) {
+                Ok(c) => c,
                 Err(e) => {
-                    let err = Error::from(e);
-                    record_deserialize_error(&table, &err);
-                    return Err(err);
+                    record_compile_error(&self, &e);
+                    return Err(e);
+                }
+            };
+            let backend_span = tracing::info_span!(
+                "valence.backend.execute_compiled_query",
+                engine = engine_id,
+                table = %table
+            );
+            let json_rows: Vec<serde_json::Value> = backend
+                .execute_compiled_query(&compiled)
+                .instrument(backend_span)
+                .await?;
+            let fetched = json_rows.len();
+            rows_db += fetched;
+            raw_offset += fetched;
+
+            let mut typed = Vec::with_capacity(fetched);
+            for row in json_rows {
+                match serde_json::from_value(row) {
+                    Ok(v) => typed.push(v),
+                    Err(e) => {
+                        let err = Error::from(e);
+                        record_deserialize_error(&table, &err);
+                        return Err(err);
+                    }
                 }
             }
+
+            let visible = self.filter_window(typed, valence, &mut dropped).await?;
+            if !paged {
+                results = visible;
+                break;
+            }
+            for row in visible {
+                if to_skip > 0 {
+                    to_skip -= 1;
+                } else if results.len() < want {
+                    results.push(row);
+                }
+            }
+            if results.len() >= want || fetched < chunk || rows_db >= scan_budget {
+                break;
+            }
         }
 
-        let filtered = self
-            .post_filter_connection_privacy(results, valence)
-            .await?;
-        let rows_after_connection = filtered.len();
-        if rows_db > rows_after_connection {
-            crate::instrumentation::metrics::record_query_rows_filtered(
-                table.split(',').next().unwrap_or(&table).trim(),
-                "connection_privacy",
-                (rows_db - rows_after_connection) as i64,
-            );
-        }
-
-        let filtered = self.post_filter_hop_privacy(filtered, valence).await?;
-        let rows_after_hop = filtered.len();
-        if rows_after_connection > rows_after_hop {
-            crate::instrumentation::metrics::record_query_rows_filtered(
-                table.split(',').next().unwrap_or(&table).trim(),
-                "hop_privacy",
-                (rows_after_connection - rows_after_hop) as i64,
-            );
-        }
-
-        // `Model::get` hides rows queued for deletion; lists and trait queries match it. This runs
-        // before entity privacy, which drops undeclared fields such as `id` from the row.
-        let filtered = self.post_filter_pending_deletion(filtered, valence).await?;
-        let rows_after_pending = filtered.len();
-        if rows_after_hop > rows_after_pending {
-            crate::instrumentation::metrics::record_query_rows_filtered(
-                table.split(',').next().unwrap_or(&table).trim(),
-                "pending_deletion",
-                (rows_after_hop - rows_after_pending) as i64,
-            );
-        }
-
-        // Entity-level read privacy for every list/query row (HasMany / Model::query inherit this).
-        let filtered = self.post_filter_entity_privacy(filtered, valence).await?;
-        let rows_after_entity = filtered.len();
-        if rows_after_pending > rows_after_entity {
-            crate::instrumentation::metrics::record_query_rows_filtered(
-                table.split(',').next().unwrap_or(&table).trim(),
-                "entity_privacy",
-                (rows_after_pending - rows_after_entity) as i64,
-            );
+        for (stage, count) in [
+            ("connection_privacy", dropped.connection),
+            ("hop_privacy", dropped.hop),
+            ("pending_deletion", dropped.pending),
+            ("entity_privacy", dropped.entity),
+        ] {
+            if count > 0 {
+                crate::instrumentation::metrics::record_query_rows_filtered(
+                    &table_label,
+                    stage,
+                    count as i64,
+                );
+            }
         }
         let wall_ms = timer.elapsed_ms();
+        let rows_after_hop = rows_db - dropped.connection - dropped.hop;
         record_query_success(
             &self,
             query_target,
             &trait_name,
             rows_db as i64,
             rows_after_hop as i64,
-            rows_after_entity as i64,
+            (rows_after_hop - dropped.pending - dropped.entity) as i64,
             wall_ms,
         );
 
-        Ok((filtered, rows_db))
+        Ok((results, rows_db))
+    }
+
+    /// Run one backend window through connection, hop, pending-deletion and entity privacy,
+    /// adding the rows each stage dropped to `dropped`.
+    async fn filter_window<T>(
+        &self,
+        rows: Vec<T>,
+        valence: &Valence,
+        dropped: &mut RowsDropped,
+    ) -> Result<Vec<T>>
+    where
+        T: DeserializeOwned + Serialize,
+    {
+        let n = rows.len();
+        let rows = self.post_filter_connection_privacy(rows, valence).await?;
+        dropped.connection += n - rows.len();
+        let n = rows.len();
+        let rows = self.post_filter_hop_privacy(rows, valence).await?;
+        dropped.hop += n - rows.len();
+        // `Model::get` hides rows queued for deletion; lists and trait queries match it. This runs
+        // before entity privacy, which drops undeclared fields such as `id` from the row.
+        let n = rows.len();
+        let rows = self.post_filter_pending_deletion(rows, valence).await?;
+        dropped.pending += n - rows.len();
+        // Entity-level read privacy for every list/query row (HasMany / Model::query inherit this).
+        let n = rows.len();
+        let rows = self.post_filter_entity_privacy(rows, valence).await?;
+        dropped.entity += n - rows.len();
+        Ok(rows)
     }
 
     /// Execute as a distinct-value query, returning a flat `Vec<String>`.

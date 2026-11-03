@@ -33,7 +33,7 @@ impl BackendCapabilities {
 ///
 /// Also used as the keyset cursor for [`DatabaseBackend::scan_edges`]: pass the last
 /// row of a page as `after` to fetch the next one.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct EdgeRow {
     /// Source record.
     pub from: RecordId,

@@ -45,6 +45,7 @@ mod on_delete;
 mod runner;
 mod scan_contract;
 mod scenario;
+mod transfer_contract;
 
 #[cfg(feature = "surreal-mem")]
 pub use admin_contract::run_admin_contract_surreal_mem;
@@ -91,6 +92,7 @@ pub use on_delete::{
 pub use runner::{RunMode, ScenarioResult, ScenarioRunner, StepTiming};
 pub use scan_contract::run_scan_contract;
 pub use scenario::{ScenarioSpec, ScenarioStep};
+pub use transfer_contract::{run_transfer_contract, run_transfer_resume_contract};
 
 pub use fixtures::{CATALOG_TTL_PROBE_SECONDS, CATALOG_TTL_PROBE_TABLE};
 

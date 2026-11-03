@@ -167,7 +167,8 @@ impl Valence {
     ///   `from` and the target schema's Read policy on `to`. Bypasses come only from those
     ///   policies (for example `always_allow: [SYSTEM_ONLY]`).
     /// - Without it, this is a raw edge write with no schema privacy, and hosts must
-    ///   authorize before calling.
+    ///   authorize before calling. The generated `relate_to_*` methods always check the stored
+    ///   source row's Update policy first; prefer them.
     ///
     /// # Errors
     ///
@@ -193,7 +194,8 @@ impl Valence {
     /// Checked the same way as [`Self::relate_edge`]: an edge whose connection sets
     /// `edge_policy: SourceUpdateTargetRead` needs Update on `from` and Read on `to`, so an
     /// actor who can only read the source can't strip its links. Without the attribute this
-    /// is a raw edge delete, and hosts must authorize before calling.
+    /// is a raw edge delete, and hosts must authorize before calling. The generated
+    /// `unrelate_from_*` methods always check the stored source row's Update policy first.
     ///
     /// # Errors
     ///

@@ -123,7 +123,14 @@ fn owner_schema(table: &str) -> &'static SchemaMetadata {
     ))
 }
 
-const TABLES: [&str; 4] = ["qs_hidden", "qs_end", "qs_all_hidden", "qs_same"];
+const TABLES: [&str; 6] = [
+    "qs_hidden",
+    "qs_end",
+    "qs_all_hidden",
+    "qs_same",
+    "qs_page",
+    "qs_budget",
+];
 
 fn purpose() -> DataUsePurpose {
     DataUsePurpose::new(
@@ -191,18 +198,41 @@ async fn query_stats_counts_hidden_rows_happy() {
 #[tokio::test]
 async fn query_stats_short_window_at_table_end_happy() {
     let v = seed("qs_end").await;
-    let (rows, fetched) = run(&v, "qs_end", 8, 10).await;
-    assert_eq!(rows.len(), 1, "only r08 is alice's in the last two rows");
-    assert_eq!(fetched, 2);
+    // Skipping two readable rows leaves r04 and r08; the table ends before the page fills.
+    let (rows, fetched) = run(&v, "qs_end", 2, 10).await;
+    assert_eq!(rows.len(), 2);
+    assert_eq!(fetched, 10);
 }
 
 #[tokio::test]
 async fn query_stats_all_hidden_window_sad() {
     let v = seed("qs_all_hidden").await;
-    // r05..r07 belong to bob.
-    let (rows, fetched) = run(&v, "qs_all_hidden", 5, 3).await;
+    // Alice owns four rows, so offset 4 skips every readable row.
+    let (rows, fetched) = run(&v, "qs_all_hidden", 4, 3).await;
     assert_eq!(rows.len(), 0);
-    assert_eq!(fetched, 3);
+    assert_eq!(fetched, 10);
+}
+
+#[tokio::test]
+async fn page_fills_past_hidden_rows_happy() {
+    let v = seed("qs_page").await;
+    let (rows, _) = run(&v, "qs_page", 0, 2).await;
+    let ids: Vec<_> = rows.iter().map(|r| r["id"].as_str().unwrap()).collect();
+    assert_eq!(ids, ["r01", "r03"]);
+    // OFFSET counts readable rows, not backend rows.
+    let (rows, fetched) = run(&v, "qs_page", 1, 2).await;
+    let ids: Vec<_> = rows.iter().map(|r| r["id"].as_str().unwrap()).collect();
+    assert_eq!(ids, ["r03", "r04"]);
+    assert_eq!(fetched, 6);
+}
+
+#[tokio::test]
+async fn limit_above_readable_rows_returns_all_readable_sad() {
+    let v = seed("qs_budget").await;
+    // Only four rows are readable; a limit of 100 returns them and stops at table end.
+    let (rows, fetched) = run(&v, "qs_budget", 0, 100).await;
+    assert_eq!(rows.len(), 4);
+    assert_eq!(fetched, 10);
 }
 
 #[tokio::test]

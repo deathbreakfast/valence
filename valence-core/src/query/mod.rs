@@ -12,6 +12,10 @@ pub const MAX_QUERY_LIMIT: u32 = 1000;
 /// Maximum query offset accepted by [`QueryCore`].
 pub const MAX_QUERY_OFFSET: u32 = 1_000_000;
 
+/// Rows past `offset + limit` a query may scan looking for readable rows, when read
+/// privacy hides rows inside the window.
+pub const MAX_QUERY_HIDDEN_SCAN: u32 = 10_000;
+
 mod predicates;
 #[cfg(any(
     feature = "compiler-sql",

@@ -140,7 +140,7 @@ async fn exists_with_no_matching_target_returns_nothing() {
     let v = seeded().await;
     let q =
         docs().where_connection_exists_many_to_many(EDGE.into(), TAG.into(), tag_label("green"));
-    assert!(ids(&v, q).await.is_empty());
+    assert_eq!(ids(&v, q).await, Vec::<String>::new());
 }
 
 #[tokio::test]

@@ -6,7 +6,9 @@ use std::pin::Pin;
 
 use crate::semi_join::{SemiJoin, Targets};
 use tokio::sync::{RwLock, RwLockReadGuard};
-use valence_core::{BackendCapabilities, CompiledQuery, DatabaseBackend, Error, RecordId, Result};
+use valence_core::{
+    BackendCapabilities, CompiledQuery, DatabaseBackend, Error, RecordId, Result, WriteOp,
+};
 
 /// Stable engine slug for router keys (`inmemory_mem:logical_name`).
 pub const ENGINE_ID: &str = valence_core::KnownEngines::INMEMORY_MEM;
@@ -121,6 +123,29 @@ impl InMemoryBackend {
             }
             Ok(members)
         })
+    }
+
+    /// Validate `content` and compute the storage id and persisted row for a create.
+    fn prepare_create(
+        &self,
+        table: &str,
+        content: serde_json::Value,
+    ) -> Result<(String, serde_json::Value)> {
+        if let Ok(layout) = valence_core::storage_layout::StorageLayout::from_registry_table(table)
+        {
+            valence_core::storage_layout::validate_write_types(&layout, &content)?;
+        }
+        let mut content = content;
+        valence_core::ttl::prepare_create_content(table, self, &mut content)?;
+        let id = storage_id_from_content(&content).unwrap_or_else(uuid_simple);
+        let mut record = content;
+        if let Some(obj) = record.as_object_mut() {
+            let has_string_id = obj.get("id").and_then(|v| v.as_str()).is_some();
+            if !has_string_id {
+                obj.insert("id".into(), record_id_json(table, &id));
+            }
+        }
+        Ok((id, record))
     }
 
     async fn table_records_read(
@@ -267,20 +292,7 @@ impl DatabaseBackend for InMemoryBackend {
         table: &str,
         content: serde_json::Value,
     ) -> Result<serde_json::Value> {
-        if let Ok(layout) = valence_core::storage_layout::StorageLayout::from_registry_table(table)
-        {
-            valence_core::storage_layout::validate_write_types(&layout, &content)?;
-        }
-        let mut content = content;
-        valence_core::ttl::prepare_create_content(table, self, &mut content)?;
-        let id = storage_id_from_content(&content).unwrap_or_else(uuid_simple);
-        let mut record = content;
-        if let Some(obj) = record.as_object_mut() {
-            let has_string_id = obj.get("id").and_then(|v| v.as_str()).is_some();
-            if !has_string_id {
-                obj.insert("id".into(), record_id_json(table, &id));
-            }
-        }
+        let (id, record) = self.prepare_create(table, content)?;
         self.tables
             .write()
             .await
@@ -353,6 +365,73 @@ impl DatabaseBackend for InMemoryBackend {
             rows.remove(id);
         }
         Ok(())
+    }
+
+    async fn apply_batch(&self, ops: Vec<WriteOp>) -> Result<Vec<serde_json::Value>> {
+        // Validate and prepare creates before taking the lock; nothing is visible until commit.
+        let mut prepared_creates = Vec::new();
+        for op in &ops {
+            if let WriteOp::Create { table, content } = op {
+                prepared_creates.push(self.prepare_create(table, content.clone())?);
+            }
+        }
+        let mut prepared_creates = prepared_creates.into_iter();
+
+        let mut guard = self.tables.write().await;
+        // Work on a copy of the tables the batch touches; swap in only on success.
+        let mut staged: HashMap<String, HashMap<String, serde_json::Value>> = HashMap::new();
+        let mut results = Vec::with_capacity(ops.len());
+        for op in ops {
+            let table = op.table().to_string();
+            let rows = staged
+                .entry(table.clone())
+                .or_insert_with(|| guard.get(&table).cloned().unwrap_or_default());
+            match op {
+                WriteOp::Create { .. } => {
+                    let (id, record) = prepared_creates.next().ok_or_else(|| {
+                        Error::Internal("apply_batch: missing prepared create".into())
+                    })?;
+                    rows.insert(id, record.clone());
+                    results.push(record);
+                }
+                WriteOp::Update { id, content, .. } => {
+                    if !rows.contains_key(&id) {
+                        return Err(Error::NotFound(format!("{table}:{id}")));
+                    }
+                    rows.insert(id, content.clone());
+                    results.push(content);
+                }
+                WriteOp::Merge { id, patch, .. } => {
+                    let existing = rows.entry(id).or_insert_with(|| serde_json::json!({}));
+                    if let (Some(base), Some(patch_obj)) =
+                        (existing.as_object_mut(), patch.as_object())
+                    {
+                        for (k, v) in patch_obj {
+                            base.insert(k.clone(), v.clone());
+                        }
+                    }
+                    results.push(existing.clone());
+                }
+                WriteOp::Upsert {
+                    id, mut content, ..
+                } => {
+                    if let Some(obj) = content.as_object_mut() {
+                        obj.insert("id".into(), record_id_json(&table, &id));
+                    }
+                    rows.insert(id, content.clone());
+                    results.push(content);
+                }
+                WriteOp::Delete { id, .. } => {
+                    rows.remove(&id);
+                    results.push(serde_json::Value::Null);
+                }
+            }
+        }
+        for (table, rows) in staged {
+            guard.insert(table, rows);
+        }
+        drop(guard);
+        Ok(results)
     }
 
     async fn relate_edge(&self, from: &RecordId, edge_table: &str, to: &RecordId) -> Result<()> {

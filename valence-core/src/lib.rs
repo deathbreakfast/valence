@@ -123,7 +123,7 @@ pub use backend::SqlQueryCompiler;
 pub use backend::SurrealQueryCompiler;
 pub use backend::{
     create_record, delete_record, get_record, merge_record, update_record, upsert_record,
-    BackendCapabilities, DatabaseBackend, EdgeRow,
+    BackendCapabilities, DatabaseBackend, EdgeRow, WriteOp,
 };
 pub use batch::BatchCreatable;
 pub use compiled_query::CompiledQuery;

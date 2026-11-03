@@ -9,7 +9,7 @@ pub use factory::{RouterValenceFactory, RouterValenceFactoryConfig, ValenceFacto
 
 use crate::actor::Actor;
 use crate::backend::DatabaseBackend;
-use crate::error::Result;
+use crate::error::{Error, Result};
 use crate::owner_ref::OwnerRef;
 use crate::ports::actor::ActorFactory;
 use crate::ports::endpoints::DatabaseEndpointResolver;
@@ -69,6 +69,40 @@ impl Valence {
             .inspect_err(|_e| {
                 crate::instrumentation::metrics::record_router_resolve_error(table);
             })
+    }
+
+    /// Apply several writes atomically on the backend that owns their tables.
+    ///
+    /// Raw backend-level batch: it does not run model privacy policies, ownership hooks or
+    /// side effects, so use it for rows the caller is already allowed to write.
+    /// Every table must route to the same backend, and that backend must report
+    /// [`crate::BackendCapabilities::supports_transactions`].
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::Validation`] when the ops span more than one backend or the backend
+    /// has no transaction support, and any error the backend raises while applying the batch
+    /// (in which case none of the writes are visible).
+    pub async fn apply_batch(&self, ops: Vec<crate::WriteOp>) -> Result<Vec<serde_json::Value>> {
+        let Some(first) = ops.first() else {
+            return Ok(Vec::new());
+        };
+        let backend = self.backend_for_table(first.table())?;
+        for op in &ops[1..] {
+            if !Arc::ptr_eq(&backend, &self.backend_for_table(op.table())?) {
+                return Err(Error::Validation(
+                    "cross-backend transactions are not supported: batch tables route to different backends"
+                        .into(),
+                ));
+            }
+        }
+        if !backend.capabilities().supports_transactions {
+            return Err(Error::Validation(format!(
+                "backend {} does not support transactions",
+                backend.engine_id()
+            )));
+        }
+        backend.apply_batch(ops).await
     }
 
     pub fn telemetry_sink(&self) -> &Arc<dyn TelemetrySink> {

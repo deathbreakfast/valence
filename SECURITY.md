@@ -35,7 +35,7 @@ Valence is an **in-process ORM**. Hosts own session auth, HTTP exposure, and whe
 |------|----------|
 | Privacy bypass | Dual-key only: `VALENCE_PRIVACY_BYPASS=1` **and** `VALENCE_PRIVACY_BYPASS_FORCE_ON=1`. Never set either in production. Bench/testkit set both when measuring bypass. |
 | Default-deny policies | Schemas without entity `policies:` deny non-System actors. Declare explicit allow rules for readable tables. |
-| Actor / System | Do not expose raw `Valence::with_actor(Actor::System)` or untrusted `actor_json` from clients. Install [`RejectExternalSystemActor`](https://docs.rs/uf-valence-core) on external [`RouterValenceFactory`](https://docs.rs/uf-valence-core) paths. |
+| Actor / System | Do not expose raw `Valence::with_actor(Actor::System)` or untrusted `actor_json` from clients. Install [`RejectExternalPrivilegedActor`](https://docs.rs/uf-valence-core), which refuses `Actor::System` and `Actor::ServiceUser` JSON, on external [`RouterValenceFactory`](https://docs.rs/uf-valence-core) paths. |
 | Backends | Do not expose raw `DatabaseBackend` / router keys to clients; wire through typed `Model` / host-authorized APIs. |
 | Query paging | `QueryCore` clamps `limit`/`offset` to `MAX_QUERY_LIMIT` (1000) / `MAX_QUERY_OFFSET`. |
 | Errors | `Error::database` redacts URL userinfo in database error strings. |

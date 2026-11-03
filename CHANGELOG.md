@@ -19,6 +19,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The in-memory row filter's `ORDER BY` (used by the mem, redis, mongodb, indradb and hybrid
   backends) now sorts on every key with its own ASC/DESC, compares numbers numerically
   instead of skipping them, and reads `START n` as an offset.
+- Field-level `update` policies are now enforced. `Model::update`, `upsert` and
+  `get_mutable().commit()` deny a write that changes a field whose update policy rejects the
+  actor (`PrivacyEvaluator::check_field_update_access`). Previously only the table's update
+  policy ran, so a field declared `SYSTEM_ONLY` could be rewritten by any actor allowed to
+  update the row.
 
 ### Added
 

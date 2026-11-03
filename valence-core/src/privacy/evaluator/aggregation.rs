@@ -66,6 +66,50 @@ impl PrivacyEvaluator {
         Ok((filtered, hidden))
     }
 
+    /// Enforce field-level `update` policies on a write to an existing row.
+    ///
+    /// A field is checked only when its value in `after` differs from `before`
+    /// (a missing field and `null` count as equal, so a field the viewer can't
+    /// read never looks changed). `before` of `None` means a create, which this
+    /// check leaves to the create policies.
+    /// # Errors
+    ///
+    /// Returns [`Error::Privacy`] naming the first changed field whose update
+    /// policy denies `viewer`, or when a policy rule cannot run synchronously.
+    pub fn check_field_update_access(
+        schema: &SchemaMetadata,
+        before: Option<&serde_json::Value>,
+        after: &serde_json::Value,
+        viewer: &crate::actor::Actor,
+    ) -> Result<()> {
+        let Some(before) = before else { return Ok(()) };
+        if crate::privacy::privacy_bypass_active() {
+            return Ok(());
+        }
+        let norm = |v: Option<&JsonValue>| v.filter(|x| !x.is_null()).cloned();
+        for field in &schema.schema.fields {
+            let Some(rules) = field.policies.as_ref().and_then(|p| p.update.as_ref()) else {
+                continue;
+            };
+            let name = field.name.as_str();
+            if norm(before.get(name)) == norm(after.get(name)) {
+                continue;
+            }
+            let policy = Self::parse_policy_rules(rules)?;
+            if Self::evaluate(&policy, after, viewer).is_err() {
+                let msg = format!("Field update denied by policy: {name}");
+                crate::instrumentation::privacy::record_privacy_denial(
+                    schema.table_name,
+                    name,
+                    "field_update",
+                    &msg,
+                );
+                return Err(Error::Privacy(msg));
+            }
+        }
+        Ok(())
+    }
+
     fn extract_field_read_policy(field_def: &SchemaField) -> Result<Option<PrivacyPolicy>> {
         if let Some(policies) = &field_def.policies {
             if let Some(read_policy) = &policies.read {

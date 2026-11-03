@@ -25,6 +25,12 @@ pub(super) fn model_update_with_before_body_tokens(
                     existing.check_update_privacy(valence).await?;
                     let existing_value = serde_json::to_value(&existing)
                         .map_err(valence::Error::from)?;
+                    valence::PrivacyEvaluator::check_field_update_access(
+                        Self::__schema_metadata()?,
+                        Some(&existing_value),
+                        &record,
+                        valence.actor(),
+                    )?;
                     let mut patch = serde_json::Map::new();
                     if let (
                         serde_json::Value::Object(existing_obj),
@@ -47,6 +53,14 @@ pub(super) fn model_update_with_before_body_tokens(
                     ).await?;
                     if let Some(ref existing) = fetched {
                         existing.check_update_privacy(valence).await?;
+                        let existing_value = serde_json::to_value(existing)
+                            .map_err(valence::Error::from)?;
+                        valence::PrivacyEvaluator::check_field_update_access(
+                            Self::__schema_metadata()?,
+                            Some(&existing_value),
+                            &record,
+                            valence.actor(),
+                        )?;
                     }
                     (fetched, None)
                 }

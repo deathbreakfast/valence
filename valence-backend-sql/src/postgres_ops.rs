@@ -312,6 +312,7 @@ pub async fn define_unique_index_postgres(
                     record_table: None,
                 },
             ],
+            retired: Vec::new(),
         };
         ensure_layout_for_write_postgres(pool, &layout, ensured).await?;
     }
@@ -355,6 +356,7 @@ pub async fn apply_ttl_policy_postgres(
                     record_table: None,
                 },
             ],
+            retired: Vec::new(),
         };
         ensure_layout_for_write_postgres(pool, &layout, ensured).await?;
     }

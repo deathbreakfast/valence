@@ -293,6 +293,7 @@ mod tests {
                     record_table: None,
                 },
             ],
+            retired: Vec::new(),
         };
         let ddl = surreal_create(&layout).expect("ddl");
         assert!(
@@ -352,6 +353,7 @@ mod tests {
                 default: None,
                 record_table: None,
             }],
+            retired: Vec::new(),
         };
         let sqlite = sqlite_create(&layout).expect("sqlite ddl");
         assert!(

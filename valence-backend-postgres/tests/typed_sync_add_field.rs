@@ -56,6 +56,7 @@ async fn postgres_get_decodes_by_column_name_after_added_field() {
             field("id", FieldStorage::String, true),
             field("name", FieldStorage::String, false),
         ],
+        retired: Vec::new(),
     };
     backend
         .ensure_typed_table(&layout_v1)
@@ -105,6 +106,7 @@ async fn postgres_concurrent_schema_growth_does_not_shift_gets() {
             field("id", FieldStorage::String, true),
             field("name", FieldStorage::String, false),
         ],
+        retired: Vec::new(),
     };
     backend.ensure_typed_table(&base).await.expect("ensure");
     backend

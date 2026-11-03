@@ -71,6 +71,9 @@ pub struct StorageLayout {
     pub table: String,
     /// Ordered fields (includes `id` when present on the schema).
     pub fields: Vec<LayoutField>,
+    /// Retired field names ([`Schema::retired_fields`]): live columns sync keeps but
+    /// never adds, reads or writes.
+    pub retired: Vec<String>,
 }
 
 impl StorageLayout {
@@ -134,9 +137,13 @@ impl StorageLayout {
                 record_table: None,
             });
         }
+        for name in &schema.retired_fields {
+            assert_safe_ident(name)?;
+        }
         Ok(Self {
             table: schema.name.clone(),
             fields,
+            retired: schema.retired_fields.clone(),
         })
     }
 
@@ -210,6 +217,7 @@ impl StorageLayout {
         Ok(Self {
             table: table.to_string(),
             fields,
+            retired: Vec::new(),
         })
     }
 
@@ -218,7 +226,10 @@ impl StorageLayout {
             return Ok(());
         };
         for key in obj.keys() {
-            if key == "id" || self.fields.iter().any(|f| f.name == *key) {
+            if key == "id"
+                || self.fields.iter().any(|f| f.name == *key)
+                || self.retired.contains(key)
+            {
                 continue;
             }
             assert_safe_ident(key)?;
@@ -313,6 +324,7 @@ mod tests {
             iters: vec![],
             composite_key: vec![],
             traits: vec![],
+            retired_fields: Vec::new(),
             ttl: None,
             ownership: None,
             meta: SchemaMeta {
@@ -434,10 +446,12 @@ mod tests {
                     record_table: None,
                 },
             ],
+            retired: Vec::new(),
         };
         let live = StorageLayout {
             table: "t".into(),
             fields: desired.fields[..2].to_vec(),
+            retired: Vec::new(),
         };
         let diff = additive_ops(&desired, &live).expect("diff");
         assert_eq!(diff.ops.len(), 1);
@@ -461,6 +475,7 @@ mod tests {
                 default: None,
                 record_table: None,
             }],
+            retired: Vec::new(),
         };
         let live = StorageLayout {
             table: "t".into(),
@@ -477,6 +492,7 @@ mod tests {
                     record_table: None,
                 },
             ],
+            retired: Vec::new(),
         };
         let err = additive_ops(&desired, &live).expect_err("destructive");
         assert!(matches!(err, Error::Validation(_)));

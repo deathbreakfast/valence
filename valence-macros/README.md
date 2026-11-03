@@ -22,6 +22,7 @@ Defines a schema using a Rust DSL. The macro registers schema metadata into
 | `side_effects` | no | Mutation hooks |
 | `composite_key` | no | Multi-field primary key |
 | `traits` | no | Mix in `valence_trait_schema!` names |
+| `retired_fields` | no | Names of removed fields whose columns stay in the table (`retired_fields: ["project"]`). See [Retiring a field](#retiring-a-field). |
 
 ### Backend selection
 
@@ -70,6 +71,42 @@ valence_schema! {
     }
 }
 ```
+
+### Retiring a field
+
+Boot sync refuses to start when a typed SQL table has a column the schema no longer
+declares, so a typo can't silently orphan data. To remove a field on purpose, delete it
+from `fields`, list its name under `retired_fields`, and bump `version` so sync runs:
+
+```rust
+valence_schema! {
+    Task {
+        table: "task",
+        version: "0.3.0",
+        repository: "https://github.com/your-org/your-app",
+        fields: [
+            id: { r#type: FieldType::String, primary_key: true, required: true },
+            title: { r#type: FieldType::String, required: true },
+        ],
+        // `project` was a field until 0.2.0.
+        retired_fields: ["project"],
+    }
+}
+```
+
+On SQLite and Postgres the column stays in the table and sync runs no DDL for it. Reads
+leave it out (`get`, queries, and the rows privacy policies see), and writes never list it,
+so new rows hold NULL there. Old rows keep their value on disk until you drop the column
+yourself.
+
+If the retired column is `NOT NULL` without a `DEFAULT`, new inserts would fail. Postgres
+sync relaxes the column to nullable; SQLite sync refuses with an error naming the column,
+because SQLite can't relax `NOT NULL` without rebuilding the table.
+
+To undo a retirement, remove the name from `retired_fields` and add the field back. The
+macro rejects a name that is still in `fields`, `id`, a duplicate, or a name that isn't a
+valid identifier. Document backends (mem, Surreal, MongoDB, Redis, IndraDB) have no fixed
+columns, so they accept the key and ignore it.
 
 ## `valence_trait_schema!`
 

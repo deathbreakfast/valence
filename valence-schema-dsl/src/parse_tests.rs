@@ -395,3 +395,61 @@ fn defer_to_edge_empty_edge_sad() {
         "{err_msg}"
     );
 }
+
+fn retired_schema(retired: &str) -> String {
+    format!(
+        r#"
+            Task {{
+                repository: "https://github.com/unified-field-dev/valence",
+                table: "task",
+                version: "0.2.0",
+                fields: [
+                    id: {{ r#type: FieldType::String, primary_key: true, required: true }},
+                    title: {{ r#type: FieldType::String, required: true }}
+                ],
+                retired_fields: {retired}
+            }}
+        "#
+    )
+}
+
+fn retired_err(retired: &str) -> String {
+    let schema = syn::parse_str::<SchemaSpec>(&retired_schema(retired)).expect("parse");
+    match schema.to_schema() {
+        Ok(_) => panic!("expected retired_fields error for {retired}"),
+        Err(e) => e.to_string(),
+    }
+}
+
+#[test]
+fn retired_fields_parse_happy() {
+    let schema = syn::parse_str::<SchemaSpec>(&retired_schema(r#"["project", "legacy_flag"]"#))
+        .expect("parse");
+    let parsed = schema.to_schema().expect("to_schema");
+    assert_eq!(parsed.retired_fields, vec!["project", "legacy_flag"]);
+    assert_eq!(parsed.fields.len(), 2);
+}
+
+#[test]
+fn retired_fields_also_in_fields_compile_error_sad() {
+    let err = retired_err(r#"["title"]"#);
+    assert!(err.contains("still declared in `fields`"), "{err}");
+}
+
+#[test]
+fn retired_fields_id_compile_error_sad() {
+    let err = retired_err(r#"["id"]"#);
+    assert!(err.contains("cannot retire `id`"), "{err}");
+}
+
+#[test]
+fn retired_fields_duplicate_compile_error_sad() {
+    let err = retired_err(r#"["project", "project"]"#);
+    assert!(err.contains("twice"), "{err}");
+}
+
+#[test]
+fn retired_fields_invalid_ident_compile_error_sad() {
+    let err = retired_err(r#"["not a name"]"#);
+    assert!(err.contains("not a valid field identifier"), "{err}");
+}

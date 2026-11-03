@@ -64,6 +64,7 @@ fn authenticated_only_schema() -> &'static SchemaMetadata {
             iters: Vec::new(),
             composite_key: Vec::new(),
             traits: Vec::new(),
+            retired_fields: Vec::new(),
             ttl: None,
             ownership: None,
             meta: SchemaMeta {

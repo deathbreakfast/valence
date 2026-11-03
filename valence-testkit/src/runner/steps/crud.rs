@@ -146,6 +146,7 @@ pub(super) async fn run(
                         record_table: None,
                     },
                 ],
+                retired: Vec::new(),
             };
             backend
                 .ensure_typed_table(&layout_v1)
@@ -294,6 +295,7 @@ pub(super) async fn run(
                         record_table: None,
                     },
                 ],
+                retired: Vec::new(),
             };
             backend
                 .ensure_typed_table(&layout_v1)
@@ -402,6 +404,7 @@ pub(super) async fn run(
                         record_table: None,
                     },
                 ],
+                retired: Vec::new(),
             };
             backend
                 .ensure_typed_table(&live)
@@ -431,6 +434,7 @@ pub(super) async fn run(
                         record_table: None,
                     },
                 ],
+                retired: Vec::new(),
             };
             match backend.sync_typed_table(&desired).await {
                 Ok(()) => {

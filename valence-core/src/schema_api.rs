@@ -216,6 +216,12 @@ pub struct Schema {
     pub composite_key: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub traits: Vec<String>,
+    /// Fields removed from the schema whose columns stay in storage.
+    ///
+    /// Boot sync accepts these live columns instead of refusing them, runs no DDL for
+    /// them, and typed reads leave them out. Set from `retired_fields: ["old"]`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub retired_fields: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ttl: Option<SchemaTtlPolicy>,
     #[serde(skip_serializing_if = "Option::is_none")]

@@ -143,6 +143,7 @@ pub async fn inspect_typed_layout_sqlite(
             .to_ascii_uppercase();
         let notnull: i64 = r.try_get("notnull").unwrap_or(0);
         let pk: i64 = r.try_get("pk").unwrap_or(0);
+        let default: Option<String> = r.try_get("dflt_value").unwrap_or(None);
         let storage = match ctype.as_str() {
             "INTEGER" => FieldStorage::Integer,
             "REAL" => FieldStorage::Decimal,
@@ -156,13 +157,14 @@ pub async fn inspect_typed_layout_sqlite(
             nullable: notnull == 0 && pk == 0,
             unique: false,
             indexed: false,
-            default: None,
+            default,
             record_table: None,
         });
     }
     Ok(Some(StorageLayout {
         table: table.to_string(),
         fields,
+        retired: Vec::new(),
     }))
 }
 
@@ -213,6 +215,7 @@ pub async fn inspect_typed_layout_postgres(
     Ok(Some(StorageLayout {
         table: table.to_string(),
         fields,
+        retired: Vec::new(),
     }))
 }
 
@@ -724,11 +727,14 @@ fn bind_postgres<'q>(
 }
 
 /// Prefer registry field storage kinds (Json/Currency/DateTime) over PRAGMA TEXT→String.
+///
+/// Drops the schema's retired columns so their stale values never reach a read.
 fn layout_with_registry_storage(table: &str, live: StorageLayout) -> StorageLayout {
     let Ok(reg) = StorageLayout::from_registry_table(table) else {
         return live;
     };
     let mut fields = live.fields;
+    fields.retain(|f| !reg.retired.contains(&f.name));
     for f in &mut fields {
         if let Some(rf) = reg.fields.iter().find(|r| r.name == f.name) {
             f.storage = rf.storage;
@@ -737,6 +743,7 @@ fn layout_with_registry_storage(table: &str, live: StorageLayout) -> StorageLayo
     StorageLayout {
         table: live.table,
         fields,
+        retired: reg.retired,
     }
 }
 
@@ -1139,10 +1146,13 @@ fn map_select_row_sqlite_with_layout(
         };
         fields.insert(f.name.clone(), val);
     }
-    // Include any unexpected SELECT columns (best-effort).
+    // Include any unexpected SELECT columns (best-effort), never retired ones.
     for col in row.columns() {
         let name = col.name();
-        if name.eq_ignore_ascii_case("id") || fields.contains_key(name) {
+        if name.eq_ignore_ascii_case("id")
+            || fields.contains_key(name)
+            || layout.retired.iter().any(|r| r == name)
+        {
             continue;
         }
         if let Ok(s) = row.try_get::<String, _>(name) {
@@ -1199,7 +1209,10 @@ fn map_select_row_postgres_with_layout(
     }
     for col in row.columns() {
         let name = col.name();
-        if name.eq_ignore_ascii_case("id") || fields.contains_key(name) {
+        if name.eq_ignore_ascii_case("id")
+            || fields.contains_key(name)
+            || layout.retired.iter().any(|r| r == name)
+        {
             continue;
         }
         if let Ok(v) = row.try_get::<Value, _>(name) {

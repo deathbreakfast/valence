@@ -327,3 +327,100 @@ async fn tm_s9_hasmany_restrict_blocks_compute() {
     assert!(!dag.restrict_violations.is_empty());
     assert!(dag.nodes.is_empty());
 }
+
+fn m2m_conn(from: &str, to: &str, edge: &str, on_delete: &str) -> SchemaConnection {
+    SchemaConnection {
+        name: "members".into(),
+        from_table: from.into(),
+        from_field: "id".into(),
+        to_table: to.into(),
+        cardinality: "ManyToMany".into(),
+        required: false,
+        on_delete: on_delete.into(),
+        label: "members".into(),
+        model_path: None,
+        reverse_field: None,
+        edge_table: Some(edge.into()),
+        target_trait: None,
+    }
+}
+
+/// Deletes `bot` row `b1` where `grp` declares an M2M to `bot` with `on_delete`.
+async fn incoming_m2m_dag(tag: &str, on_delete: &str, with_edge: bool) -> (Valence, DeletionDag) {
+    let grp = format!("grp_{tag}");
+    let bot = format!("bot_{tag}");
+    let edge = format!("grp_bot_{tag}");
+    let mut reg = SchemaRegistry::new();
+    reg.register(base_schema(
+        &grp,
+        vec![m2m_conn(&grp, &bot, &edge, on_delete)],
+    ));
+    reg.register(base_schema(&bot, vec![]));
+
+    let v = mem_valence();
+    if with_edge {
+        v.relate_edge(
+            &edge,
+            &RecordId::new(&grp, "g1"),
+            &RecordId::new(&bot, "b1"),
+            DataUsePurpose::new(
+                r"**Test:** Creates a fixture edge so the incoming M2M cascade can be checked. CI and developers running the suite only.",
+                file!(),
+                line!(),
+            ),
+        )
+        .await
+        .unwrap();
+    }
+    let dag = DeletionDag::compute_with_registry(
+        &bot,
+        "b1",
+        &v,
+        &reg,
+        &valence_core::trait_registry::TraitRegistry::new(),
+    )
+    .await
+    .unwrap();
+    (v, dag)
+}
+
+fn remove_edge_count(dag: &DeletionDag, edge: &str) -> usize {
+    dag.nodes
+        .iter()
+        .filter(|n| matches!(&n.action, DeletionAction::RemoveEdge { edge_table } if edge_table == edge))
+        .count()
+}
+
+#[tokio::test]
+async fn tm_s10_incoming_m2m_cascade_removes_edge() {
+    let (v, dag) = incoming_m2m_dag("s10", "Cascade", true).await;
+    assert_eq!(remove_edge_count(&dag, "grp_bot_s10"), 1);
+    for n in &dag.nodes {
+        apply_deletion_node(n, &v).await.unwrap();
+    }
+    let sources = v
+        .active_backend()
+        .unwrap()
+        .get_edge_sources(&RecordId::new("bot_s10", "b1"), "grp_bot_s10")
+        .await
+        .unwrap();
+    assert!(sources.is_empty());
+}
+
+#[tokio::test]
+async fn tm_s11_incoming_m2m_setnull_emits_single_remove_edge() {
+    let (_v, dag) = incoming_m2m_dag("s11", "SetNull", true).await;
+    assert_eq!(remove_edge_count(&dag, "grp_bot_s11"), 1);
+}
+
+#[tokio::test]
+async fn tm_s12_incoming_m2m_restrict_emits_no_remove_edge() {
+    let (_v, dag) = incoming_m2m_dag("s12", "Restrict", true).await;
+    assert_eq!(remove_edge_count(&dag, "grp_bot_s12"), 0);
+}
+
+#[tokio::test]
+async fn tm_s13_incoming_m2m_without_edges_emits_nothing() {
+    let (_v, dag) = incoming_m2m_dag("s13", "Cascade", false).await;
+    assert_eq!(remove_edge_count(&dag, "grp_bot_s13"), 0);
+}

@@ -404,7 +404,8 @@ async fn collect_set_null_and_remove_edge_for_entity(
         }
     }
 
-    // Incoming M2M SetNull declared on other tables targeting this table.
+    // Incoming M2M declared on other tables targeting this table: drop the edges whatever
+    // the policy, except Restrict (which blocks rather than cleans up).
     for other in registry.list_schemas() {
         if skip_graph_table(other) || other == tbl {
             continue;
@@ -414,7 +415,7 @@ async fn collect_set_null_and_remove_edge_for_entity(
         };
         for conn in schema_connections_for_table(om).iter() {
             if conn.cardinality != "ManyToMany"
-                || !conn.on_delete.eq_ignore_ascii_case("setnull")
+                || conn.on_delete.eq_ignore_ascii_case("restrict")
                 || !conn_targets_table(conn, tbl, traits)
             {
                 continue;

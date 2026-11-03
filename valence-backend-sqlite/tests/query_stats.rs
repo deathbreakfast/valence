@@ -40,6 +40,7 @@ fn base_schema(name: &str, policies: SchemaPolicies, fields: Vec<SchemaField>) -
         side_effects: Vec::new(),
         iters: Vec::new(),
         composite_key: Vec::new(),
+        retired_fields: Vec::new(),
         traits: Vec::new(),
         ttl: None,
         ownership: None,
@@ -161,6 +162,7 @@ async fn seed(table: &str) -> Valence {
         .ensure_typed_table(&StorageLayout {
             table: table.into(),
             fields: vec![col("id", true), col("user", false)],
+            retired: Vec::new(),
         })
         .await
         .expect("ensure table");

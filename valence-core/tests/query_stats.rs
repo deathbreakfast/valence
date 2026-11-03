@@ -39,6 +39,7 @@ fn base_schema(name: &str, policies: SchemaPolicies, fields: Vec<SchemaField>) -
         side_effects: Vec::new(),
         iters: Vec::new(),
         composite_key: Vec::new(),
+        retired_fields: Vec::new(),
         traits: Vec::new(),
         ttl: None,
         ownership: None,

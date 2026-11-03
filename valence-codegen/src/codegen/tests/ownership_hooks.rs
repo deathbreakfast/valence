@@ -164,3 +164,43 @@ valence_schema! {
         "platform ownership table must not inject delete ownership markers"
     );
 }
+
+#[test]
+fn queued_delete_checks_dispatcher_before_marking_pending() {
+    let schema = r#"
+use valence::prelude::*;
+use valence::privacy_policies::common::{PUBLIC_READ, AUTHENTICATED};
+
+valence_schema! {
+    QueuedDeleteProbe {
+        repository: "https://github.com/unified-field-dev/valence",
+        table: "queued_delete_probe",
+        database: valence::DEFAULT_SURREAL_STORAGE,
+        version: "0.1.0",
+        description: "queued delete probe",
+
+        policies: {
+            read: { allow: [PUBLIC_READ] },
+            delete: { allow: [AUTHENTICATED] },
+        },
+
+        fields: [
+            id: { r#type: FieldType::String, primary_key: true, required: true },
+        ]
+    }
+}
+"#;
+    let path = write_temp_schema_file(schema, "ownership_hook_queued_delete.rs");
+    let generated = generate_from_schema_file(&path, &HashMap::<String, ParsedTraitDef>::new())
+        .expect("codegen");
+    let check = generated
+        .find("require_deletion_dispatcher")
+        .expect("queued delete checks the dispatcher");
+    let mark = generated
+        .find("OwnershipService::mark_pending_deletion")
+        .expect("queued delete marks the row");
+    assert!(
+        check < mark,
+        "dispatcher check must precede the pending mark"
+    );
+}

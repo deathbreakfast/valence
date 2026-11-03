@@ -1011,3 +1011,44 @@ async fn delete_now_partial_failure_then_idempotent_retry() {
         "missing root must not re-fire SE"
     );
 }
+
+#[tokio::test]
+async fn queued_delete_without_dispatcher_leaves_row_visible() {
+    use valence_core::deletion::{
+        is_deletion_dispatcher_registered, register_noop_deletion_dispatcher_for_tests,
+    };
+    use valence_core::queue_delete_entity_returning_run_id;
+
+    ensure_dn_schemas();
+    // No other test in this binary installs a dispatcher, so the process-global slot is empty
+    // until the end of this test.
+    assert!(!is_deletion_dispatcher_registered());
+    let (v, backend) = mem_valence(Actor::User {
+        user_id: "u1".into(),
+    });
+    backend
+        .create_record("dn_pending_q", json!({"id": "nodisp"}))
+        .await
+        .unwrap();
+    OwnershipService::ensure_active_ownership("dn_pending_q", "nodisp", OwnerRef::system(), &v)
+        .await
+        .unwrap();
+
+    let err = queue_delete_entity_returning_run_id("dn_pending_q", "nodisp", &v)
+        .await
+        .expect_err("no dispatcher registered");
+    assert!(matches!(err, Error::Internal(_)), "got {err:?}");
+    assert!(
+        QueryCore::get_record_json("dn_pending_q", "nodisp", &v, DataUsePurpose::new(r"**Test:** Reloads a fixture row to check that a failed queued delete left it readable. CI and developers running the suite only.", file!(), line!()))
+            .await
+            .unwrap()
+            .is_some(),
+        "row must not be pending_deletion after a refused queued delete"
+    );
+
+    register_noop_deletion_dispatcher_for_tests();
+    let run_id = queue_delete_entity_returning_run_id("dn_pending_q", "nodisp", &v)
+        .await
+        .expect("queued delete with dispatcher");
+    assert!(run_id.is_some());
+}

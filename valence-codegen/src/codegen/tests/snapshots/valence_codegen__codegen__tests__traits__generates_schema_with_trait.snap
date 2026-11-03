@@ -1,5 +1,6 @@
 ---
 source: valence-codegen/src/codegen/tests/traits.rs
+assertion_line: 152
 expression: generated
 ---
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -255,6 +256,7 @@ impl valence::Model for TestTraitA {
             valence::deletion::PreparedDeletion::Missing
             | valence::deletion::PreparedDeletion::Pending { .. } => Ok(()),
             valence::deletion::PreparedDeletion::Ready { bare_id, .. } => {
+                valence::deletion::require_deletion_dispatcher()?;
                 valence::ownership::OwnershipService::mark_pending_deletion(
                         Self::table_name(),
                         &bare_id,

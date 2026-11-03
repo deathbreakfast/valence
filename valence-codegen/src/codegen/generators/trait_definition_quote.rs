@@ -81,10 +81,19 @@ fn collect_trait_definition_pieces(trait_def: &ParsedTraitDef) -> TraitDefinitio
         .map(|f| {
             let name = format_ident!("{}", f.name);
             let rtype = rust_type_for_field(f, trait_name);
-            if f.stored_optional() {
-                quote! { #name: Option<#rtype> }
+            let serde_attrs = if f.field_type == "datetime" {
+                if f.stored_optional() {
+                    quote! { #[serde(default, with = "valence::datetime_unix::option")] }
+                } else {
+                    quote! { #[serde(with = "valence::datetime_unix")] }
+                }
             } else {
-                quote! { #name: #rtype }
+                quote! {}
+            };
+            if f.stored_optional() {
+                quote! { #serde_attrs #name: Option<#rtype> }
+            } else {
+                quote! { #serde_attrs #name: #rtype }
             }
         })
         .collect();

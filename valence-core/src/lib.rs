@@ -165,6 +165,7 @@ pub use ports::actor::{ActorContext, ActorFactory, JsonActorContext, JsonActorFa
 pub use ports::endpoints::{
     DatabaseEndpointResolver, EnvEndpointResolver, NoopEndpointResolver, StaticEndpointResolver,
 };
+pub use ports::extensions::PortExtensions;
 pub use ports::secrets::{EnvSecretProvider, NoOpSecretProvider, SecretProvider};
 pub use privacy::{
     parent_op_for_defer, privacy_bypass_active, PolicyEvaluator, PrivacyEvaluator,

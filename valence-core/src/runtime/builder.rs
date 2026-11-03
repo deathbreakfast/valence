@@ -6,6 +6,7 @@ use crate::backend::DatabaseBackend;
 use crate::error::{Error, Result};
 use crate::ports::actor::{ActorFactory, JsonActorFactory};
 use crate::ports::endpoints::{DatabaseEndpointResolver, NoopEndpointResolver};
+use crate::ports::extensions::PortExtensions;
 use crate::ports::secrets::{NoOpSecretProvider, SecretProvider};
 use crate::request_cache::RequestPermissionCache;
 use crate::router::DatabaseRouter;
@@ -28,7 +29,8 @@ use valence_telemetry::{install_telemetry_sink, NoOpSink, TelemetrySink};
 /// ## Host ports
 ///
 /// Optional: [`Self::telemetry_sink`], [`Self::secret_provider`], [`Self::actor_factory`],
-/// [`Self::endpoint_resolver`]. See [`crate::ports`] for the port table and reference impls.
+/// [`Self::endpoint_resolver`]. Ports that only privacy evaluators read go through
+/// [`Self::extension`]. See [`crate::ports`] for the port table and reference impls.
 ///
 /// Privacy policies are schema-attached ([`crate::PolicyEvaluator`]), not registered here.
 ///
@@ -55,6 +57,7 @@ pub struct ValenceBuilder {
     secret_provider: Option<Arc<dyn SecretProvider>>,
     actor_factory: Option<Arc<dyn ActorFactory>>,
     endpoint_resolver: Option<Arc<dyn DatabaseEndpointResolver>>,
+    extensions: PortExtensions,
     actor: Option<Actor>,
     permission_cache: Option<RequestPermissionCache>,
 }
@@ -150,6 +153,35 @@ impl ValenceBuilder {
         self
     }
 
+    /// Register a host port under its type for [`Valence::extension`].
+    ///
+    /// Use this for ports consulted inside [`crate::PolicyEvaluator`]s that have no builder
+    /// method of their own. Registering the same type twice keeps the later port.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::sync::Arc;
+    /// use valence_backend_mem::InMemoryBackend;
+    /// use valence_core::Valence;
+    ///
+    /// struct BotGate {
+    ///     strict: bool,
+    /// }
+    ///
+    /// let valence = Valence::builder()
+    ///     .add_backend("default", Arc::new(InMemoryBackend::new()))
+    ///     .extension(Arc::new(BotGate { strict: true }))
+    ///     .build()
+    ///     .expect("build");
+    /// assert!(valence.extension::<BotGate>().expect("registered").strict);
+    /// ```
+    #[must_use]
+    pub fn extension<T: Send + Sync + 'static>(mut self, port: Arc<T>) -> Self {
+        self.extensions.insert(port);
+        self
+    }
+
     /// Set the default actor for this runtime (defaults to anonymous).
     ///
     /// # Security
@@ -234,6 +266,7 @@ impl ValenceBuilder {
             endpoint_resolver: self
                 .endpoint_resolver
                 .unwrap_or_else(|| Arc::new(NoopEndpointResolver)),
+            port_extensions: self.extensions,
             actor,
             owner_override: None,
             permission_cache: self.permission_cache,

@@ -12,6 +12,26 @@ pub(super) fn model_update_with_before_body_tokens(
             .map_err(valence::Error::from)?;
         Self::__assert_unique_constraints_for_record(&record, Some(id), valence).await?;
 
+        // Authorize against the row actually in storage, read raw. `Model::get` hides
+        // rows the caller can't read, and a caller-supplied `before` can't be trusted,
+        // so neither may decide whether the stored row allows this update.
+        let __stored = valence::QueryCore::get_record_json(
+            <Self as valence::Model>::table_name(),
+            id,
+            valence,
+            valence::use_!(r"When a model **updates a row**, we **load the stored row first** so Update privacy is checked against what is actually saved. The same request path performing the update uses this load."),
+        )
+        .await?;
+        if let Some(__stored) = &__stored {
+            valence::PrivacyEvaluator::check_entity_access(
+                Self::__schema_metadata()?,
+                valence::PrivacyOperation::Update,
+                __stored,
+                valence,
+            )
+            .await?;
+        }
+
         // When the caller supplies a real prior snapshot (`before`), only the fields
         // that actually differ from it are written — a sparse patch that can't clobber
         // a field it doesn't name, no matter what else changed concurrently. Diffing
@@ -22,7 +42,6 @@ pub(super) fn model_update_with_before_body_tokens(
         let (before_snapshot, sparse_patch): (Option<Self>, Option<serde_json::Map<String, serde_json::Value>>) =
             match before {
                 Some(existing) => {
-                    existing.check_update_privacy(valence).await?;
                     let existing_value = serde_json::to_value(&existing)
                         .map_err(valence::Error::from)?;
                     let mut patch = serde_json::Map::new();
@@ -45,9 +64,6 @@ pub(super) fn model_update_with_before_body_tokens(
                         valence,
                         valence::DataUsePurpose::framework_nested(),
                     ).await?;
-                    if let Some(ref existing) = fetched {
-                        existing.check_update_privacy(valence).await?;
-                    }
                     (fetched, None)
                 }
             };

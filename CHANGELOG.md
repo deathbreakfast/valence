@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Documented
+
+- The owner rules (`OWNER_BY_ID`, `OWNER_BY_USER_FIELD`, `check_owner_by_field`) never
+  match an `Actor::ServiceUser`, since a service user has no user id. Allow bots with
+  `AUTHENTICATED`, `SYSTEM_ONLY` or a custom rule on `service_name()`.
+
 ### Added
 
 - `retired_fields: ["old"]` in `valence_schema!` (and `Schema::retired_fields`). A product

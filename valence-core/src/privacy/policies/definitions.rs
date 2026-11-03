@@ -61,6 +61,10 @@ pub mod common {
 pub mod owner {
     use super::{owner_by_id_check, owner_by_user_field_check, Actor, JsonValue, PrivacyRule};
 
+    /// Owner rule keyed on the record's `id` field.
+    ///
+    /// A [`crate::actor::Actor::ServiceUser`] never passes it: a service user has no user id
+    /// to compare. See [`check_owner_by_field`].
     pub fn owner_by_id() -> PrivacyRule {
         PrivacyRule {
             name: "owner_by_id",
@@ -69,6 +73,27 @@ pub mod owner {
         }
     }
 
+    /// True when `viewer` is [`Actor::System`], or a [`Actor::User`] whose id equals the
+    /// record's `field` value (a `table:` prefix on either side is ignored).
+    ///
+    /// A [`Actor::ServiceUser`] (a bot) never matches, because it has no user id. To let
+    /// bots through, allow `common::AUTHENTICATED` or `common::SYSTEM_ONLY` beside the owner
+    /// rule, or write a custom rule that checks `viewer.service_name()`.
+    ///
+    /// ```
+    /// use valence_core::actor::Actor;
+    /// use valence_core::privacy_policies::owner::check_owner_by_field;
+    ///
+    /// let record = serde_json::json!({ "user": "user:alice" });
+    /// let alice = Actor::User { user_id: "alice".into() };
+    /// let bot = Actor::ServiceUser { service_name: "svc:ingest".into() };
+    ///
+    /// let system = Actor::System { operation: "job".into() };
+    ///
+    /// assert!(check_owner_by_field(&record, &alice, "user"));
+    /// assert!(check_owner_by_field(&record, &system, "user"));
+    /// assert!(!check_owner_by_field(&record, &bot, "user"));
+    /// ```
     pub fn check_owner_by_field(record: &JsonValue, viewer: &Actor, field: &str) -> bool {
         if viewer.is_system() {
             return true;
@@ -125,12 +150,16 @@ pub mod owner {
         false
     }
 
+    /// Owner rule keyed on the record's `user` field. Never matches a
+    /// [`Actor::ServiceUser`]; see [`check_owner_by_field`].
     pub const OWNER_BY_USER_FIELD: PrivacyRule = PrivacyRule {
         name: "owner_by_user_field",
         description: Some("Owner check via \"user\" field"),
         check: owner_by_user_field_check,
     };
 
+    /// Owner rule keyed on the record's `id` field. Never matches a
+    /// [`Actor::ServiceUser`]; see [`check_owner_by_field`].
     pub const OWNER_BY_ID: PrivacyRule = PrivacyRule {
         name: "owner_by_id",
         description: Some("Owner check via \"id\" field"),
@@ -142,6 +171,7 @@ pub mod owner {
 pub mod helpers {
     use crate::actor::Actor;
 
+    /// False for any actor without a user id, including a service user.
     pub fn is_owner(viewer: &Actor, record_id: &str) -> bool {
         if let Some(viewer_id) = viewer.user_id() {
             viewer_id == record_id
@@ -150,6 +180,7 @@ pub mod helpers {
         }
     }
 
+    /// False for any actor without a user id, including a service user.
     pub fn is_owner_via_field(viewer: &Actor, owner_field_value: &str) -> bool {
         let owner_id = if let Some(id_part) = owner_field_value.split(':').nth(1) {
             id_part

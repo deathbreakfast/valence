@@ -554,20 +554,37 @@ impl TestEntity {
         data.check_update_privacy(valence).await?;
         let record = serde_json::to_value(&data).map_err(valence::Error::from)?;
         Self::__assert_unique_constraints_for_record(&record, Some(id), valence).await?;
+        let __stored = valence::QueryCore::get_record_json(
+                <Self as valence::Model>::table_name(),
+                id,
+                valence,
+                valence::use_!(
+                    r"When a model **updates a row**, we **load the stored row first** so Update privacy is checked against what is actually saved. The same request path performing the update uses this load."
+                ),
+            )
+            .await?;
+        if let Some(__stored) = &__stored {
+            valence::PrivacyEvaluator::check_entity_access(
+                    Self::__schema_metadata()?,
+                    valence::PrivacyOperation::Update,
+                    __stored,
+                    valence,
+                )
+                .await?;
+            valence::PrivacyEvaluator::check_field_update_access(
+                Self::__schema_metadata()?,
+                Some(__stored),
+                &record,
+                valence.actor(),
+            )?;
+        }
         let (
             before_snapshot,
             sparse_patch,
         ): (Option<Self>, Option<serde_json::Map<String, serde_json::Value>>) = match before {
             Some(existing) => {
-                existing.check_update_privacy(valence).await?;
                 let existing_value = serde_json::to_value(&existing)
                     .map_err(valence::Error::from)?;
-                valence::PrivacyEvaluator::check_field_update_access(
-                    Self::__schema_metadata()?,
-                    Some(&existing_value),
-                    &record,
-                    valence.actor(),
-                )?;
                 let mut patch = serde_json::Map::new();
                 if let (
                     serde_json::Value::Object(existing_obj),
@@ -588,17 +605,6 @@ impl TestEntity {
                         valence::DataUsePurpose::framework_nested(),
                     )
                     .await?;
-                if let Some(ref existing) = fetched {
-                    existing.check_update_privacy(valence).await?;
-                    let existing_value = serde_json::to_value(existing)
-                        .map_err(valence::Error::from)?;
-                    valence::PrivacyEvaluator::check_field_update_access(
-                        Self::__schema_metadata()?,
-                        Some(&existing_value),
-                        &record,
-                        valence.actor(),
-                    )?;
-                }
                 (fetched, None)
             }
         };

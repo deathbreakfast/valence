@@ -272,4 +272,69 @@ mod tests {
             .unwrap();
         assert_eq!(targets, Vec::<RecordId>::new());
     }
+
+    /// Bob can't read alice's note, so `Model::get` hides it. Update privacy must
+    /// still be checked against the stored row, with or without a caller `before`.
+    #[tokio::test]
+    async fn update_checks_stored_row_when_caller_cannot_read_it() {
+        use std::sync::Arc;
+
+        use valence::DatabaseBackend;
+
+        use super::OwnedNote;
+
+        let backend: Arc<dyn DatabaseBackend> = Arc::new(InMemoryBackend::new());
+        backend
+            .create_record(
+                "owned_note",
+                serde_json::json!({"id": {"table": "owned_note", "id": "n1"}, "user": "alice"}),
+            )
+            .await
+            .unwrap();
+        let as_user = |user: &str| {
+            Valence::builder()
+                .add_backend("default", backend.clone())
+                .with_actor(Actor::User {
+                    user_id: user.into(),
+                })
+                .build()
+                .expect("build")
+        };
+        let note = |user: &str| -> OwnedNote {
+            serde_json::from_value(
+                serde_json::json!({"id": {"table": "owned_note", "id": "n1"}, "user": user}),
+            )
+            .expect("note")
+        };
+        let purpose = || {
+            valence::use_!(
+                r"When the **product-model-host** suite updates a note it cannot read, we **check Update privacy against the stored row** so the test can prove a non-owner is refused. Developers running that example suite use this result."
+            )
+        };
+        let bob = as_user("bob");
+
+        // `data` names bob as owner, so only the stored row can refuse this.
+        let err = OwnedNote::update("n1", note("bob"), &bob, purpose())
+            .await
+            .expect_err("non-owner update must be refused");
+        assert!(matches!(err, valence::Error::Privacy(_)), "{err:?}");
+
+        // A forged `before` that claims bob owns the row must not be trusted.
+        let err = OwnedNote::update_with_before("n1", note("bob"), Some(note("bob")), &bob)
+            .await
+            .expect_err("forged before must be refused");
+        assert!(matches!(err, valence::Error::Privacy(_)), "{err:?}");
+
+        let stored = backend
+            .get_record("owned_note", "n1")
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(stored["user"], "alice");
+
+        // The owner can still update their own row.
+        OwnedNote::update("n1", note("alice"), &as_user("alice"), purpose())
+            .await
+            .expect("owner update");
+    }
 }

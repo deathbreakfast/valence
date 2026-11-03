@@ -10,8 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Documented
 
 - The owner rules (`OWNER_BY_ID`, `OWNER_BY_USER_FIELD`, `check_owner_by_field`) never
-  match an `Actor::ServiceUser`, since a service user has no user id. Allow bots with
-  `AUTHENTICATED`, `SYSTEM_ONLY` or a custom rule on `service_name()`.
+  match an `Actor::ServiceUser`, since a service user has no user id. Allow a bot with a
+  custom rule on `service_name()`; `SYSTEM_ONLY` never admits a service user, and
+  `AUTHENTICATED` would also open the records to every signed-in user.
 
 ### Added
 

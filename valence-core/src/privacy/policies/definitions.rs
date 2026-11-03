@@ -76,9 +76,11 @@ pub mod owner {
     /// True when `viewer` is [`Actor::System`], or a [`Actor::User`] whose id equals the
     /// record's `field` value (a `table:` prefix on either side is ignored).
     ///
-    /// A [`Actor::ServiceUser`] (a bot) never matches, because it has no user id. To let
-    /// bots through, allow `common::AUTHENTICATED` or `common::SYSTEM_ONLY` beside the owner
-    /// rule, or write a custom rule that checks `viewer.service_name()`.
+    /// A [`Actor::ServiceUser`] (a bot) never matches, because it has no user id. To let a
+    /// specific bot through, add a custom rule beside the owner rule that checks
+    /// `viewer.service_name()`, such as `== Some("svc:ingest")`. `common::SYSTEM_ONLY` does
+    /// not admit service users, and `common::AUTHENTICATED` would also open the records to
+    /// every signed-in user, which defeats the owner rule.
     ///
     /// ```
     /// use valence_core::actor::Actor;

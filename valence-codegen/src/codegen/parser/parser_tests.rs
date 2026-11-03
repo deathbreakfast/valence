@@ -27,6 +27,31 @@ fn parses_ttl_from_schema_file() {
 }
 
 #[test]
+fn parses_spectra_export_from_schema_file() {
+    let schema = extract_schema_from_macro(
+        r#"
+        valence_schema! {
+            Foo {
+                repository: "https://github.com/unified-field-dev/valence",
+                table: "foo",
+                version: "0.1.0",
+                spectra_export: { cadence: Weekly },
+                fields: [
+                    id: { r#type: FieldType::String, primary_key: true, required: true },
+                ],
+            }
+        }
+        "#,
+    )
+    .expect("parse")
+    .schema;
+    let export = schema.spectra_export.expect("spectra_export");
+    assert_eq!(export.cron(), "0 0 * * 0");
+    assert_eq!(export.job_name, "foo_weekly_export");
+    assert_eq!(export.target_table, "foo_export");
+}
+
+#[test]
 fn parses_database_expr() {
     let parsed = extract_schema_from_macro(
         r#"

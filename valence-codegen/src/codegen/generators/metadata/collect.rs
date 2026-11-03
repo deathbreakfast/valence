@@ -34,6 +34,7 @@ pub(super) struct SchemaMetadataPieces {
     pub side_effects_code: TokenStream,
     pub iters_code: TokenStream,
     pub ttl_code: TokenStream,
+    pub spectra_export_code: TokenStream,
     pub composite_key_code: TokenStream,
     pub ownership_code: TokenStream,
     pub database_evaluator_code: TokenStream,
@@ -119,6 +120,22 @@ pub(super) fn collect_schema_metadata_pieces(schema: &SchemaContext) -> SchemaMe
         quote! { None }
     };
 
+    let spectra_export_code = if let Some(export) = &schema.schema.spectra_export {
+        let cadence =
+            proc_macro2::Ident::new(export.cadence.as_str(), proc_macro2::Span::call_site());
+        let job_name = LitStr::new(&export.job_name, proc_macro2::Span::call_site());
+        let target_table = LitStr::new(&export.target_table, proc_macro2::Span::call_site());
+        quote! {
+            Some(valence::SpectraExportConfig {
+                cadence: valence::SpectraExportCadence::#cadence,
+                job_name: #job_name.to_string(),
+                target_table: #target_table.to_string(),
+            })
+        }
+    } else {
+        quote! { None }
+    };
+
     let ownership_code = match &schema.schema.ownership {
         None => quote! { None },
         Some(o) => {
@@ -163,6 +180,7 @@ pub(super) fn collect_schema_metadata_pieces(schema: &SchemaContext) -> SchemaMe
         side_effects_code,
         iters_code,
         ttl_code,
+        spectra_export_code,
         composite_key_code,
         ownership_code,
         database_evaluator_code,

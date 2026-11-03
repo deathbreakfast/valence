@@ -1000,6 +1000,7 @@ impl TestTraitASchema {
                     traits: vec!["Named".to_string()],
                     retired_fields: Vec::new(),
                     ttl: None,
+                    spectra_export: None,
                     ownership: None,
                     meta: valence::SchemaMeta {
                         retention: "365 days".to_string(),

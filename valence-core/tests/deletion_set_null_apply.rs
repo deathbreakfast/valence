@@ -62,6 +62,7 @@ fn base_schema(name: &str, connections: Vec<SchemaConnection>) -> &'static Schem
         traits: Vec::new(),
         retired_fields: Vec::new(),
         ttl: None,
+        spectra_export: None,
         ownership: None,
         meta: SchemaMeta {
             retention: "1d".into(),

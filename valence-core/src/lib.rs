@@ -88,6 +88,7 @@ pub mod schema;
 pub mod schema_api;
 pub mod schema_types;
 pub mod side_effect;
+pub mod spectra_export;
 pub mod storage_layout;
 pub mod trait_registry;
 pub mod trait_schema;
@@ -207,6 +208,7 @@ pub use schema_api::{
 };
 pub use schema_types::{FieldType, JsonAsSerdeError, Role, Validator};
 pub use side_effect::{FieldChange, Mutation, MutationKind, SideEffect};
+pub use spectra_export::{SpectraExportCadence, SpectraExportConfig};
 pub use storage_layout::{
     AdditiveOp, FieldStorage, LayoutDiff, LayoutField, SqlColumnType, StorageLayout,
     SurrealFieldType,

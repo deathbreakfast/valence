@@ -326,6 +326,7 @@ mod tests {
             traits: vec![],
             retired_fields: Vec::new(),
             ttl: None,
+            spectra_export: None,
             ownership: None,
             meta: SchemaMeta {
                 retention: "365 days".into(),

@@ -44,6 +44,7 @@ fn base_schema(name: &str, policies: SchemaPolicies, fields: Vec<SchemaField>) -
         traits: Vec::new(),
         retired_fields: Vec::new(),
         ttl: None,
+        spectra_export: None,
         ownership: None,
         meta: SchemaMeta {
             retention: "365 days".to_string(),
@@ -205,6 +206,7 @@ fn history_defer_schema(table: &str, parent_table: &str) -> &'static SchemaMetad
         traits: Vec::new(),
         retired_fields: Vec::new(),
         ttl: None,
+        spectra_export: None,
         ownership: None,
         meta: SchemaMeta {
             retention: "365 days".to_string(),
@@ -497,6 +499,7 @@ async fn defer_cycle_denies_sad() {
         traits: vec![],
         retired_fields: Vec::new(),
         ttl: None,
+        spectra_export: None,
         ownership: None,
         meta: SchemaMeta {
             retention: "365 days".into(),
@@ -546,6 +549,7 @@ async fn defer_cycle_denies_sad() {
         traits: vec![],
         retired_fields: Vec::new(),
         ttl: None,
+        spectra_export: None,
         ownership: None,
         meta: SchemaMeta {
             retention: "365 days".into(),
@@ -1022,6 +1026,7 @@ async fn validate_unknown_edge_errors() {
         traits: vec![],
         retired_fields: Vec::new(),
         ttl: None,
+        spectra_export: None,
         ownership: None,
         meta: SchemaMeta {
             retention: "365 days".into(),

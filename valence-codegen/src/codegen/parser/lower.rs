@@ -2,11 +2,13 @@
 
 use valence_core::{
     DatabaseEvaluator, ForeignKeyRef, OwnershipConfig, Schema, SchemaConnection, SchemaEdge,
-    SchemaField, SchemaMeta, SchemaPolicies, SchemaPrivacy, SchemaTtlPolicy, DEFAULT_IN_MEMORY,
+    SchemaField, SchemaMeta, SchemaPolicies, SchemaPrivacy, SchemaTtlPolicy, SpectraExportCadence,
+    SpectraExportConfig, DEFAULT_IN_MEMORY,
 };
 use valence_schema_dsl::{
     ParsedConnection, ParsedField, ParsedOwnershipConfig, ParsedPolicies, ParsedPolicyRules,
-    ParsedSchema, ParsedTraitSchema, ParsedTtlPolicy,
+    ParsedSchema, ParsedSpectraExportCadence, ParsedSpectraExportConfig, ParsedTraitSchema,
+    ParsedTtlPolicy,
 };
 
 use super::ParsedTraitDef;
@@ -62,6 +64,7 @@ pub fn lower_parsed_schema(parsed: &ParsedSchema) -> Schema {
         traits: parsed.traits.clone(),
         retired_fields: parsed.retired_fields.clone(),
         ttl: parsed.ttl.as_ref().map(lower_ttl),
+        spectra_export: parsed.spectra_export.as_ref().map(lower_spectra_export),
         ownership: parsed.ownership.as_ref().map(lower_ownership),
         meta: SchemaMeta {
             retention: parsed.retention.clone(),
@@ -89,6 +92,21 @@ fn lower_ttl(ttl: &ParsedTtlPolicy) -> SchemaTtlPolicy {
     SchemaTtlPolicy {
         seconds: ttl.seconds,
         mode: ttl.mode.clone(),
+    }
+}
+
+fn lower_spectra_export(export: &ParsedSpectraExportConfig) -> SpectraExportConfig {
+    SpectraExportConfig {
+        cadence: match export.cadence {
+            ParsedSpectraExportCadence::Hourly => SpectraExportCadence::Hourly,
+            ParsedSpectraExportCadence::ThreeHours => SpectraExportCadence::ThreeHours,
+            ParsedSpectraExportCadence::SixHours => SpectraExportCadence::SixHours,
+            ParsedSpectraExportCadence::TwelveHours => SpectraExportCadence::TwelveHours,
+            ParsedSpectraExportCadence::Daily => SpectraExportCadence::Daily,
+            ParsedSpectraExportCadence::Weekly => SpectraExportCadence::Weekly,
+        },
+        job_name: export.job_name.clone(),
+        target_table: export.target_table.clone(),
     }
 }
 

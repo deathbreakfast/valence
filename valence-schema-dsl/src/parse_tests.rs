@@ -476,6 +476,76 @@ fn edge_policy_err(connection: &str) -> String {
     match schema.to_schema() {
         Ok(_) => panic!("expected edge_policy error for {connection}"),
         Err(e) => e.to_string(),
+fn spectra_export_schema(block: &str) -> syn::Result<ParsedSchema> {
+    let input = format!(
+        r#"
+            UserCounter {{
+                repository: "https://github.com/unified-field-dev/valence",
+                table: "user_counter",
+                version: "0.1.0",
+                {block}
+                fields: [
+                    id: {{ r#type: FieldType::String, primary_key: true, required: true }}
+                ]
+            }}
+        "#
+    );
+    syn::parse_str::<SchemaSpec>(&input)?.to_schema()
+}
+
+#[test]
+fn test_spectra_export_absent_is_opt_out() {
+    assert!(spectra_export_schema("").unwrap().spectra_export.is_none());
+}
+
+#[test]
+fn test_spectra_export_explicit_names() {
+    let parsed = spectra_export_schema(
+        r#"spectra_export: { cadence: Daily, job_name: "user-counter-nightly", target_table: "user_counter_export" },"#,
+    )
+    .unwrap();
+    let cfg = parsed.spectra_export.expect("spectra_export");
+    assert_eq!(cfg.cadence, ParsedSpectraExportCadence::Daily);
+    assert_eq!(cfg.job_name, "user-counter-nightly");
+    assert_eq!(cfg.target_table, "user_counter_export");
+}
+
+#[test]
+fn test_spectra_export_defaults_even_when_declared_before_table() {
+    let input = r#"
+        UserCounter {
+            spectra_export: { cadence: ThreeHours },
+            repository: "https://github.com/unified-field-dev/valence",
+            table: "user_counter",
+            version: "0.1.0",
+            fields: [ id: { r#type: FieldType::String, primary_key: true, required: true } ]
+        }
+    "#;
+    let parsed = syn::parse_str::<SchemaSpec>(input)
+        .unwrap()
+        .to_schema()
+        .unwrap();
+    let cfg = parsed.spectra_export.unwrap();
+    assert_eq!(cfg.job_name, "user_counter_three_hours_export");
+    assert_eq!(cfg.target_table, "user_counter_export");
+}
+
+#[test]
+fn test_spectra_export_every_cadence_parses() {
+    for (name, snake) in [
+        ("Hourly", "hourly"),
+        ("ThreeHours", "three_hours"),
+        ("SixHours", "six_hours"),
+        ("TwelveHours", "twelve_hours"),
+        ("Daily", "daily"),
+        ("Weekly", "weekly"),
+    ] {
+        let cfg = spectra_export_schema(&format!("spectra_export: {{ cadence: {name} }},"))
+            .unwrap()
+            .spectra_export
+            .unwrap();
+        assert_eq!(cfg.cadence.variant_name(), name);
+        assert_eq!(cfg.job_name, format!("user_counter_{snake}_export"));
     }
 }
 
@@ -512,4 +582,47 @@ fn edge_policy_unknown_value_compile_error_sad() {
                      edge_policy: AnyoneMayLink, on_delete: Cascade }"#,
     );
     assert!(err.contains("unknown edge_policy `AnyoneMayLink`"), "{err}");
+fn test_spectra_export_unknown_cadence_rejected() {
+    let err = spectra_export_schema("spectra_export: { cadence: Monthly },").unwrap_err();
+    let msg = err.to_string();
+    assert!(
+        msg.contains("Unknown spectra_export cadence `Monthly`"),
+        "{msg}"
+    );
+    assert!(msg.contains("Daily"), "{msg}");
+}
+
+#[test]
+fn test_spectra_export_cron_string_rejected() {
+    let err = spectra_export_schema(r#"spectra_export: { cadence: "0 0 * * *" },"#).unwrap_err();
+    assert!(err.to_string().contains("not a cron string"), "{err}");
+}
+
+#[test]
+fn test_spectra_export_sad_paths() {
+    for (block, needle) in [
+        (
+            "spectra_export: { job_name: \"x\" },",
+            "cadence is required",
+        ),
+        (
+            "spectra_export: { cadence: Daily, cron: \"x\" },",
+            "Unknown spectra_export key",
+        ),
+        (
+            "spectra_export: { cadence: Daily, cadence: Weekly },",
+            "Duplicate spectra_export key",
+        ),
+        (
+            "spectra_export: { cadence: Daily, job_name: \"\" },",
+            "job_name must be non-empty",
+        ),
+        (
+            "spectra_export: { cadence: Daily, target_table: \"a b\" },",
+            "target_table must be non-empty",
+        ),
+    ] {
+        let err = spectra_export_schema(block).unwrap_err();
+        assert!(err.to_string().contains(needle), "{block}: {err}");
+    }
 }

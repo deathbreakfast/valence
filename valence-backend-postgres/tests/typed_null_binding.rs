@@ -68,6 +68,7 @@ fn leak_schema() -> &'static Schema {
         traits: Vec::new(),
         retired_fields: Vec::new(),
         ttl: None,
+        spectra_export: None,
         ownership: None,
         meta: SchemaMeta {
             retention: "365 days".to_string(),

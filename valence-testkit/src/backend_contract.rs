@@ -99,7 +99,7 @@ async fn delete_idempotent(backend: &dyn DatabaseBackend) -> Result<()> {
 
 async fn compiled_query_select(backend: &dyn DatabaseBackend) -> Result<()> {
     // Seed an INTEGER-shaped datetime so SELECT * maps prove numeric JSON (not
-    // stringified unix seconds — the SQLite map_select_row regression).
+    // stringified unix timestamps — the SQLite map_select_row regression).
     let _ = backend
         .create_record(
             CONTRACT_TABLE,
@@ -130,7 +130,7 @@ async fn compiled_query_select(backend: &dyn DatabaseBackend) -> Result<()> {
     if let Some(at) = row.get("at") {
         assert!(
             at.is_i64() || at.as_u64().is_some(),
-            "datetime unix seconds must be JSON number, got {at:?}"
+            "datetime unix timestamp must be JSON number, got {at:?}"
         );
         assert_eq!(
             at.as_i64().or_else(|| at.as_u64().map(|u| u as i64)),

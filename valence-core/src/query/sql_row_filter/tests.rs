@@ -289,13 +289,13 @@ mod clause_matching {
     #[test]
     fn neither_team_nor_user_matches_returns_nothing() {
         let out = apply_equality_where(edges(), &team_user_query(Some("t9"), Some("uC")));
-        assert!(out.is_empty());
+        assert_eq!(out, Vec::<serde_json::Value>::new());
     }
 
     #[test]
     fn user_exists_only_on_other_team_returns_nothing() {
         let out = apply_equality_where(edges(), &team_user_query(Some("t2"), Some("uB")));
-        assert!(out.is_empty());
+        assert_eq!(out, Vec::<serde_json::Value>::new());
     }
 
     #[test]
@@ -397,7 +397,7 @@ mod clause_matching {
             sql,
             vec![("p0", "x".into()), ("p1", "y".into()), ("p2", "zz".into())],
         );
-        assert!(out.is_empty());
+        assert_eq!(out, Vec::<serde_json::Value>::new());
         assert!(run(sql, vec![]).is_empty());
     }
 
@@ -751,4 +751,31 @@ fn or_clause_keeps_param_1_and_param_10_apart() {
     ];
     let out = apply_equality_where(rows, &compiled);
     assert_eq!(out.len(), 2);
+}
+
+#[test]
+fn filters_datetime_after_separates_rows_in_the_same_second() {
+    let compiled = CompiledQuery::new(
+        "SELECT id, body FROM typed_probe WHERE json_extract(body, '$.at') > $param_0".into(),
+        vec![("param_0".into(), serde_json::json!(1_700_000_000_001_i64))],
+    );
+    let rows = vec![
+        serde_json::json!({"id": "1", "at": 1_700_000_000_001_i64}),
+        serde_json::json!({"id": "2", "at": 1_700_000_000_002_i64}),
+    ];
+    let out = apply_equality_where(rows, &compiled);
+    assert_eq!(out.len(), 1);
+    assert_eq!(out[0]["id"], "2");
+}
+
+#[test]
+fn legacy_seconds_row_sorts_before_millisecond_predicate() {
+    // Predicates compare milliseconds; an unrewritten seconds row is far below the bound.
+    let compiled = CompiledQuery::new(
+        "SELECT id, body FROM typed_probe WHERE json_extract(body, '$.at') > $param_0".into(),
+        vec![("param_0".into(), serde_json::json!(1_000_000_000_000_i64))],
+    );
+    let rows = vec![serde_json::json!({"id": "legacy", "at": 1_700_000_000_i64})];
+    let out = apply_equality_where(rows, &compiled);
+    assert_eq!(out, Vec::<serde_json::Value>::new());
 }

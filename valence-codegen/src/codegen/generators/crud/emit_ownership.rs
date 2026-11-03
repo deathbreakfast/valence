@@ -110,6 +110,10 @@ pub(super) fn emit_batch_creatable_tokens(cx: &CrudEmitCtx<'_>) -> TokenStream {
                 self.id = Some(id);
             }
 
+            fn validate_batch_row(row: &serde_json::Value) -> valence::Result<()> {
+                Self::__reject_unset_read_hidable(row)
+            }
+
             #ownership_hook
         }
     }

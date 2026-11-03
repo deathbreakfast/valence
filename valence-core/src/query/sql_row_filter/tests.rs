@@ -506,4 +506,74 @@ mod clause_matching {
         let null = "SELECT * FROM t WHERE a = NULL OR b = $p0";
         assert_eq!(run(null, vec![("p0", "q".into())]), ["r2"]);
     }
+
+    fn view(id: &str, surface: &str, scope: &str, owner: &str) -> serde_json::Value {
+        serde_json::json!({
+            "id": id,
+            "surface": surface,
+            "scope_kind": scope,
+            "owner_user": {"table": "user", "id": owner},
+        })
+    }
+
+    /// v1 (list, org, uA), v2 (list, org, uB), v3 (board, org, uA), v4 (list, team, uA).
+    fn views() -> Vec<serde_json::Value> {
+        vec![
+            view("v1", "list", "org", "uA"),
+            view("v2", "list", "org", "uB"),
+            view("v3", "board", "org", "uA"),
+            view("v4", "list", "team", "uA"),
+        ]
+    }
+
+    /// The compiled shape of string predicates plus a record predicate, from the real builder.
+    fn string_and_record_query(strings: &[(&str, &str)], owner: &str) -> CompiledQuery {
+        let mut q = QueryCore::new("saved_view".to_string());
+        for (field, value) in strings {
+            q = q.where_string(
+                (*field).into(),
+                crate::query::StringPredicate::Equals((*value).into()),
+            );
+        }
+        q = q.where_record(
+            "owner_user".into(),
+            RecordPredicate::Equals(RecordId::new("user", owner)),
+        );
+        let (sql, params) = q.to_sql().expect("compile");
+        CompiledQuery::new(sql, params)
+    }
+
+    #[test]
+    fn string_and_record_predicates_both_apply() {
+        let q = string_and_record_query(&[("surface", "list")], "uA");
+        assert_eq!(ids(&apply_equality_where(views(), &q)), ["v1", "v4"]);
+    }
+
+    #[test]
+    fn two_string_predicates_and_a_record_predicate_all_apply() {
+        let q = string_and_record_query(&[("surface", "list"), ("scope_kind", "org")], "uA");
+        assert_eq!(ids(&apply_equality_where(views(), &q)), ["v1"]);
+    }
+
+    #[test]
+    fn string_miss_drops_rows_the_record_predicate_matches() {
+        let q = string_and_record_query(&[("surface", "calendar")], "uA");
+        assert!(apply_equality_where(views(), &q).is_empty());
+    }
+
+    #[test]
+    fn record_predicate_before_string_predicate_both_apply() {
+        let mut q = QueryCore::new("saved_view".to_string());
+        q = q.where_record(
+            "owner_user".into(),
+            RecordPredicate::Equals(RecordId::new("user", "uA")),
+        );
+        q = q.where_string(
+            "surface".into(),
+            crate::query::StringPredicate::Equals("board".into()),
+        );
+        let (sql, params) = q.to_sql().expect("compile");
+        let out = apply_equality_where(views(), &CompiledQuery::new(sql, params));
+        assert_eq!(ids(&out), ["v3"]);
+    }
 }

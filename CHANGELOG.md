@@ -27,6 +27,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   definition; exclude it by writing a custom rule whose check is `viewer.is_user()`
   on its own instead of reusing `AUTHENTICATED`.
 
+### Changed
+
+- The `valence_error_log` and `valence_slow_op` event payloads now carry the table name as
+  `table_name` instead of `table`. Spectra's schema macro generates its own `table` field,
+  which kept these events from being registered. Readers of the old key must switch.
+
 ### Fixed
 
 - The document-row filter shared by the mem, IndraDB, Redis, MongoDB and hybrid backends

@@ -8,7 +8,9 @@
 //! gaps, such as `TOO_THIN`, show only in `--csv`.
 //!
 //! Exit codes: 0 on success, even with hits (inventory, not a gate); 1 if any
-//! file could not be read or parsed; 2 on a usage error or an unreadable root.
+//! file could not be read or parsed; 2 on a usage error or an unreadable root;
+//! 3 when `--deny` is set and there is at least one hit. A skipped file wins
+//! over 3, so a tree that was not fully read never passes as clean.
 
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -17,21 +19,25 @@ use valence_data_use_scan::{
     inventory_csv_header, inventory_csv_row, lint_tree, matching_phrases_for, HitSummary,
 };
 
-const USAGE: &str = "usage: valence-purpose-lint [--sites | --csv] <path>...\n\n\
+const USAGE: &str = "usage: valence-purpose-lint [--sites | --csv] [--deny] <path>...\n\n\
 Counts use_! purposes that carry a migration template phrase (BAN_TEMPLATE) or a\n\
 hedge (HEDGE), per file, across each checkout path.\n\n\
   --sites  also print <file>:<line>: <GAP_CODE> <matched phrase> for every hit\n\
-  --csv    print every site with all gap codes instead of the summary\n\n\
-Exit codes: 0 ok (hits do not fail the run), 1 a file was skipped, 2 usage or path error.";
+  --csv    print every site with all gap codes instead of the summary\n\
+  --deny   exit 3 when there is any hit, for CI gates\n\n\
+Exit codes: 0 ok (hits do not fail the run unless --deny), 1 a file was skipped,\n\
+2 usage or path error, 3 hits found with --deny.";
 
 fn main() -> ExitCode {
     let mut sites = false;
     let mut csv = false;
+    let mut deny = false;
     let mut roots = Vec::new();
     for arg in std::env::args().skip(1) {
         match arg.as_str() {
             "--sites" => sites = true,
             "--csv" => csv = true,
+            "--deny" => deny = true,
             "-h" | "--help" => {
                 println!("{USAGE}");
                 return ExitCode::SUCCESS;
@@ -66,6 +72,7 @@ fn main() -> ExitCode {
         }
     }
 
+    let hit_sites = HitSummary::from_rows(&rows).hit_sites;
     if csv {
         println!("{}", inventory_csv_header());
         for row in &rows {
@@ -84,6 +91,8 @@ fn main() -> ExitCode {
     }
     if any_skipped {
         ExitCode::from(1)
+    } else if deny && hit_sites > 0 {
+        ExitCode::from(3)
     } else {
         ExitCode::SUCCESS
     }

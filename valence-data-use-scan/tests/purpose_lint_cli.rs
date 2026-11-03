@@ -136,3 +136,36 @@ fn sites_pairs_each_code_with_its_own_phrases() {
         "{out}"
     );
 }
+
+#[test]
+fn deny_exits_three_on_hits_and_still_reports() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    fixture(dir.path());
+    let root = dir.path().to_str().expect("utf8");
+    let out = run(&["--deny", root]);
+    assert_eq!(out.status.code(), Some(3));
+    assert!(s(&out.stdout).contains("2 template/hedge hits"));
+
+    let out = run(&["--deny", "--sites", root]);
+    assert_eq!(out.status.code(), Some(3));
+    assert!(s(&out.stdout).contains("src/bad.rs:2: BAN_TEMPLATE"));
+
+    assert_eq!(run(&["--deny", "--csv", root]).status.code(), Some(3));
+}
+
+#[test]
+fn deny_exits_zero_on_a_clean_tree() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    write(dir.path(), "src/good.rs", &file_with(&[site(CLEAN)]));
+    let out = run(&["--deny", dir.path().to_str().expect("utf8")]);
+    assert_eq!(out.status.code(), Some(0));
+}
+
+#[test]
+fn deny_with_a_skipped_file_exits_one() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    fixture(dir.path());
+    write(dir.path(), "src/broken.rs", "fn {{{ not rust");
+    let out = run(&["--deny", dir.path().to_str().expect("utf8")]);
+    assert_eq!(out.status.code(), Some(1));
+}

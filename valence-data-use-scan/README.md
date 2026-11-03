@@ -98,9 +98,10 @@ src/images/service.rs: 2
 6 template/hedge hits in 2 files; 6 of 41 use_! sites
 ```
 
-The run exits 0 even when it finds hits, so you can use it as an inventory before any CI
-gate. It exits 1 if a file could not be parsed (listed on stderr) and 2 on a usage error or
-an unreadable path. `--sites` adds `file:line: CODE phrase` for each hit, and `--csv` prints
+The run exits 0 even when it finds hits, so you can use it as an inventory. Once a checkout
+reaches zero hits, add `--deny` to make any hit exit 3 and fail CI. A file that could not be
+parsed (listed on stderr) exits 1, which wins over 3, and a usage error or an unreadable path
+exits 2. `--sites` adds `file:line: CODE phrase` for each hit, and `--csv` prints
 every site with all of its gap codes. Only `BAN_TEMPLATE` and `HEDGE` count as hits;
 others, such as `TOO_THIN`, appear only in the CSV. Test paths and `target/` are skipped.
 

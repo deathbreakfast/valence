@@ -30,6 +30,8 @@ jobs:
         run: cargo fmt --all -- --check
       - name: Clippy
         run: cargo clippy --workspace --all-targets -- -D warnings -A missing-docs -A deprecated
+      - name: Purpose lint
+        run: cargo run -p uf-valence-data-use-scan --bin valence-purpose-lint -- --deny .
       - name: Deny rustc warnings (isolated crates)
         # Workspace feature unification can hide dead_code that only appears on
         # single-crate builds (cargo publish / package verify). Match that surface.

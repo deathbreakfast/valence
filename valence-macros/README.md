@@ -18,7 +18,7 @@ Defines a schema using a Rust DSL. The macro registers schema metadata into
 | `database` | no | Path to a `DatabaseEvaluator` const/static; defaults to `DEFAULT_IN_MEMORY` |
 | `policies` | no | Read/write/update/delete allow lists |
 | `connections` | no | Graph/FK edges. A `ManyToMany` connection can set `edge_policy` so edge writes are privacy-checked; see [Checked many-to-many edges](#checked-many-to-many-edges). |
-| `ttl` | no | Create-only time-to-live (`ttl: { seconds: N }`). Native on Redis/Mongo; Deferred backends stamp `__valence_expire_at`, ensure an expire-at index, and warn until `valence_platform::ttl_sweep::register_ttl_service` is wired. Call `Valence::ensure_ttl_for_all()` once at boot. See `valence::ttl`. |
+| `ttl` | no | Create-only time-to-live (`ttl: { seconds: N }`). Native on Redis/Mongo; Deferred backends stamp `__valence_expire_at`, ensure an expire-at index, and log an info notice until `valence_platform::ttl_sweep::register_ttl_service` is wired (backends with no TTL path at all still warn). Call `Valence::ensure_ttl_for_all()` once at boot. See `valence::ttl`. |
 | `side_effects` | no | Mutation hooks |
 | `composite_key` | no | Multi-field primary key |
 | `traits` | no | Mix in `valence_trait_schema!` names |

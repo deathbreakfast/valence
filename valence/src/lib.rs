@@ -9,7 +9,7 @@
 //! - **Schema DSL** — fields, connections, policies, ownership, TTL, and trait mixins
 //!   ([`valence_schema!`], [`valence_trait_schema!`])
 //! - **Table TTL** — declare `ttl: { seconds }` on a schema; call [`Valence::ensure_ttl_for_all`]
-//!   once at boot ([`ttl`] module: native Redis/Mongo, Deferred stamp + warn otherwise)
+//!   once at boot ([`ttl`] module: native Redis/Mongo, Deferred stamp + notice otherwise)
 //! - **Build-time codegen** — typed models from host `schemas/` via `valence-codegen`
 //! - **Composable backends** — in-memory, SQLite, IndraDB, SurrealDB, Postgres, MongoDB, Redis
 //! - **Multi-backend routing** — one [`DatabaseRouter`]; each schema picks a backend with
@@ -534,7 +534,7 @@
 //! Add `ttl: { seconds: N }` on a table schema (create-only clock). After backends are
 //! registered, call [`Valence::ensure_ttl_for_all`] once — it scrapes the schema registry
 //! for every TTL table (no hand list). See the [`ttl`] module for capabilities, the reserved
-//! [`ttl::EXPIRE_AT_FIELD`], and Deferred/non-native warnings. Hosts wire
+//! [`ttl::EXPIRE_AT_FIELD`], and the Deferred (info) and Unsupported (warn) boot notices. Hosts wire
 //! `valence_platform::ttl_sweep::register_ttl_service` so Deferred engines delete expired rows.
 //!
 //! ## 3. Set up build-time codegen

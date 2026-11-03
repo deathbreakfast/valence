@@ -298,6 +298,17 @@ fn quote_trait_definition_bundle(p: &TraitDefinitionPieces) -> TokenStream {
                 Ok(results.pop())
             }
 
+            /// Execute the query and also return [`valence::QueryStats`].
+            ///
+            /// `fetched` is the sum of each table's backend rows before read privacy and
+            /// the merge window, an upper bound. Do not show it to users: it can reveal
+            /// that hidden rows exist.
+            pub async fn fetch_with_stats(self) -> valence::Result<(Vec<#model_struct_name>, valence::QueryStats)> {
+                self.inner
+                    .execute_with_stats(self.valence, valence::DataUsePurpose::framework_nested())
+                    .await
+            }
+
             pub fn into_parts(self) -> (valence::QueryCore, &'a valence::Valence) {
                 (self.inner, self.valence)
             }

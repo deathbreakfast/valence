@@ -126,4 +126,52 @@ mod tests {
         assert_eq!(len, 1);
         assert_eq!(root_table, "project");
     }
+
+    #[tokio::test]
+    async fn generated_fetch_with_stats_matches_into_future_happy() {
+        use std::sync::Arc;
+
+        use valence::DatabaseBackend;
+
+        use super::OwnedNote;
+
+        // Ten rows; alice owns four of them.
+        let backend: Arc<dyn DatabaseBackend> = Arc::new(InMemoryBackend::new());
+        for i in 0..10 {
+            let owner = if [1, 3, 4, 8].contains(&i) {
+                "alice"
+            } else {
+                "bob"
+            };
+            backend
+                .create_record(
+                    "owned_note",
+                    serde_json::json!({"id": {"table": "owned_note", "id": format!("n{i:02}")}, "user": owner}),
+                )
+                .await
+                .unwrap();
+        }
+        let valence = Valence::builder()
+            .add_backend("default", backend)
+            .with_actor(Actor::User {
+                user_id: "alice".into(),
+            })
+            .build()
+            .expect("build");
+
+        let awaited = OwnedNote::query(&valence, valence::use_!(r"When the **product-model-host** suite lists sample notes, we **query them by owner** so the stats test can compare the awaited rows with the fetch count. Developers running that example suite use this result.")).limit(10).await.expect("await");
+        let (rows, stats) = OwnedNote::query(&valence, valence::use_!(r"When the **product-model-host** suite lists sample notes, we **query them by owner** so the stats test can compare the awaited rows with the fetch count. Developers running that example suite use this result."))
+            .limit(10)
+            .fetch_with_stats()
+            .await
+            .expect("fetch_with_stats");
+        assert_eq!(rows.len(), 4);
+        assert_eq!(stats.fetched, 10);
+        let ids = |v: &[OwnedNote]| {
+            v.iter()
+                .map(|n| n.id().expect("id").id().to_string())
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(ids(&rows), ids(&awaited));
+    }
 }

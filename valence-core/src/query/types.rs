@@ -69,6 +69,19 @@ pub struct HopSource {
     pub hop_type: HopType,
 }
 
+/// Counts reported by [`QueryCore::execute_with_stats`].
+///
+/// Not for display: `fetched` includes rows the caller may not read.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct QueryStats {
+    /// Rows the backend returned for this window, before connection, hop,
+    /// pending-deletion and entity read privacy. Page until `fetched < limit`.
+    /// Do not show it to users: it can reveal that hidden rows exist. For
+    /// trait-union queries it is the sum over tables, an upper bound.
+    pub fetched: usize,
+}
+
 /// Core query builder that compiles per registered engine.
 #[derive(Debug, Clone)]
 pub struct QueryCore {

@@ -109,13 +109,31 @@ async fn seeded() -> Valence {
         .expect("build")
 }
 
+/// Ids the backend returns for `q` before any read-privacy filtering, with the compiled SQL.
+async fn raw_ids(v: &Valence, q: &QueryCore) -> (Vec<String>, String) {
+    let backend = v.backend_for_table(DOC).unwrap();
+    let compiled = valence_core::compile_for_engine(backend.engine_id(), q).unwrap();
+    let rows = backend.execute_compiled_query(&compiled).await.unwrap();
+    let mut ids: Vec<String> = rows
+        .iter()
+        .filter_map(|r| r["id"].as_str().map(str::to_string))
+        .collect();
+    ids.sort();
+    (ids, compiled.query_string)
+}
+
 async fn ids(v: &Valence, q: QueryCore) -> Vec<String> {
+    let (raw, sql) = raw_ids(v, &q).await;
     let rows: Vec<serde_json::Value> = q.execute(v, purpose()).await.unwrap();
     let mut ids: Vec<String> = rows
         .iter()
         .map(|r| r["id"].as_str().unwrap().to_string())
         .collect();
     ids.sort();
+    assert_eq!(
+        raw, ids,
+        "read privacy changed the backend rows; sql: {sql}"
+    );
     ids
 }
 

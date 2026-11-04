@@ -576,4 +576,34 @@ mod clause_matching {
         let out = apply_equality_where(views(), &CompiledQuery::new(sql, params));
         assert_eq!(ids(&out), ["v3"]);
     }
+
+    #[test]
+    fn and_only_clause_with_unsupported_operator_excludes_every_row() {
+        for unsupported in [
+            "a IS NULL",
+            "a IS NOT NULL",
+            "a != $p1",
+            "a <> $p1",
+            "a IN ($p1, $p2)",
+            "a NOT LIKE $p1",
+            "n BETWEEN $p1 AND $p2",
+            "a = $missing",
+            "a = 'unterminated",
+            "(a = $p1",
+        ] {
+            let sql = format!("SELECT * FROM t WHERE b = $p0 AND {unsupported}");
+            let params = vec![("p0", "p".into()), ("p1", "x".into()), ("p2", "y".into())];
+            assert!(
+                run(&sql, params).is_empty(),
+                "{unsupported} must fail closed"
+            );
+        }
+    }
+
+    #[test]
+    fn and_only_clause_does_not_confuse_param_prefixes() {
+        let sql = "SELECT * FROM t WHERE a = $param_1";
+        let params = vec![("param_10", "y".into()), ("param_1", "x".into())];
+        assert_eq!(run(sql, params), ["r1", "r2"]);
+    }
 }

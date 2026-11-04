@@ -1,9 +1,7 @@
 //! SELECT WHERE / ORDER / LIMIT / OFFSET support for document-row adapters (mem, IndraDB,
 //! Redis, MongoDB, hybrid).
 //!
-//! Filtering works on the text of the compiled SQL, not on a parsed query. In clauses without
-//! `OR`, parameter names are matched as substrings, so `$param_1` can be confused with
-//! `$param_10`.
+//! Filtering works on the text of the compiled SQL, not on a parsed query.
 
 mod clause;
 
@@ -11,16 +9,14 @@ use crate::compiled_query::CompiledQuery;
 
 /// Apply `field {=,>,>=,<,<=} $param` and `LIKE` filters from compiled SQL.
 ///
-/// A clause containing `OR` is matched term by term with `OR` looser than `AND`: a row is kept
-/// when every top-level `AND` conjunct matches, and each conjunct matches when any of its `OR`
-/// terms does (two record predicates joined by `AND`, for example). A term the filter cannot
-/// read excludes the row. A clause without `OR` applies each comparison in turn and ignores
-/// fragments it does not recognise.
+/// The clause is matched term by term with `OR` looser than `AND`: a row is kept when every
+/// top-level `AND` conjunct matches, and each conjunct matches when any of its `OR` terms does
+/// (two record predicates joined by `AND`, for example). A term the filter cannot read
+/// (`IS NULL`, `!=`, `IN`, an unknown `$key`, unbalanced quotes) excludes the row.
 ///
-/// Matching is string-level on the compiled SQL. In clauses without `OR`, parameter-name prefix
-/// collisions such as `$param_1` and `$param_10` are not told apart.
+/// Matching is string-level on the compiled SQL.
 pub fn apply_equality_where(
-    mut rows: Vec<serde_json::Value>,
+    rows: Vec<serde_json::Value>,
     compiled: &CompiledQuery,
 ) -> Vec<serde_json::Value> {
     let upper = compiled.query_string.to_uppercase();
@@ -37,55 +33,9 @@ pub fn apply_equality_where(
         .unwrap_or(where_part.len());
     let clause = where_part[..end].trim();
 
-    if clause.to_ascii_uppercase().contains(" OR ") {
-        return rows
-            .into_iter()
-            .filter(|row| clause::clause_matches(row, clause, &compiled.params))
-            .collect();
-    }
-
-    for (key, value) in &compiled.params {
-        // Check longer ops first so `>=` / `<=` are not mistaken for `>` / `<`.
-        if apply_cmp_param(&mut rows, clause, key, value, ">=") {
-            continue;
-        }
-        if apply_cmp_param(&mut rows, clause, key, value, "<=") {
-            continue;
-        }
-        if apply_cmp_param(&mut rows, clause, key, value, ">") {
-            continue;
-        }
-        if apply_cmp_param(&mut rows, clause, key, value, "<") {
-            continue;
-        }
-
-        let needle = format!("= ${key}");
-        if let Some(eq_at) = clause.find(&needle) {
-            let before = clause[..eq_at].trim_end();
-            let field = extract_field_ref(&lhs_segment(before));
-            if !field.is_empty() {
-                rows.retain(|row| row_field_equals(row, &field, value));
-            }
-            continue;
-        }
-
-        let like_needle = format!("LIKE ${key}");
-        if clause.to_uppercase().contains(&like_needle.to_uppercase()) {
-            if let Some(pattern) = value.as_str() {
-                if let Some(like_at) = clause.to_uppercase().find(" LIKE ") {
-                    let before = clause[..like_at].trim_end();
-                    let field = extract_field_ref(&lhs_segment(before));
-                    if !field.is_empty() {
-                        rows.retain(|row| {
-                            row_string_field(row, &field)
-                                .is_some_and(|s| sql_like_matches(s, pattern))
-                        });
-                    }
-                }
-            }
-        }
-    }
-    rows
+    rows.into_iter()
+        .filter(|row| clause::clause_matches(row, clause, &compiled.params))
+        .collect()
 }
 
 /// Match a SQL `LIKE` pattern with `%` wildcards (`%term%`, `term%`, `%term`, exact).
@@ -100,41 +50,6 @@ fn sql_like_matches(value: &str, pattern: &str) -> bool {
         (false, true) => value.starts_with(&pattern[..pattern.len().saturating_sub(1)]),
         (true, false) => value.ends_with(&pattern[1..]),
         (false, false) => value == pattern,
-    }
-}
-
-/// Apply `field {op} $key` when present; returns true if this param was a comparison op.
-fn apply_cmp_param(
-    rows: &mut Vec<serde_json::Value>,
-    clause: &str,
-    key: &str,
-    value: &serde_json::Value,
-    op: &str,
-) -> bool {
-    let needle = format!("{op} ${key}");
-    let Some(at) = clause.find(&needle) else {
-        return false;
-    };
-    // Reject `>` matching inside `>=` (and `<` inside `<=`) when scanning shorter ops.
-    if (op == ">" || op == "<") && at > 0 && clause.as_bytes().get(at - 1) == Some(&b'=') {
-        return false;
-    }
-    let before = clause[..at].trim_end();
-    let field = extract_field_ref(&lhs_segment(before));
-    if field.is_empty() {
-        return true;
-    }
-    rows.retain(|row| row_field_cmp(row, &field, value, op));
-    true
-}
-
-/// Last AND-conjunct before the comparison op (multi-param WHERE clauses).
-fn lhs_segment(before: &str) -> String {
-    let upper = before.to_uppercase();
-    if let Some(idx) = upper.rfind(" AND ") {
-        before[idx + 5..].trim().to_string()
-    } else {
-        before.trim().to_string()
     }
 }
 

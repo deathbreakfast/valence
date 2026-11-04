@@ -213,18 +213,19 @@ async fn query_stats_counts_hidden_rows_happy() {
 #[tokio::test]
 async fn query_stats_short_window_at_table_end_happy() {
     let v = seed("qs_end").await;
-    let (rows, fetched) = run(&v, "qs_end", 8, 10).await;
-    assert_eq!(rows.len(), 1, "only r08 is alice's in the last two rows");
-    assert_eq!(fetched, 2);
+    // Skipping two readable rows leaves r04 and r08; the table ends before the page fills.
+    let (rows, fetched) = run(&v, "qs_end", 2, 10).await;
+    assert_eq!(rows.len(), 2);
+    assert_eq!(fetched, 10);
 }
 
 #[tokio::test]
 async fn query_stats_all_hidden_window_sad() {
     let v = seed("qs_all_hidden").await;
-    // r05..r07 belong to bob.
-    let (rows, fetched) = run(&v, "qs_all_hidden", 5, 3).await;
+    // Alice owns four rows, so offset 4 skips every readable row.
+    let (rows, fetched) = run(&v, "qs_all_hidden", 4, 3).await;
     assert_eq!(rows.len(), 0);
-    assert_eq!(fetched, 3);
+    assert_eq!(fetched, 10);
 }
 
 #[tokio::test]

@@ -403,7 +403,7 @@ async fn tm_s10_incoming_m2m_cascade_removes_edge() {
         .get_edge_sources(&RecordId::new("bot_s10", "b1"), "grp_bot_s10")
         .await
         .unwrap();
-    assert!(sources.is_empty());
+    assert_eq!(sources, Vec::<RecordId>::new());
 }
 
 #[tokio::test]

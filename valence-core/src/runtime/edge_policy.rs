@@ -6,17 +6,16 @@ use crate::error::{Error, Result};
 use crate::privacy::{PrivacyEvaluator, PrivacyOperation};
 use crate::query::QueryCore;
 use crate::record_id::RecordId;
-use crate::schema::{SchemaMetadata, SchemaRegistry};
+use crate::schema::{schema_connections_for_table, SchemaMetadata, SchemaRegistry};
 use crate::schema_api::SchemaConnection;
 
 /// The `edge_policy` declared for `edge_table` on the schema of `from`, if any.
-fn declared_edge_policy(from: &RecordId, edge_table: &str) -> Option<&'static str> {
-    let meta = SchemaRegistry::global().get_schema(from.table())?;
-    meta.schema
-        .connections
+fn declared_edge_policy(from: &RecordId, edge_table: &str) -> Option<String> {
+    let meta = SchemaRegistry::lookup(from.table())?;
+    schema_connections_for_table(meta)
         .iter()
         .filter(|c| c.edge_table.as_deref() == Some(edge_table))
-        .find_map(|c| c.edge_policy.as_deref())
+        .find_map(|c| c.edge_policy.clone())
 }
 
 /// Load the stored row behind `rid`, or `Error::NotFound` when the table or row is missing.
@@ -25,8 +24,7 @@ async fn load_row(
     valence: &Valence,
     purpose: DataUsePurpose,
 ) -> Result<(&'static SchemaMetadata, serde_json::Value)> {
-    let schema = SchemaRegistry::global()
-        .get_schema(rid.table())
+    let schema = SchemaRegistry::lookup(rid.table())
         .ok_or_else(|| Error::NotFound(format!("unknown table {}", rid.table())))?;
     let row = QueryCore::get_record_json(rid.table(), rid.id(), valence, purpose)
         .await?

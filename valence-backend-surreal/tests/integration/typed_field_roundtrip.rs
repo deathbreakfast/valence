@@ -69,7 +69,7 @@ async fn surreal_round_trip_json_as_currency_datetime() {
         .expect("create");
     assert_eq!(
         created.get("at").and_then(|v| v.as_i64()),
-        Some(1_700_000_000)
+        Some(1_700_000_000_123)
     );
     assert_eq!(
         created.pointer("/price/code").and_then(|v| v.as_str()),

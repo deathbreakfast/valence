@@ -98,7 +98,7 @@ async fn failing_op_rolls_back_the_whole_batch() {
 #[tokio::test]
 async fn empty_batch_is_ok() {
     let backend = InMemoryBackend::new();
-    assert!(backend.apply_batch(Vec::new()).await.unwrap().is_empty());
+    assert_eq!(backend.apply_batch(Vec::new()).await.unwrap().len(), 0);
 }
 
 #[tokio::test]
@@ -109,7 +109,7 @@ async fn valence_apply_batch_routes_to_backend() {
         .build()
         .unwrap();
 
-    assert!(valence.apply_batch(Vec::new()).await.unwrap().is_empty());
+    assert_eq!(valence.apply_batch(Vec::new()).await.unwrap().len(), 0);
     valence
         .apply_batch(vec![create("v1", 1), create("v2", 2)])
         .await

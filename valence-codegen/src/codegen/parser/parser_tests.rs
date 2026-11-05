@@ -45,7 +45,7 @@ fn parses_export_block_from_schema_file() {
     )
     .expect("parse")
     .schema;
-    let export = schema.spectra_export.expect("spectra_export");
+    let export = schema.partition_export.expect("partition_export");
     assert_eq!(export.cron(), "0 0 * * 0");
     assert_eq!(export.job_name, "foo_weekly_export");
     assert_eq!(export.target_table, "foo_export");

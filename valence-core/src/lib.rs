@@ -66,6 +66,7 @@ pub mod known_engines;
 pub mod model;
 pub mod owner_ref;
 pub mod ownership;
+pub mod partition_export;
 pub mod ports;
 pub mod privacy;
 pub mod privacy_policies;
@@ -88,7 +89,6 @@ pub mod schema;
 pub mod schema_api;
 pub mod schema_types;
 pub mod side_effect;
-pub mod spectra_export;
 pub mod storage_layout;
 pub mod trait_registry;
 pub mod trait_schema;
@@ -162,6 +162,7 @@ pub use known_engines::KnownEngines;
 pub use model::{FieldOperation, Model, PrivacyError, SchemaMetadata};
 pub use owner_ref::{OwnerKind, OwnerRef, OwnershipConfig};
 pub use ownership::OwnershipService;
+pub use partition_export::{PartitionExportCadence, PartitionExportConfig};
 pub use ports::actor::{ActorContext, ActorFactory, JsonActorContext, JsonActorFactory};
 pub use ports::endpoints::{
     DatabaseEndpointResolver, EnvEndpointResolver, NoopEndpointResolver, StaticEndpointResolver,
@@ -208,7 +209,6 @@ pub use schema_api::{
 };
 pub use schema_types::{FieldType, JsonAsSerdeError, Role, Validator};
 pub use side_effect::{FieldChange, Mutation, MutationKind, SideEffect};
-pub use spectra_export::{SpectraExportCadence, SpectraExportConfig};
 pub use storage_layout::{
     AdditiveOp, FieldStorage, LayoutDiff, LayoutField, SqlColumnType, StorageLayout,
     SurrealFieldType,

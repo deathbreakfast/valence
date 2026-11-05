@@ -2,8 +2,8 @@
 
 use crate::evaluator::DatabaseEvaluator;
 use crate::owner_ref::OwnershipConfig;
+use crate::partition_export::PartitionExportConfig;
 use crate::privacy::PolicyEvaluator;
-use crate::spectra_export::SpectraExportConfig;
 use crate::ttl::SchemaTtlPolicy;
 use serde::{Deserialize, Serialize};
 
@@ -239,9 +239,9 @@ pub struct Schema {
     pub retired_fields: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ttl: Option<SchemaTtlPolicy>,
-    /// `spectra_export:` opt-in; presence enables periodic partition export.
+    /// Export opt-in from the schema export block; presence enables periodic partition export.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub spectra_export: Option<SpectraExportConfig>,
+    pub partition_export: Option<PartitionExportConfig>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ownership: Option<OwnershipConfig>,
     pub meta: SchemaMeta,

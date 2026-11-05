@@ -86,7 +86,7 @@ then `database: crate::MY_DB`.",
 
     let policies_code = policies::policies_tokens(parsed.policies.as_ref());
     let ttl_code = ttl_tokens(parsed.ttl.as_ref());
-    let spectra_export_code = spectra_export_tokens(parsed.spectra_export.as_ref());
+    let partition_export_code = partition_export_tokens(parsed.spectra_export.as_ref());
     let fields_code = fields_tokens(&parsed.fields);
     let edges_code = edges_tokens(&parsed.fields);
     let connections_code =
@@ -138,7 +138,7 @@ then `database: crate::MY_DB`.",
             traits: #traits_code,
             retired_fields: #retired_fields_code,
             ttl: #ttl_code,
-            spectra_export: #spectra_export_code,
+            partition_export: #partition_export_code,
             ownership: #ownership_code,
             meta: valence::SchemaMeta {
                 retention: #retention_lit.to_string(),
@@ -251,7 +251,7 @@ fn ttl_tokens(ttl: Option<&valence_schema_dsl::ParsedTtlPolicy>) -> TokenStream2
     }
 }
 
-fn spectra_export_tokens(
+fn partition_export_tokens(
     export: Option<&valence_schema_dsl::ParsedSpectraExportConfig>,
 ) -> TokenStream2 {
     let Some(export) = export else {
@@ -264,8 +264,8 @@ fn spectra_export_tokens(
     let job_name = LitStr::new(&export.job_name, proc_macro2::Span::call_site());
     let target_table = LitStr::new(&export.target_table, proc_macro2::Span::call_site());
     quote! {
-        Some(valence::SpectraExportConfig {
-            cadence: valence::SpectraExportCadence::#cadence,
+        Some(valence::PartitionExportConfig {
+            cadence: valence::PartitionExportCadence::#cadence,
             job_name: #job_name.to_string(),
             target_table: #target_table.to_string(),
         })

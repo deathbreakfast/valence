@@ -86,7 +86,7 @@ fn schema_with_policies(
         traits: Vec::new(),
         retired_fields: Vec::new(),
         ttl: None,
-        spectra_export: None,
+        partition_export: None,
         ownership: None,
         meta: SchemaMeta {
             retention: "1d".into(),

@@ -58,7 +58,7 @@
             traits: Vec::new(),
             retired_fields: Vec::new(),
             ttl: None,
-            spectra_export: None,
+            partition_export: None,
             ownership: None,
             meta: SchemaMeta {
                 retention: "365 days".to_string(),

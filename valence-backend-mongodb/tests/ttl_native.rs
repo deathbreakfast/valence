@@ -53,7 +53,7 @@ fn leak_ttl_schema(table: &str, seconds: u64) -> &'static Schema {
             seconds,
             mode: "backend_capability".into(),
         }),
-        spectra_export: None,
+        partition_export: None,
         ownership: None,
         meta: SchemaMeta {
             retention: "365 days".to_string(),

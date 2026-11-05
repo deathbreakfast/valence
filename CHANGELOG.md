@@ -46,7 +46,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `TwelveHours`, `Daily` or `Weekly`; cron strings are rejected because the schedule is
   platform-owned (`SpectraExportCadence::cron`). `job_name` defaults to
   `{table}_{cadence}_export` and `target_table` to `{table}_export`. The resolved config is
-  `Schema::spectra_export`, so code that builds a `Schema` with a struct literal must add the
+  `Schema::partition_export` (Valence core keeps Spectra out of its source, hence the neutral name), so code that builds a `Schema` with a struct literal must add the
   field (`None`). Valence only records the opt-in; Chronon registration and the export
   executor live in other crates.
 - `retired_fields: ["old"]` in `valence_schema!` (and `Schema::retired_fields`). A product

@@ -2,8 +2,8 @@
 //!
 //! # Owns
 //!
-//! - [`SpectraExportCadence`] and the platform-owned cron string for each variant
-//! - [`SpectraExportConfig`], carried on `Schema.spectra_export`
+//! - [`PartitionExportCadence`] and the platform-owned cron string for each variant
+//! - [`PartitionExportConfig`], carried on `Schema.partition_export`
 //!
 //! # Does not own
 //!
@@ -14,9 +14,9 @@
 //!
 //! | Concern | API |
 //! |---------|-----|
-//! | Opt a table in | `spectra_export: { cadence, job_name?, target_table? }` in `valence_schema!` |
-//! | Read the config | `Schema.spectra_export` ([`SpectraExportConfig`]) |
-//! | Resolve the schedule | [`SpectraExportCadence::cron`] |
+//! | Opt a table in | the export block of `valence_schema!` (cadence, optional job and target table names) |
+//! | Read the config | `Schema.partition_export` ([`PartitionExportConfig`]) |
+//! | Resolve the schedule | [`PartitionExportCadence::cron`] |
 
 use std::fmt;
 use std::str::FromStr;
@@ -27,7 +27,7 @@ use crate::error::Error;
 
 /// Fixed export cadence. Schema authors choose a variant; they never write cron strings.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub enum SpectraExportCadence {
+pub enum PartitionExportCadence {
     /// Previous hour bucket, every hour.
     Hourly,
     /// Previous 3-hour bucket, every 3 hours.
@@ -42,7 +42,7 @@ pub enum SpectraExportCadence {
     Weekly,
 }
 
-impl SpectraExportCadence {
+impl PartitionExportCadence {
     /// Every variant, in order of increasing period.
     pub const ALL: [Self; 6] = [
         Self::Hourly,
@@ -82,34 +82,34 @@ impl SpectraExportCadence {
     }
 }
 
-impl fmt::Display for SpectraExportCadence {
+impl fmt::Display for PartitionExportCadence {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(self.as_str())
     }
 }
 
-impl FromStr for SpectraExportCadence {
+impl FromStr for PartitionExportCadence {
     type Err = Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         Self::ALL
             .into_iter()
             .find(|c| c.as_str() == s)
-            .ok_or_else(|| Error::Validation(format!("unknown spectra_export cadence: {s:?}")))
+            .ok_or_else(|| Error::Validation(format!("unknown export cadence: {s:?}")))
     }
 }
 
-/// Resolved `spectra_export` opt-in for one schema.
+/// Resolved export opt-in for one schema.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct SpectraExportConfig {
-    pub cadence: SpectraExportCadence,
+pub struct PartitionExportConfig {
+    pub cadence: PartitionExportCadence,
     /// Chronon job name; defaults to `{table}_{cadence}_export`.
     pub job_name: String,
     /// Spectra table receiving partitions; defaults to `{table}_export`.
     pub target_table: String,
 }
 
-impl SpectraExportConfig {
+impl PartitionExportConfig {
     /// Platform cron derived from [`Self::cadence`].
     #[must_use]
     pub const fn cron(&self) -> &'static str {
@@ -123,7 +123,10 @@ mod tests {
 
     #[test]
     fn cron_mapping_is_platform_owned() {
-        let got: Vec<_> = SpectraExportCadence::ALL.iter().map(|c| c.cron()).collect();
+        let got: Vec<_> = PartitionExportCadence::ALL
+            .iter()
+            .map(|c| c.cron())
+            .collect();
         assert_eq!(
             got,
             [
@@ -139,23 +142,23 @@ mod tests {
 
     #[test]
     fn name_round_trip_and_unknown() {
-        for c in SpectraExportCadence::ALL {
-            assert_eq!(c.as_str().parse::<SpectraExportCadence>().unwrap(), c);
+        for c in PartitionExportCadence::ALL {
+            assert_eq!(c.as_str().parse::<PartitionExportCadence>().unwrap(), c);
         }
-        assert!("0 0 * * *".parse::<SpectraExportCadence>().is_err());
-        assert!("daily".parse::<SpectraExportCadence>().is_err());
+        assert!("0 0 * * *".parse::<PartitionExportCadence>().is_err());
+        assert!("daily".parse::<PartitionExportCadence>().is_err());
     }
 
     #[test]
     fn config_serde_round_trip() {
-        let cfg = SpectraExportConfig {
-            cadence: SpectraExportCadence::SixHours,
+        let cfg = PartitionExportConfig {
+            cadence: PartitionExportCadence::SixHours,
             job_name: "j".into(),
             target_table: "t".into(),
         };
         let json = serde_json::to_string(&cfg).unwrap();
         assert_eq!(
-            serde_json::from_str::<SpectraExportConfig>(&json).unwrap(),
+            serde_json::from_str::<PartitionExportConfig>(&json).unwrap(),
             cfg
         );
         assert_eq!(cfg.cron(), "0 */6 * * *");

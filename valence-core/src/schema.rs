@@ -264,7 +264,7 @@ mod tests {
             traits: Vec::new(),
             retired_fields: Vec::new(),
             ttl: None,
-            spectra_export: None,
+            partition_export: None,
             ownership: None,
             meta: SchemaMeta {
                 retention: "365 days".to_string(),
@@ -346,7 +346,7 @@ mod tests {
             traits: Vec::new(),
             retired_fields: Vec::new(),
             ttl: None,
-            spectra_export: None,
+            partition_export: None,
             ownership: None,
             meta: SchemaMeta {
                 retention: "365 days".to_string(),
@@ -363,28 +363,28 @@ mod tests {
     }
 
     #[test]
-    fn spectra_export_round_trips_through_registry_and_json() {
-        use crate::spectra_export::{SpectraExportCadence, SpectraExportConfig};
+    fn partition_export_round_trips_through_registry_and_json() {
+        use crate::partition_export::{PartitionExportCadence, PartitionExportConfig};
 
-        let mut schema = build_schema("spectra_export_probe").clone();
-        schema.spectra_export = Some(SpectraExportConfig {
-            cadence: SpectraExportCadence::Weekly,
-            job_name: "spectra_export_probe_weekly_export".to_string(),
-            target_table: "spectra_export_probe_export".to_string(),
+        let mut schema = build_schema("partition_export_probe").clone();
+        schema.partition_export = Some(PartitionExportConfig {
+            cadence: PartitionExportCadence::Weekly,
+            job_name: "partition_export_probe_weekly_export".to_string(),
+            target_table: "partition_export_probe_export".to_string(),
         });
         let schema: &'static Schema = Box::leak(Box::new(schema));
 
         let mut registry = SchemaRegistry::new();
         registry.register_schema(schema);
         let stored = registry
-            .get_full_schema("spectra_export_probe")
-            .and_then(|s| s.spectra_export.as_ref())
-            .expect("spectra_export on registered schema");
+            .get_full_schema("partition_export_probe")
+            .and_then(|s| s.partition_export.as_ref())
+            .expect("partition_export on registered schema");
         assert_eq!(stored.cadence.cron(), "0 0 * * 0");
 
         let json = serde_json::to_value(schema).expect("serialize");
-        assert_eq!(json["spectra_export"]["cadence"], "Weekly");
-        let none = serde_json::to_value(build_schema("spectra_export_none")).expect("serialize");
-        assert!(none.get("spectra_export").is_none());
+        assert_eq!(json["partition_export"]["cadence"], "Weekly");
+        let none = serde_json::to_value(build_schema("partition_export_none")).expect("serialize");
+        assert!(none.get("partition_export").is_none());
     }
 }

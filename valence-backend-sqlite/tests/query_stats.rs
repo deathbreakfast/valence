@@ -43,7 +43,7 @@ fn base_schema(name: &str, policies: SchemaPolicies, fields: Vec<SchemaField>) -
         retired_fields: Vec::new(),
         traits: Vec::new(),
         ttl: None,
-        spectra_export: None,
+        partition_export: None,
         ownership: None,
         meta: SchemaMeta {
             retention: "365 days".to_string(),

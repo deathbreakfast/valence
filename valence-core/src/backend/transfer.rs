@@ -160,68 +160,86 @@ impl<'a> TableTransfer<'a> {
         }
         let mut report = TransferReport::default();
         loop {
-            match checkpoint.phase.clone() {
+            // Each helper writes a whole page before returning the next phase, so the
+            // checkpoint only moves past pages that are on the target.
+            checkpoint.phase = match checkpoint.phase.clone() {
                 TransferPhase::Rows { table_index, after } => {
-                    let Some(table) = self.tables.get(table_index) else {
-                        if table_index == self.tables.len() {
-                            checkpoint.phase = TransferPhase::Edges { after: None };
-                            continue;
-                        }
-                        return Err(Error::Validation(format!(
-                            "transfer checkpoint table index {table_index} is past {} tables",
-                            self.tables.len()
-                        )));
-                    };
-                    if after.is_none() {
-                        self.prepare_table(table).await?;
-                    }
-                    let rows = self
-                        .source
-                        .scan_table(table, after.as_deref(), self.page_size)
-                        .await?;
-                    let mut last = after;
-                    for row in &rows {
-                        let id = row_id(table, row)?;
-                        self.target.upsert_record(table, &id, row.clone()).await?;
-                        last = Some(id);
-                    }
-                    report.add_rows(table, rows.len());
-                    checkpoint.phase = if rows.len() < self.page_size {
-                        TransferPhase::Rows {
-                            table_index: table_index + 1,
-                            after: None,
-                        }
-                    } else {
-                        TransferPhase::Rows {
-                            table_index,
-                            after: last,
-                        }
-                    };
+                    self.copy_rows_page(table_index, after, &mut report).await?
                 }
-                TransferPhase::Edges { after } => {
-                    let edges = self
-                        .source
-                        .scan_edges(None, after.as_ref(), self.page_size)
-                        .await?;
-                    for e in &edges {
-                        if self.tables.iter().any(|t| t == e.from.table()) {
-                            self.target
-                                .relate_edge(&e.from, &e.edge_type, &e.to)
-                                .await?;
-                            report.edges += 1;
-                        }
-                    }
-                    checkpoint.phase = if edges.len() < self.page_size {
-                        TransferPhase::Done
-                    } else {
-                        TransferPhase::Edges {
-                            after: edges.last().cloned(),
-                        }
-                    };
-                }
+                TransferPhase::Edges { after } => self.copy_edges_page(after, &mut report).await?,
                 TransferPhase::Done => return Ok(report),
+            };
+        }
+    }
+
+    /// Copy one page of `tables[table_index]` after `after` and return the next phase.
+    async fn copy_rows_page(
+        &self,
+        table_index: usize,
+        after: Option<String>,
+        report: &mut TransferReport,
+    ) -> Result<TransferPhase> {
+        let Some(table) = self.tables.get(table_index) else {
+            if table_index == self.tables.len() {
+                return Ok(TransferPhase::Edges { after: None });
+            }
+            return Err(Error::Validation(format!(
+                "transfer checkpoint table index {table_index} is past {} tables",
+                self.tables.len()
+            )));
+        };
+        if after.is_none() {
+            self.prepare_table(table).await?;
+        }
+        let rows = self
+            .source
+            .scan_table(table, after.as_deref(), self.page_size)
+            .await?;
+        let mut last = after;
+        for row in &rows {
+            let id = row_id(table, row)?;
+            self.target.upsert_record(table, &id, row.clone()).await?;
+            last = Some(id);
+        }
+        report.add_rows(table, rows.len());
+        Ok(if rows.len() < self.page_size {
+            TransferPhase::Rows {
+                table_index: table_index + 1,
+                after: None,
+            }
+        } else {
+            TransferPhase::Rows {
+                table_index,
+                after: last,
+            }
+        })
+    }
+
+    /// Copy one page of in-set edges after `after` and return the next phase.
+    async fn copy_edges_page(
+        &self,
+        after: Option<EdgeRow>,
+        report: &mut TransferReport,
+    ) -> Result<TransferPhase> {
+        let edges = self
+            .source
+            .scan_edges(None, after.as_ref(), self.page_size)
+            .await?;
+        for e in &edges {
+            if self.tables.iter().any(|t| t == e.from.table()) {
+                self.target
+                    .relate_edge(&e.from, &e.edge_type, &e.to)
+                    .await?;
+                report.edges += 1;
             }
         }
+        Ok(if edges.len() < self.page_size {
+            TransferPhase::Done
+        } else {
+            TransferPhase::Edges {
+                after: edges.last().cloned(),
+            }
+        })
     }
 
     /// Create the table on the target with the source's layout when the target lacks it,

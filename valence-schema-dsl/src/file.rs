@@ -221,6 +221,51 @@ mod tests {
     }
 
     #[test]
+    fn parses_indexed_field_attr_happy() {
+        let src = r#"
+            valence_schema! {
+                Lookup {
+                    repository: "https://github.com/unified-field-dev/valence",
+                    table: "lookup",
+                    version: "0.1.0",
+                    fields: [
+                        id: { r#type: FieldType::String, primary_key: true, required: true },
+                        name: { r#type: FieldType::String, required: true, indexed: true },
+                        note: { r#type: FieldType::String, indexed: false },
+                    ],
+                }
+            }
+        "#;
+        let parsed = parse_schema_file(src).expect("parse");
+        let indexed: Vec<_> = parsed
+            .fields
+            .iter()
+            .map(|f| (f.name.as_str(), f.indexed))
+            .collect();
+        assert_eq!(
+            indexed,
+            vec![("id", false), ("name", true), ("note", false)]
+        );
+    }
+
+    #[test]
+    fn rejects_non_bool_indexed_sad() {
+        let src = r#"
+            valence_schema! {
+                Lookup {
+                    repository: "https://github.com/unified-field-dev/valence",
+                    table: "lookup",
+                    version: "0.1.0",
+                    fields: [
+                        name: { r#type: FieldType::String, indexed: "yes" },
+                    ],
+                }
+            }
+        "#;
+        assert!(parse_schema_file(src).is_err());
+    }
+
+    #[test]
     fn rejects_zero_macros() {
         let err = parse_schema_file("fn main() {}").unwrap_err();
         assert!(err.message.contains("found none"));

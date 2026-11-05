@@ -51,7 +51,7 @@ pub(super) fn push_many_to_many_concrete_methods(
     let unrelate_name = format_ident!("unrelate_from_{}", singular);
 
     methods.push(quote! {
-        /// Create a ManyToMany edge (checks this record's update privacy) with a declared data use.
+        /// Create a ManyToMany edge (checks the stored record's update privacy) with a declared data use.
         pub async fn #relate_name(
             &self,
             target: &#target_type,
@@ -60,13 +60,23 @@ pub(super) fn push_many_to_many_concrete_methods(
         ) -> valence::Result<()> {
             let from_rid = self.id().ok_or_else(|| valence::Error::Validation("Record has no id".into()))?;
             let to_rid = target.id().ok_or_else(|| valence::Error::Validation("Target has no id".into()))?;
-            self.check_update_privacy(valence).await?;
+            // Check the stored row, not `self`: a deserialized or forged record can carry
+            // someone else's id with the caller's owner field.
+            let stored_id = valence::extract_id_from_record(from_rid)?;
+            let stored = <Self as valence::Model>::get(
+                &stored_id,
+                valence,
+                valence::DataUsePurpose::framework_nested(),
+            )
+            .await?
+            .ok_or_else(|| valence::Error::NotFound(format!("{}:{}", from_rid.table(), stored_id)))?;
+            stored.check_update_privacy(valence).await?;
             valence
                 .relate_edge(#edge_table_lit, from_rid, to_rid, purpose)
                 .await
         }
 
-        /// Remove a ManyToMany edge (checks this record's update privacy) with a declared data use.
+        /// Remove a ManyToMany edge (checks the stored record's update privacy) with a declared data use.
         pub async fn #unrelate_name(
             &self,
             target: &#target_type,
@@ -75,7 +85,17 @@ pub(super) fn push_many_to_many_concrete_methods(
         ) -> valence::Result<()> {
             let from_rid = self.id().ok_or_else(|| valence::Error::Validation("Record has no id".into()))?;
             let to_rid = target.id().ok_or_else(|| valence::Error::Validation("Target has no id".into()))?;
-            self.check_update_privacy(valence).await?;
+            // Check the stored row, not `self`: a deserialized or forged record can carry
+            // someone else's id with the caller's owner field.
+            let stored_id = valence::extract_id_from_record(from_rid)?;
+            let stored = <Self as valence::Model>::get(
+                &stored_id,
+                valence,
+                valence::DataUsePurpose::framework_nested(),
+            )
+            .await?
+            .ok_or_else(|| valence::Error::NotFound(format!("{}:{}", from_rid.table(), stored_id)))?;
+            stored.check_update_privacy(valence).await?;
             valence
                 .unrelate_edge(#edge_table_lit, from_rid, to_rid, purpose)
                 .await
@@ -124,7 +144,7 @@ pub(super) fn push_many_to_many_trait_target_methods(
     let unrelate_name = format_ident!("unrelate_from_{}_record", singular);
 
     methods.push(quote! {
-        /// Create a ManyToMany edge to a trait target (checks this record's update privacy) with a declared data use.
+        /// Create a ManyToMany edge to a trait target (checks the stored record's update privacy) with a declared data use.
         pub async fn #relate_name(
             &self,
             target: &valence::RecordId,
@@ -141,13 +161,23 @@ pub(super) fn push_many_to_many_trait_target_methods(
                     #target_trait_lit
                 )));
             }
-            self.check_update_privacy(valence).await?;
+            // Check the stored row, not `self`: a deserialized or forged record can carry
+            // someone else's id with the caller's owner field.
+            let stored_id = valence::extract_id_from_record(from_rid)?;
+            let stored = <Self as valence::Model>::get(
+                &stored_id,
+                valence,
+                valence::DataUsePurpose::framework_nested(),
+            )
+            .await?
+            .ok_or_else(|| valence::Error::NotFound(format!("{}:{}", from_rid.table(), stored_id)))?;
+            stored.check_update_privacy(valence).await?;
             valence
                 .relate_edge(#edge_table_lit, from_rid, target, purpose)
                 .await
         }
 
-        /// Remove a ManyToMany edge from a trait target (checks this record's update privacy) with a declared data use.
+        /// Remove a ManyToMany edge from a trait target (checks the stored record's update privacy) with a declared data use.
         pub async fn #unrelate_name(
             &self,
             target: &valence::RecordId,
@@ -155,7 +185,17 @@ pub(super) fn push_many_to_many_trait_target_methods(
             purpose: valence::DataUsePurpose,
         ) -> valence::Result<()> {
             let from_rid = self.id().ok_or_else(|| valence::Error::Validation("Record has no id".into()))?;
-            self.check_update_privacy(valence).await?;
+            // Check the stored row, not `self`: a deserialized or forged record can carry
+            // someone else's id with the caller's owner field.
+            let stored_id = valence::extract_id_from_record(from_rid)?;
+            let stored = <Self as valence::Model>::get(
+                &stored_id,
+                valence,
+                valence::DataUsePurpose::framework_nested(),
+            )
+            .await?
+            .ok_or_else(|| valence::Error::NotFound(format!("{}:{}", from_rid.table(), stored_id)))?;
+            stored.check_update_privacy(valence).await?;
             valence
                 .unrelate_edge(#edge_table_lit, from_rid, target, purpose)
                 .await

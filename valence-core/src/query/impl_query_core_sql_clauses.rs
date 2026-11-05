@@ -18,7 +18,12 @@ impl QueryCore {
                 from_field,
                 subquery,
                 ..
-            } => Self::connection_exists_clause_sql(from_field, subquery, &format!("ce{}", *param_counter), param_counter),
+            } => Self::connection_exists_clause_sql(
+                from_field,
+                subquery,
+                &format!("ce{}", *param_counter),
+                param_counter,
+            ),
             WhereClause::ConnectionExistsReverse {
                 reverse_field,
                 subquery,
@@ -35,7 +40,12 @@ impl QueryCore {
                 ..
             } => {
                 crate::safe_ident::assert_registered_edge_ident(edge_table)?;
-                Self::connection_exists_m2m_clause_sql(edge_table, subquery, &format!("cemtm{}", *param_counter), param_counter)
+                Self::connection_exists_m2m_clause_sql(
+                    edge_table,
+                    subquery,
+                    &format!("cemtm{}", *param_counter),
+                    param_counter,
+                )
             }
             WhereClause::ConnectionContainsManyToMany { edge_table, target } => {
                 crate::safe_ident::assert_registered_edge_ident(edge_table)?;

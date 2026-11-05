@@ -405,7 +405,7 @@ async fn collect_set_null_and_remove_edge_for_entity(
     }
 
     // Incoming M2M declared on other tables targeting this table: drop the edges whatever
-    // the policy, except Restrict (which blocks rather than cleans up).
+    // the policy, except Restrict, whose edges are left alone (blocking on them is not checked yet).
     for other in registry.list_schemas() {
         if skip_graph_table(other) || other == tbl {
             continue;

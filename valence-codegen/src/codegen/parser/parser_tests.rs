@@ -27,7 +27,7 @@ fn parses_ttl_from_schema_file() {
 }
 
 #[test]
-fn parses_spectra_export_from_schema_file() {
+fn parses_export_block_from_schema_file() {
     let schema = extract_schema_from_macro(
         r#"
         valence_schema! {

@@ -64,7 +64,7 @@ pub fn lower_parsed_schema(parsed: &ParsedSchema) -> Schema {
         traits: parsed.traits.clone(),
         retired_fields: parsed.retired_fields.clone(),
         ttl: parsed.ttl.as_ref().map(lower_ttl),
-        spectra_export: parsed.spectra_export.as_ref().map(lower_spectra_export),
+        spectra_export: parsed.spectra_export.as_ref().map(lower_export_block),
         ownership: parsed.ownership.as_ref().map(lower_ownership),
         meta: SchemaMeta {
             retention: parsed.retention.clone(),
@@ -95,7 +95,7 @@ fn lower_ttl(ttl: &ParsedTtlPolicy) -> SchemaTtlPolicy {
     }
 }
 
-fn lower_spectra_export(export: &ParsedSpectraExportConfig) -> SpectraExportConfig {
+fn lower_export_block(export: &ParsedSpectraExportConfig) -> SpectraExportConfig {
     SpectraExportConfig {
         cadence: match export.cadence {
             ParsedSpectraExportCadence::Hourly => SpectraExportCadence::Hourly,

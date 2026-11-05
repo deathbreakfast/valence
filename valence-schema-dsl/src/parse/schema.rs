@@ -11,9 +11,7 @@ use super::connections::{parse_connections, ConnectionsConfig, ParsedConnection}
 use super::fields::{parse_fields, FieldsConfig, ParsedField};
 use super::ownership::{parse_ownership_block, OwnershipConfigBlock, ParsedOwnershipConfig};
 use super::privacy::{parse_policies_config, ParsedPolicies, PoliciesConfig, PrivacyConfig};
-use super::spectra_export::{
-    parse_spectra_export_config, ParsedSpectraExportConfig, SpectraExportConfig,
-};
+use super::spectra_export::{parse_export_block, ParsedSpectraExportConfig, SpectraExportConfig};
 use super::ttl::{parse_ttl_config, ParsedTtlPolicy, TtlConfig};
 
 /// Root schema definition.
@@ -406,7 +404,7 @@ impl SchemaSpec {
         let table_name =
             table_name.ok_or_else(|| syn::Error::new(self.name.span(), "Missing 'table' field"))?;
         let spectra_export = spectra_export_cfg
-            .map(|c| parse_spectra_export_config(c, &table_name))
+            .map(|c| parse_export_block(c, &table_name))
             .transpose()?;
         let version = version.unwrap_or_else(|| "1.0.0".to_string());
         let repository = meta_repository

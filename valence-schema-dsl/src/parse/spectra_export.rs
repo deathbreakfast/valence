@@ -173,7 +173,7 @@ fn set_once<T>(slot: &mut Option<T>, value: T, key: &str, span: proc_macro2::Spa
     Ok(())
 }
 
-pub(super) fn parse_spectra_export_config(
+pub(super) fn parse_export_block(
     config: &SpectraExportConfig,
     table: &str,
 ) -> Result<ParsedSpectraExportConfig> {

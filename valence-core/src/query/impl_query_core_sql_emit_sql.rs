@@ -43,7 +43,7 @@ impl QueryCore {
             } => Self::connection_exists_clause_sql_dialect(
                 from_field,
                 subquery,
-                "ce",
+                &format!("ce{}", *param_counter),
                 param_counter,
             ),
             WhereClause::ConnectionExistsReverse {
@@ -53,7 +53,7 @@ impl QueryCore {
             } => Self::connection_exists_reverse_clause_sql_dialect(
                 reverse_field,
                 subquery,
-                "cer",
+                &format!("cer{}", *param_counter),
                 param_counter,
                 table,
             ),
@@ -66,7 +66,7 @@ impl QueryCore {
                 Self::connection_exists_m2m_clause_sql_dialect(
                     edge_table,
                     subquery,
-                    "cemtm",
+                    &format!("cemtm{}", *param_counter),
                     param_counter,
                 )
             }

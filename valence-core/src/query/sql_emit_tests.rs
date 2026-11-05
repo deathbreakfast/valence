@@ -106,3 +106,109 @@ fn string_less_than_emits_lt_and_limit() {
     assert!(sql.contains("LIMIT 32"), "got {sql}");
     assert_eq!(params[0].1, serde_json::json!("2020-01-01T00:00:00+00:00"));
 }
+
+fn sub_named(table: &str, name: &str) -> QueryCore {
+    QueryCore::new(table.to_string()).where_string(
+        "name".to_string(),
+        StringPredicate::Equals(name.to_string()),
+    )
+}
+
+/// Every param key is unique and each value is bound to the key the text references.
+fn assert_distinct_bindings(sql: &str, params: &[(String, serde_json::Value)], values: &[&str]) {
+    let keys: std::collections::HashSet<_> = params.iter().map(|(k, _)| k.as_str()).collect();
+    assert_eq!(keys.len(), params.len(), "duplicate param keys: {params:?}");
+    for v in values {
+        let (key, _) = params
+            .iter()
+            .find(|(_, p)| p == &serde_json::json!(v))
+            .unwrap_or_else(|| panic!("value {v} missing from {params:?}"));
+        assert!(sql.contains(&format!("${key}")), "{key} not in {sql}");
+    }
+}
+
+#[test]
+fn two_connection_exists_clauses_keep_distinct_params() {
+    let query = QueryCore::new("task".to_string())
+        .where_connection_exists("a".into(), "x".into(), sub_named("x", "one"))
+        .where_connection_exists("b".into(), "y".into(), sub_named("y", "two"));
+    let (sql, params) = query.to_surrealql().expect("surreal");
+    assert_distinct_bindings(&sql, &params, &["one", "two"]);
+    let (sql, params) = query.to_sql().expect("sql");
+    assert_distinct_bindings(&sql, &params, &["one", "two"]);
+}
+
+#[test]
+fn two_connection_exists_reverse_clauses_keep_distinct_params() {
+    let query = QueryCore::new("task".to_string())
+        .where_connection_exists_reverse("x".into(), "a".into(), sub_named("x", "one"))
+        .where_connection_exists_reverse("y".into(), "b".into(), sub_named("y", "two"));
+    let (sql, params) = query.to_surrealql().expect("surreal");
+    assert_distinct_bindings(&sql, &params, &["one", "two"]);
+    let (sql, params) = query.to_sql().expect("sql");
+    assert_distinct_bindings(&sql, &params, &["one", "two"]);
+}
+
+#[test]
+fn two_many_to_many_exists_clauses_keep_distinct_params() {
+    use crate::schema::{SchemaMetadata, SchemaRegistry};
+    use crate::schema_api::{Schema, SchemaConnection, SchemaMeta, SchemaPrivacy};
+    let schema = Box::leak(Box::new(Schema {
+        name: "m2m_param_probe".to_string(),
+        version: "1.0.0".to_string(),
+        databases: vec!["default".to_string()],
+        database_evaluator: &crate::DEFAULT_IN_MEMORY,
+        privacy: SchemaPrivacy {
+            read: "public".to_string(),
+            write: "service".to_string(),
+        },
+        policies: None,
+        fields: Vec::new(),
+        edges: Vec::new(),
+        connections: vec![SchemaConnection {
+            name: "peers".to_string(),
+            from_table: "m2m_param_probe".to_string(),
+            from_field: "id".to_string(),
+            to_table: "m2m_param_probe".to_string(),
+            cardinality: "ManyToMany".to_string(),
+            required: false,
+            on_delete: "Cascade".to_string(),
+            label: "peers".to_string(),
+            model_path: None,
+            reverse_field: None,
+            edge_table: Some("m2m_param_probe_edge".to_string()),
+            target_trait: None,
+        }],
+        side_effects: Vec::new(),
+        iters: Vec::new(),
+        composite_key: Vec::new(),
+        traits: Vec::new(),
+        retired_fields: Vec::new(),
+        ttl: None,
+        ownership: None,
+        meta: SchemaMeta {
+            retention: "365 days".to_string(),
+            row_count: 0,
+            owner: "system".to_string(),
+            description: None,
+            repository: "https://github.com/unified-field-dev/valence".to_string(),
+        },
+    }));
+    SchemaRegistry::register_overlay(Box::leak(Box::new(SchemaMetadata::from_schema(schema))));
+
+    let query = QueryCore::new("task".to_string())
+        .where_connection_exists_many_to_many(
+            "m2m_param_probe_edge".into(),
+            "tag".into(),
+            sub_named("tag", "one"),
+        )
+        .where_connection_exists_many_to_many(
+            "m2m_param_probe_edge".into(),
+            "tag".into(),
+            sub_named("tag", "two"),
+        );
+    let (sql, params) = query.to_surrealql().expect("surreal");
+    assert_distinct_bindings(&sql, &params, &["one", "two"]);
+    let (sql, params) = query.to_sql().expect("sql");
+    assert_distinct_bindings(&sql, &params, &["one", "two"]);
+}

@@ -112,3 +112,36 @@ async fn non_owner_cannot_unrelate() {
     assert!(matches!(err, Error::Privacy(_)), "got {err:?}");
     assert_eq!(labels_of(&lab).await, 1);
 }
+
+#[tokio::test]
+async fn forged_note_with_the_attackers_owner_field_is_denied() {
+    let lab = lab().await;
+    let forged: Note = serde_json::from_value(serde_json::json!({
+        "id": lab.note.id().expect("note id"),
+        "user": "bob",
+        "title": "Groceries",
+    }))
+    .expect("deserialize forged note");
+    let err = forged
+        .relate_to_label(
+            &lab.label,
+            &lab.bob,
+            valence::use_!(r"In the **edge-write privacy** suite, we **attach the label through a forged copy of alice's note** so the suite can check the stored owner decides, not the copy. Developers running that example suite use this edge."),
+        )
+        .await
+        .expect_err("bob is denied");
+    assert!(matches!(err, Error::Privacy(_)), "got {err:?}");
+    assert_eq!(labels_of(&lab).await, 0);
+
+    relate(&lab, &lab.alice).await.expect("owner relates");
+    let err = forged
+        .unrelate_from_label(
+            &lab.label,
+            &lab.bob,
+            valence::use_!(r"In the **edge-write privacy** suite, we **detach the label through a forged copy of alice's note** so the suite can check the stored owner decides, not the copy. Developers running that example suite use this edge."),
+        )
+        .await
+        .expect_err("bob is denied");
+    assert!(matches!(err, Error::Privacy(_)), "got {err:?}");
+    assert_eq!(labels_of(&lab).await, 1);
+}

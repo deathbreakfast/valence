@@ -88,7 +88,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   table, field and bucket; before, such a schema compiled and every read of the field failed.
 - Generated `relate_to_*` / `unrelate_from_*` (and the `_record` trait-target variants) wrote
   edges with no privacy check, so any code holding a user or bot `Valence` could add or drop
-  a membership or grant edge. They now run the source record's update privacy first.
+  a membership or grant edge. They now run the stored source record's update privacy first (not the caller's copy).
   Behavior change: a non-System actor that fails the source schema's update policy (or whose
   schema has none) gets `Error::Privacy`. `Valence::relate_edge` / `unrelate_edge` stay raw.
 - The document-row filter shared by the mem, IndraDB, Redis, MongoDB and hybrid backends

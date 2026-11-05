@@ -279,7 +279,7 @@ valence_schema! {
             .unwrap_or_else(|| panic!("missing {method}"))
             .1;
         let check = body
-            .find("self.check_update_privacy(valence).await?")
+            .find("stored.check_update_privacy(valence).await?")
             .unwrap();
         let write = body.find(raw).unwrap();
         assert!(

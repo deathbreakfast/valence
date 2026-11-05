@@ -14,6 +14,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   custom rule on `service_name()`; `SYSTEM_ONLY` never admits a service user, and
   `AUTHENTICATED` would also open the records to every signed-in user.
 
+### Fixed
+
+- The in-memory row filter's `ORDER BY` (used by the mem, redis, mongodb, indradb and hybrid
+  backends) now sorts on every key with its own ASC/DESC, compares numbers numerically
+  instead of skipping them, and reads `START n` as an offset.
+
 ### Added
 
 - `ValenceBuilder::extension` and `Valence::extension` give each `Valence` a typed slot for

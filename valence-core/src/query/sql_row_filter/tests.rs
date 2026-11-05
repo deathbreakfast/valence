@@ -607,3 +607,67 @@ mod clause_matching {
         assert_eq!(run(sql, params), ["r1", "r2"]);
     }
 }
+
+fn ids(rows: &[serde_json::Value]) -> Vec<&str> {
+    rows.iter().map(|r| r["id"].as_str().unwrap()).collect()
+}
+
+#[test]
+fn order_by_sorts_numbers_numerically() {
+    let rows = vec![
+        serde_json::json!({"id": "a", "created_at": 100}),
+        serde_json::json!({"id": "b", "created_at": 2}),
+        serde_json::json!({"id": "c", "created_at": 10}),
+        serde_json::json!({"id": "d", "created_at": -5}),
+        serde_json::json!({"id": "e", "created_at": 2.5}),
+    ];
+    let asc = apply_order_limit_offset(rows.clone(), "SELECT * FROM t ORDER BY created_at ASC");
+    assert_eq!(ids(&asc), ["d", "b", "e", "c", "a"]);
+    let desc = apply_order_limit_offset(rows, "SELECT * FROM t ORDER BY created_at DESC");
+    assert_eq!(ids(&desc), ["a", "c", "e", "b", "d"]);
+}
+
+#[test]
+fn order_by_uses_every_key_with_its_own_direction() {
+    let rows = vec![
+        serde_json::json!({"id": "a", "g": "x", "n": 1}),
+        serde_json::json!({"id": "b", "g": "y", "n": 5}),
+        serde_json::json!({"id": "c", "g": "x", "n": 9}),
+        serde_json::json!({"id": "d", "g": "y", "n": 7}),
+    ];
+    let out = apply_order_limit_offset(rows, "SELECT * FROM t ORDER BY g ASC, n DESC");
+    assert_eq!(ids(&out), ["c", "a", "d", "b"]);
+}
+
+#[test]
+fn order_by_json_extract_keys_and_missing_fields() {
+    let rows = vec![
+        serde_json::json!({"id": "a", "body": {"rank": 3}}),
+        serde_json::json!({"id": "b"}),
+        serde_json::json!({"id": "c", "body": {"rank": 20}}),
+    ];
+    let out = apply_order_limit_offset(
+        rows.clone(),
+        "SELECT * FROM t ORDER BY json_extract(body, '$.rank') ASC, id ASC",
+    );
+    assert_eq!(ids(&out), ["b", "a", "c"]);
+    let out = apply_order_limit_offset(
+        rows,
+        "SELECT * FROM t ORDER BY json_extract(body, '$.rank') DESC",
+    );
+    assert_eq!(ids(&out), ["c", "a", "b"]);
+}
+
+#[test]
+fn order_by_then_offset_and_limit_window() {
+    let rows: Vec<_> = (0..6)
+        .map(|n| serde_json::json!({"id": format!("r{n}"), "n": n * 10}))
+        .collect();
+    let sql = "SELECT * FROM t ORDER BY n DESC LIMIT 2 OFFSET 1";
+    assert_eq!(
+        ids(&apply_order_limit_offset(rows.clone(), sql)),
+        ["r4", "r3"]
+    );
+    let surreal = "SELECT * FROM t ORDER BY n DESC LIMIT 2 START 1";
+    assert_eq!(ids(&apply_order_limit_offset(rows, surreal)), ["r4", "r3"]);
+}

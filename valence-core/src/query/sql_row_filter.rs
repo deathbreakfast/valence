@@ -105,7 +105,11 @@ fn json_as_f64(v: &serde_json::Value) -> Option<f64> {
         .or_else(|| v.as_str().and_then(|s| s.trim().parse().ok()))
 }
 
-/// Apply ORDER BY field ASC/DESC plus LIMIT/OFFSET windowing.
+/// Apply ORDER BY (every key, each with its own direction) plus LIMIT/OFFSET windowing.
+///
+/// Numbers compare numerically and strings lexically; a missing field sorts before any
+/// value, so DESC puts it last. The sort is stable, so rows tied on every key keep their
+/// input order.
 pub fn apply_order_limit_offset(
     mut rows: Vec<serde_json::Value>,
     sql: &str,
@@ -114,26 +118,40 @@ pub fn apply_order_limit_offset(
     if let Some(order_idx) = upper.find(" ORDER BY ") {
         let rest = &sql[order_idx + 10..];
         let rest_upper = rest.to_uppercase();
-        let end = rest_upper
-            .find(" LIMIT ")
-            .or_else(|| rest_upper.find(" OFFSET "))
+        let end = [" LIMIT ", " OFFSET ", " START "]
+            .iter()
+            .filter_map(|kw| rest_upper.find(kw))
+            .min()
             .unwrap_or(rest.len());
-        let order_clause = rest[..end].trim();
-        let desc = order_clause.to_uppercase().contains(" DESC");
-        let field = order_by_field(order_clause);
+        let keys: Vec<(String, bool)> = split_top_level_commas(rest[..end].trim())
+            .into_iter()
+            .map(|part| {
+                let part = part.trim();
+                let desc = part.to_uppercase().ends_with(" DESC");
+                (order_by_field(part), desc)
+            })
+            .collect();
         rows.sort_by(|a, b| {
-            let as_ = row_string_field(a, &field).unwrap_or("");
-            let bs = row_string_field(b, &field).unwrap_or("");
-            if desc {
-                bs.cmp(as_)
-            } else {
-                as_.cmp(bs)
-            }
+            keys.iter()
+                .map(|(field, desc)| {
+                    let ord = compare_for_sort(nested_field(a, field), nested_field(b, field));
+                    if *desc {
+                        ord.reverse()
+                    } else {
+                        ord
+                    }
+                })
+                .find(|ord| ord.is_ne())
+                .unwrap_or(std::cmp::Ordering::Equal)
         });
     }
 
-    let offset = if let Some(off_idx) = upper.rfind(" OFFSET ") {
-        let tail = sql[off_idx + 8..].trim();
+    let offset = if let Some((off_idx, kw_len)) = upper
+        .rfind(" OFFSET ")
+        .map(|at| (at, " OFFSET ".len()))
+        .or_else(|| upper.rfind(" START ").map(|at| (at, " START ".len())))
+    {
+        let tail = sql[off_idx + kw_len..].trim();
         let num = tail.split_whitespace().next().unwrap_or("0");
         num.parse().unwrap_or(0)
     } else {
@@ -151,6 +169,55 @@ pub fn apply_order_limit_offset(
         }
     }
     rows
+}
+
+/// Split on commas outside parentheses, so `json_extract(body, '$.a')` stays whole.
+fn split_top_level_commas(clause: &str) -> Vec<&str> {
+    let mut parts = Vec::new();
+    let mut depth = 0usize;
+    let mut start = 0;
+    for (i, c) in clause.char_indices() {
+        match c {
+            '(' => depth += 1,
+            ')' => depth = depth.saturating_sub(1),
+            ',' if depth == 0 => {
+                parts.push(&clause[start..i]);
+                start = i + 1;
+            }
+            _ => {}
+        }
+    }
+    parts.push(&clause[start..]);
+    parts
+}
+
+/// Total order for sorting: missing < present; numbers numerically, strings lexically,
+/// `{table, id}` objects by `id`; mixed or other types compare equal.
+fn compare_for_sort(
+    a: Option<&serde_json::Value>,
+    b: Option<&serde_json::Value>,
+) -> std::cmp::Ordering {
+    use serde_json::Value;
+    match (a, b) {
+        (Some(Value::Number(x)), Some(Value::Number(y))) => {
+            if let (Some(x), Some(y)) = (x.as_i64(), y.as_i64()) {
+                return x.cmp(&y);
+            }
+            if let (Some(x), Some(y)) = (x.as_u64(), y.as_u64()) {
+                return x.cmp(&y);
+            }
+            x.as_f64()
+                .partial_cmp(&y.as_f64())
+                .unwrap_or(std::cmp::Ordering::Equal)
+        }
+        (Some(Value::String(x)), Some(Value::String(y))) => x.cmp(y),
+        (Some(Value::Object(x)), Some(Value::Object(y))) => {
+            compare_for_sort(x.get("id"), y.get("id"))
+        }
+        (Some(_), None) => std::cmp::Ordering::Greater,
+        (None, Some(_)) => std::cmp::Ordering::Less,
+        _ => std::cmp::Ordering::Equal,
+    }
 }
 
 /// Parse a SQL LHS into a Valence field path (`name`, `body` path, or `price.code`).

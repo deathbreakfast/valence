@@ -190,3 +190,12 @@ valence_schema! {
         "stays required"
     );
 }
+
+#[test]
+fn batch_creatable_rejects_unset_read_hidable_rows() {
+    let g = generated();
+    assert!(
+        g.contains("fnvalidate_batch_row(row:&serde_json::Value)->valence::Result<()>{Self::__reject_unset_read_hidable(row)}"),
+        "batch impl runs the same guard as create"
+    );
+}

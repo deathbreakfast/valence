@@ -802,6 +802,9 @@ impl valence::BatchCreatable for ScoreTracker {
     fn set_id(&mut self, id: valence::RecordId) {
         self.id = Some(id);
     }
+    fn validate_batch_row(row: &serde_json::Value) -> valence::Result<()> {
+        Self::__reject_unset_read_hidable(row)
+    }
     async fn ensure_ownership_after_batch_create(
         created_row: serde_json::Value,
         valence: &valence::Valence,

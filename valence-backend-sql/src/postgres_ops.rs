@@ -330,7 +330,6 @@ pub async fn define_index_postgres(
     if let Ok(layout) = StorageLayout::from_registry_table(table) {
         ensure_layout_for_write_postgres(pool, &layout, ensured).await?;
     } else {
-        ensure_table_postgres(pool, table).await?;
         let layout = crate::sqlite_ops::adhoc_index_layout(table, fields);
         ensure_layout_for_write_postgres(pool, &layout, ensured).await?;
     }

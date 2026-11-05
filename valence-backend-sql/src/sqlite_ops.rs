@@ -405,7 +405,6 @@ pub async fn define_index_sqlite(
     if let Ok(layout) = StorageLayout::from_registry_table(table) {
         ensure_layout_for_write_sqlite(pool, &layout, ensured).await?;
     } else {
-        ensure_table_sqlite(pool, table).await?;
         ensure_layout_for_write_sqlite(pool, &adhoc_index_layout(table, fields), ensured).await?;
     }
     sqlx::query(&q)

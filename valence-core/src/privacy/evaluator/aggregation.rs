@@ -68,6 +68,8 @@ impl PrivacyEvaluator {
 
     /// Enforce field-level `update` policies on a write to an existing row.
     ///
+    /// Generated `update`, `update_with_before` and `upsert` call this before writing.
+    ///
     /// A field is checked only when its value in `after` differs from `before`
     /// (a missing field and `null` count as equal, so a field the viewer can't
     /// read never looks changed). `before` of `None` means a create, which this

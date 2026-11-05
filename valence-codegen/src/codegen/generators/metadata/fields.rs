@@ -6,13 +6,14 @@ use syn::LitStr;
 
 use crate::codegen::utils::map_field_type_to_string;
 use valence_core::SchemaField;
-use valence_schema_dsl::ParsedPolicies;
+use valence_schema_dsl::{ParsedPolicies, ParsedPolicyRules};
 
 use super::policies::generate_policies_code;
 use super::string_helpers::humanize_field_edge_label;
 
 /// Optional `SchemaEdge` for FK-backed fields; plus the `SchemaField` row for `full()`.
 pub(super) fn schema_field_and_edge_tokens(
+    table: &str,
     field: &SchemaField,
     field_policies: Option<&ParsedPolicies>,
 ) -> (Option<TokenStream>, TokenStream) {
@@ -84,6 +85,16 @@ pub(super) fn schema_field_and_edge_tokens(
     let encrypted = field.encrypted;
     let unique = field.unique;
     let policies_code = generate_policies_code(field_policies);
+    let sync_assertions = field_read_sync_assertions(
+        table,
+        field_name_str,
+        field_policies.and_then(|p| p.read.as_ref()),
+    );
+    let policies_code = if sync_assertions.is_empty() {
+        policies_code
+    } else {
+        quote! { { #sync_assertions #policies_code } }
+    };
 
     let model_path_code = if let Some(ref path) = field.model_path {
         let lit = LitStr::new(path, proc_macro2::Span::call_site());
@@ -112,4 +123,51 @@ pub(super) fn schema_field_and_edge_tokens(
     };
 
     (edge_ts, row)
+}
+
+/// Assertions that every rule in a field `read` policy is a sync [`valence::PrivacyRule`].
+///
+/// The field evaluator only runs sync rules, so an async rule (one implementing
+/// `PolicyEvaluator` directly) would compile and then fail every read of the field.
+/// Codegen only sees rule paths, not their types, so it emits one function per rule whose
+/// name carries the table, field and bucket; rustc's type error then points at the rule
+/// and the enclosing function name says where it was used.
+fn field_read_sync_assertions(
+    table: &str,
+    field: &str,
+    read: Option<&ParsedPolicyRules>,
+) -> TokenStream {
+    let Some(read) = read else {
+        return TokenStream::new();
+    };
+    let buckets = [
+        ("always_allow", &read.always_allow),
+        ("allow", &read.allow),
+        ("block", &read.block),
+        ("always_block", &read.always_block),
+    ];
+    let clean = |s: &str| -> String {
+        s.chars()
+            .map(|c| if c.is_ascii_alphanumeric() { c } else { '_' })
+            .collect()
+    };
+    let assertions = buckets.iter().flat_map(|(bucket, rules)| {
+        rules.iter().enumerate().map(move |(i, rule)| {
+            let name = quote::format_ident!(
+                "field_read_rule_must_be_sync__{}__{}__{}_{}",
+                clean(table),
+                clean(field),
+                bucket,
+                i
+            );
+            quote! {
+                #[allow(dead_code, non_snake_case)]
+                fn #name() {
+                    fn must_be_sync_privacy_rule(_: &valence::PrivacyRule) {}
+                    must_be_sync_privacy_rule(&#rule);
+                }
+            }
+        })
+    });
+    quote! { #(#assertions)* }
 }

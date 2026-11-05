@@ -53,7 +53,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   trait file fails codegen, naming the file. They used to print a `cargo:warning` (which
   Cargo hides for git dependencies) and skip the model, so consumers only saw an
   unresolved import.
-
+- A rule in a field `read` policy that is not a sync `PrivacyRule` (for example an async
+  `PolicyEvaluator`) now fails the build. Codegen emits a per-rule assertion named after the
+  table, field and bucket; before, such a schema compiled and every read of the field failed.
 - The document-row filter shared by the mem, IndraDB, Redis, MongoDB and hybrid backends
   flattened `(a = $x) AND (b = $y)` into one `OR`. A query filtering two record fields at
   once (a team and a user, say) returned every row matching either field, so a lookup for a

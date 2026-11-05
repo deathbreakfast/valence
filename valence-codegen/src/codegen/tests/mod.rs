@@ -4,6 +4,7 @@
 mod composite_key;
 mod connections;
 mod emit_parity;
+mod field_policy_sync_rule;
 mod ownership_hooks;
 mod read_hidable;
 mod record_history_source_codegen;

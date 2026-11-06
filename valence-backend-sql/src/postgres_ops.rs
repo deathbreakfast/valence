@@ -83,6 +83,17 @@ pub async fn execute_select_postgres(
         {
             return Ok(vec![]);
         }
+        // 42703 undefined_column: `define_index` can create the ownership table before any
+        // ownership row exists, with only the indexed columns. Until the first write adds
+        // the rest it has no rows.
+        Err(e)
+            if sql.contains("valence_data_ownership")
+                && e.as_database_error()
+                    .and_then(|d| d.code())
+                    .is_some_and(|code| code == "42703") =>
+        {
+            return Ok(vec![]);
+        }
         Err(e) => return Err(Error::database(e.to_string())),
     };
 

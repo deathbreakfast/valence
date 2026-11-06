@@ -54,6 +54,7 @@ fn register_edge() {
                 model_path: None,
                 reverse_field: None,
                 edge_table: Some(EDGE.to_string()),
+                edge_policy: None,
                 target_trait: None,
             }],
             side_effects: Vec::new(),

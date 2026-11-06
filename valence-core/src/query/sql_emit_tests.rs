@@ -177,6 +177,7 @@ fn two_many_to_many_exists_clauses_keep_distinct_params() {
             model_path: None,
             reverse_field: None,
             edge_table: Some("m2m_param_probe_edge".to_string()),
+            edge_policy: None,
             target_trait: None,
         }],
         side_effects: Vec::new(),

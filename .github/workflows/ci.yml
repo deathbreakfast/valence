@@ -183,16 +183,19 @@ jobs:
       - uses: taiki-e/install-action@07b4745e0c39a41822af610387492e3e53aa222b # v2
         with:
           tool: cargo-llvm-cov
+      # Serial: valence-testkit uses process-global telemetry/deletion harness state.
       - name: Line coverage report (workspace, mem tier)
         run: |
           cargo llvm-cov --workspace \
             --exclude valence-e2e --exclude valence-bench \
             --features mem,surreal-mem \
-            --summary-only
+            --summary-only \
+            -- --test-threads=1
           cargo llvm-cov --workspace \
             --exclude valence-e2e --exclude valence-bench \
             --features mem,surreal-mem \
-            --lcov --output-path lcov.info
+            --lcov --output-path lcov.info \
+            -- --test-threads=1
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: coverage-lcov

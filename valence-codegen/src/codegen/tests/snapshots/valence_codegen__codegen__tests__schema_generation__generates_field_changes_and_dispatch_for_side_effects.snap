@@ -1123,7 +1123,8 @@ impl ScoreTrackerSchema {
                         to_table : "user".to_string(), cardinality : "HasOne"
                         .to_string(), required : true, on_delete : "Cascade".to_string(),
                         label : "User".to_string(), model_path : None, reverse_field :
-                        None, edge_table : None, target_trait : None, }
+                        None, edge_table : None, edge_policy : None, target_trait : None,
+                        }
                     ],
                     side_effects: vec![
                         "ScoreNotifier".to_string(), "AuditLogger".to_string()

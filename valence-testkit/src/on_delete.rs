@@ -135,6 +135,7 @@ fn has_many_conn(
         model_path: None,
         reverse_field: Some(reverse.into()),
         edge_table: None,
+        edge_policy: None,
         target_trait: None,
     }
 }
@@ -152,6 +153,7 @@ fn m2m_conn(name: &str, from: &str, to: &str, edge: &str, on_delete: &str) -> Sc
         model_path: None,
         reverse_field: None,
         edge_table: Some(edge.into()),
+        edge_policy: None,
         target_trait: None,
     }
 }

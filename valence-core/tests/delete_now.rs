@@ -112,6 +112,7 @@ fn has_many(name: &str, from: &str, to: &str, reverse: &str, on_delete: &str) ->
         model_path: None,
         reverse_field: Some(reverse.into()),
         edge_table: None,
+        edge_policy: None,
         target_trait: None,
     }
 }
@@ -129,6 +130,7 @@ fn m2m(name: &str, from: &str, to: &str, edge: &str, on_delete: &str) -> SchemaC
         model_path: None,
         reverse_field: None,
         edge_table: Some(edge.into()),
+        edge_policy: None,
         target_trait: None,
     }
 }

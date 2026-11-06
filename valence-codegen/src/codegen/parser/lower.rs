@@ -36,6 +36,7 @@ pub fn lower_parsed_schema(parsed: &ParsedSchema) -> Schema {
                     model_path: f.model_path.clone(),
                     reverse_field: None,
                     edge_table: None,
+                    edge_policy: None,
                     target_trait: None,
                 }
             })
@@ -186,6 +187,7 @@ fn lower_connections(connections: &[ParsedConnection], from_table: &str) -> Vec<
             model_path: c.model.clone(),
             reverse_field: c.reverse_field.clone(),
             edge_table: c.edge_table.clone(),
+            edge_policy: c.edge_policy.clone(),
             target_trait: c.target_trait.clone(),
         })
         .collect()

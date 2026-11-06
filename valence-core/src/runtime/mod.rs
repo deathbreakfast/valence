@@ -1,6 +1,7 @@
 //! Valence runtime handle and builder.
 
 mod builder;
+mod edge_policy;
 mod factory;
 
 pub use builder::ValenceBuilder;
@@ -158,11 +159,21 @@ impl Valence {
     ///
     /// # Security
     ///
-    /// Raw edge write — no schema privacy. Hosts must authorize before calling.
+    /// The check depends on the ManyToMany connection on `from`'s schema whose `edge_table`
+    /// matches:
+    ///
+    /// - With `edge_policy: SourceUpdateTargetRead`, Valence loads both stored rows and
+    ///   refuses the write unless the actor passes the source schema's Update policy on
+    ///   `from` and the target schema's Read policy on `to`. Bypasses come only from those
+    ///   policies (for example `always_allow: [SYSTEM_ONLY]`).
+    /// - Without it, this is a raw edge write with no schema privacy, and hosts must
+    ///   authorize before calling.
     ///
     /// # Errors
     ///
-    /// Returns an error when the requested operation cannot be completed.
+    /// On a checked edge: [`crate::Error::NotFound`] when either row (or its table) is
+    /// missing, [`crate::Error::Privacy`] when a policy denies, and nothing is written.
+    /// Otherwise any backend error.
     pub async fn relate_edge(
         &self,
         edge_table: &str,
@@ -170,7 +181,7 @@ impl Valence {
         to: &RecordId,
         purpose: crate::data_use::DataUsePurpose,
     ) -> Result<()> {
-        let _ = purpose;
+        edge_policy::check_edge_write(self, edge_table, from, to, purpose).await?;
         let backend = self.active_backend()?;
         backend.relate_edge(from, edge_table, to).await
     }
@@ -179,11 +190,16 @@ impl Valence {
     ///
     /// # Security
     ///
-    /// Raw edge delete — no schema privacy. Hosts must authorize before calling.
+    /// Checked the same way as [`Self::relate_edge`]: an edge whose connection sets
+    /// `edge_policy: SourceUpdateTargetRead` needs Update on `from` and Read on `to`, so an
+    /// actor who can only read the source can't strip its links. Without the attribute this
+    /// is a raw edge delete, and hosts must authorize before calling.
     ///
     /// # Errors
     ///
-    /// Returns an error when the requested operation cannot be completed.
+    /// On a checked edge: [`crate::Error::NotFound`] when either row (or its table) is
+    /// missing, [`crate::Error::Privacy`] when a policy denies, and nothing is removed.
+    /// Otherwise any backend error.
     pub async fn unrelate_edge(
         &self,
         edge_table: &str,
@@ -191,7 +207,18 @@ impl Valence {
         to: &RecordId,
         purpose: crate::data_use::DataUsePurpose,
     ) -> Result<()> {
-        let _ = purpose;
+        edge_policy::check_edge_write(self, edge_table, from, to, purpose).await?;
+        self.unrelate_edge_unchecked(edge_table, from, to).await
+    }
+
+    /// Raw edge delete for the deletion engine, which has already checked Delete on the
+    /// root row and must remove links whose endpoint row may already be gone.
+    pub(crate) async fn unrelate_edge_unchecked(
+        &self,
+        edge_table: &str,
+        from: &RecordId,
+        to: &RecordId,
+    ) -> Result<()> {
         let backend = self.active_backend()?;
         backend.unrelate_edge(from, edge_table, to).await
     }

@@ -336,6 +336,7 @@ mod tests {
                 model_path: None,
                 reverse_field: None,
                 edge_table: Some("edge_probe_rel".to_string()),
+                edge_policy: None,
                 target_trait: None,
             }],
             side_effects: Vec::new(),

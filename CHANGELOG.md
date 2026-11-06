@@ -26,6 +26,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   host ports that privacy evaluators consult. A host can keep something like a bot gate on
   the handle instead of in a process-global, and two runtimes in one process no longer share
   it. `with_actor` and `with_owner_override` keep the slot.
+- `edge_policy: SourceUpdateTargetRead` on `ManyToMany` connections in `valence_schema!`.
+  On an edge that sets it, `Valence::relate_edge` and `unrelate_edge` (and the generated
+  `relate_to_*` / `unrelate_from_*`) load both rows and refuse the write unless the actor
+  passes the source schema's Update policy and the target schema's Read policy: a missing
+  row is `Error::NotFound`, a denial is `Error::Privacy`, and nothing is written. Edges
+  without it still write raw, and deletion's edge cleanup stays unchecked. The attribute on
+  any other cardinality is a compile error. `SchemaConnection` gains `edge_policy`, so code
+  that builds it with a struct literal must add the field (`None`).
 - `retired_fields: ["old"]` in `valence_schema!` (and `Schema::retired_fields`). A product
   can now remove a field whose column still exists: SQLite and Postgres boot sync keeps the
   column instead of refusing to start, typed reads leave it out, and new rows leave it NULL.

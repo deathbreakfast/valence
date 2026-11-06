@@ -156,8 +156,21 @@ pub struct SchemaConnection {
     pub reverse_field: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub edge_table: Option<String>,
+    /// Privacy rule for relate/unrelate on a ManyToMany edge (DSL `edge_policy:`).
+    ///
+    /// `None` keeps the raw edge write. The only rule is
+    /// [`SchemaConnection::EDGE_POLICY_SOURCE_UPDATE_TARGET_READ`]; see
+    /// [`crate::Valence::relate_edge`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub edge_policy: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub target_trait: Option<String>,
+}
+
+impl SchemaConnection {
+    /// `edge_policy: SourceUpdateTargetRead`: a relate or unrelate needs Update on the
+    /// source row and Read on the target row.
+    pub const EDGE_POLICY_SOURCE_UPDATE_TARGET_READ: &'static str = "SourceUpdateTargetRead";
 }
 
 impl From<SchemaEdge> for SchemaConnection {
@@ -175,6 +188,7 @@ impl From<SchemaEdge> for SchemaConnection {
             model_path: None,
             reverse_field: None,
             edge_table: None,
+            edge_policy: None,
             target_trait: None,
         }
     }

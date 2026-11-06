@@ -77,6 +77,14 @@ pub async fn execute_select_sqlite(
     let rows = match q.fetch_all(pool).await {
         Ok(rows) => rows,
         Err(e) if e.to_string().to_lowercase().contains("no such table") => return Ok(vec![]),
+        // `define_index` can create the ownership table before any ownership row exists, with
+        // only the indexed columns. Until the first write adds the rest it has no rows.
+        Err(e)
+            if sql.contains("valence_data_ownership")
+                && e.to_string().to_lowercase().contains("no such column") =>
+        {
+            return Ok(vec![]);
+        }
         Err(e) => return Err(Error::database(e.to_string())),
     };
 

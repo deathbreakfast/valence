@@ -70,7 +70,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `acknowledge_sensitive(id)` for each migration that touches sensitive data. Each run
   writes an audit row to the append-only `valence_data_migrations` table (actor, approver,
   reason, times, rows touched, outcome); failed runs get their own row with credentials
-  redacted. Applied migrations are skipped on later runs, and an applied migration whose
+  redacted, or with only the error kind when the migration touches sensitive data. Run one
+  runner per deployment at a time. Applied migrations are skipped on later runs, and an applied migration whose
   version or description changed stops the run. `dry_run(true)` runs the gates and
   `apply` without writing the ledger.
 - `retired_fields: ["old"]` in `valence_schema!` (and `Schema::retired_fields`). A product

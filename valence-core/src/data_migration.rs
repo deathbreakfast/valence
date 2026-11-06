@@ -66,7 +66,9 @@
 //! The ledger lives on the active backend in the schemaless table
 //! [`DATA_MIGRATION_LEDGER_TABLE`]. A successful run writes one row keyed by the
 //! migration id; a failed run writes its own row keyed `{id}__failed__{nanos}` with the
-//! error text (credentials redacted), so a failure never blocks a retry. The runner only
+//! error text (credentials redacted), so a failure never blocks a retry. For a migration
+//! that touches sensitive data, the failed row keeps only the error kind (`database`,
+//! `validation`, ...), since the message could quote a field value. The runner only
 //! creates rows and refuses to overwrite one that exists. Each row records the migration
 //! id, version, description, tables, sensitive flag, actor, approver, reason, ticket,
 //! start and finish time, rows touched and outcome.
@@ -81,6 +83,8 @@
 //!
 //! - Migrations run one at a time in version order, and the run stops at the first failure.
 //!   Migrations are not wrapped in a transaction; make `apply` safe to rerun.
+//! - Run only one runner per deployment at a time. The ledger check and write are not
+//!   atomic, so two runners started together can both apply the same migration.
 //! - Encrypted transport and at-rest protection for migrated data are not checked here yet.
 
 use std::collections::HashSet;
@@ -302,7 +306,7 @@ impl<'a> MigrationRunner<'a> {
                 Err(e) => {
                     row["outcome"] = json!("failed");
                     row["rows_touched"] = json!(0);
-                    row["error"] = json!(failure_text(&e));
+                    row["error"] = json!(failure_text(&e, migration.touches_sensitive_data()));
                     let nanos = started_at.timestamp_nanos_opt().unwrap_or_default();
                     (format!("{}__failed__{nanos}", migration.id()), Some(e))
                 }
@@ -335,9 +339,26 @@ async fn write_ledger_row(valence: &Valence, row_id: &str, row: serde_json::Valu
     Ok(())
 }
 
-/// Error text for a failed ledger row, with URL credentials removed.
-fn failure_text(err: &Error) -> String {
+/// Error text for a failed ledger row: the error kind alone for a sensitive migration,
+/// otherwise the message with URL credentials removed.
+fn failure_text(err: &Error, sensitive: bool) -> String {
+    if sensitive {
+        return error_kind(err).to_string();
+    }
     redact_credentials_in_text(&err.to_string())
+}
+
+fn error_kind(err: &Error) -> &'static str {
+    match err {
+        Error::Database { .. } => "database",
+        Error::NotFound(_) => "not_found",
+        Error::Validation(_) => "validation",
+        Error::Privacy(_) => "privacy",
+        Error::Internal(_) => "internal",
+        Error::Serialization { .. } => "serialization",
+        Error::PendingDeletion(_) => "pending_deletion",
+        Error::Identity(_) => "identity",
+    }
 }
 
 fn check_actor(actor: &Actor) -> Result<()> {
@@ -552,9 +573,15 @@ mod tests {
     #[test]
     fn failure_text_redacts_credentials() {
         let err = Error::Internal("lost postgres://admin:hunter2@db.internal/app".into());
-        let text = failure_text(&err);
+        let text = failure_text(&err, false);
         assert!(!text.contains("hunter2"), "{text}");
         assert!(text.contains("db.internal"), "{text}");
+    }
+
+    #[test]
+    fn failure_text_keeps_only_the_kind_for_sensitive_migrations() {
+        let err = Error::Validation("bad email alice@example.com".into());
+        assert_eq!(failure_text(&err, true), "validation");
     }
 
     #[test]

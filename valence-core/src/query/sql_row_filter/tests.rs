@@ -671,3 +671,84 @@ fn order_by_then_offset_and_limit_window() {
     let surreal = "SELECT * FROM t ORDER BY n DESC LIMIT 2 START 1";
     assert_eq!(ids(&apply_order_limit_offset(rows, surreal)), ["r4", "r3"]);
 }
+
+/// `param_0` to `param_10`, listed with `param_10` first so a lookup that stops at the first
+/// name sharing a prefix with `param_1` finds the wrong value.
+fn eleven_params(
+    one: serde_json::Value,
+    ten: serde_json::Value,
+) -> Vec<(String, serde_json::Value)> {
+    let mut params: Vec<_> = (0..11)
+        .map(|i| {
+            (
+                format!("param_{i}"),
+                serde_json::json!(format!("unused{i}")),
+            )
+        })
+        .collect();
+    params[1].1 = one;
+    params[10].1 = ten;
+    params.reverse();
+    params
+}
+
+#[test]
+fn equality_keeps_param_1_and_param_10_apart() {
+    let compiled = CompiledQuery::new(
+        "SELECT * FROM t WHERE a = $param_1 AND b = $param_10".into(),
+        eleven_params(serde_json::json!("a1"), serde_json::json!("b10")),
+    );
+    let rows = vec![
+        serde_json::json!({"id": "1", "a": "a1", "b": "b10"}),
+        serde_json::json!({"id": "2", "a": "b10", "b": "a1"}),
+        serde_json::json!({"id": "3", "a": "a1", "b": "other"}),
+    ];
+    let out = apply_equality_where(rows, &compiled);
+    assert_eq!(out.len(), 1);
+    assert_eq!(out[0]["id"], "1");
+}
+
+#[test]
+fn comparison_keeps_param_1_and_param_10_apart() {
+    let params = eleven_params(serde_json::json!(5), serde_json::json!(50));
+    let compiled = CompiledQuery::new(
+        "SELECT * FROM t WHERE n >= $param_1 AND n < $param_10".into(),
+        params,
+    );
+    let rows = (0..60)
+        .map(|n| serde_json::json!({"id": n.to_string(), "n": n}))
+        .collect();
+    let out = apply_equality_where(rows, &compiled);
+    assert_eq!(out.len(), 45);
+}
+
+#[test]
+fn like_keeps_param_1_and_param_10_apart() {
+    let params = eleven_params(serde_json::json!("x%"), serde_json::json!("%z"));
+    let compiled = CompiledQuery::new(
+        "SELECT * FROM t WHERE s LIKE $param_1 AND s LIKE $param_10".into(),
+        params,
+    );
+    let rows = vec![
+        serde_json::json!({"id": "1", "s": "xyz"}),
+        serde_json::json!({"id": "2", "s": "xyy"}),
+    ];
+    let out = apply_equality_where(rows, &compiled);
+    assert_eq!(out.len(), 1);
+    assert_eq!(out[0]["id"], "1");
+}
+
+#[test]
+fn or_clause_keeps_param_1_and_param_10_apart() {
+    let compiled = CompiledQuery::new(
+        "SELECT * FROM t WHERE a = $param_1 OR b = $param_10".into(),
+        eleven_params(serde_json::json!("a1"), serde_json::json!("b10")),
+    );
+    let rows = vec![
+        serde_json::json!({"id": "1", "a": "a1", "b": "x"}),
+        serde_json::json!({"id": "2", "a": "x", "b": "b10"}),
+        serde_json::json!({"id": "3", "a": "b10", "b": "a1"}),
+    ];
+    let out = apply_equality_where(rows, &compiled);
+    assert_eq!(out.len(), 2);
+}

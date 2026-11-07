@@ -3,10 +3,13 @@
 use std::collections::{HashMap, HashSet};
 use std::future::Future;
 use std::pin::Pin;
+use std::sync::{PoisonError, RwLock as SyncRwLock};
 
 use crate::semi_join::{SemiJoin, Targets};
 use tokio::sync::{RwLock, RwLockReadGuard};
 use valence_core::{BackendCapabilities, CompiledQuery, DatabaseBackend, Error, RecordId, Result};
+
+use crate::index::{candidates_for, EqIndex};
 
 /// Stable engine slug for router keys (`inmemory_mem:logical_name`).
 pub const ENGINE_ID: &str = valence_core::KnownEngines::INMEMORY_MEM;
@@ -53,6 +56,10 @@ pub const ENGINE_ID: &str = valence_core::KnownEngines::INMEMORY_MEM;
 pub struct InMemoryBackend {
     tables: RwLock<HashMap<String, HashMap<String, serde_json::Value>>>,
     edges: RwLock<HashMap<String, HashSet<(String, String)>>>,
+    /// Equality indexes per table, from [`DatabaseBackend::define_index`]. Written only
+    /// while `tables` is write-locked, so the two never disagree; never held across an
+    /// `.await`.
+    indexes: SyncRwLock<HashMap<String, Vec<EqIndex>>>,
 }
 
 impl InMemoryBackend {
@@ -68,13 +75,7 @@ impl InMemoryBackend {
         compiled: &CompiledQuery,
         joins: &[SemiJoin],
     ) -> Result<Vec<serde_json::Value>> {
-        let mut rows = {
-            let tables = self.table_records_read(table).await;
-            tables
-                .get(table)
-                .map(|m| m.values().cloned().collect::<Vec<_>>())
-                .unwrap_or_default()
-        };
+        let mut rows = self.candidate_rows(table, compiled).await;
         rows = crate::query_filter::apply_equality_where(rows, compiled);
         for join in joins {
             let members = self.semi_join_members(table, join).await?;
@@ -128,6 +129,59 @@ impl InMemoryBackend {
         _table: &str,
     ) -> RwLockReadGuard<'_, HashMap<String, HashMap<String, serde_json::Value>>> {
         self.tables.read().await
+    }
+
+    /// Rows `compiled` could match: the candidates of an index the query pins, or every
+    /// row of `table`. The caller still filters them.
+    async fn candidate_rows(
+        &self,
+        table: &str,
+        compiled: &CompiledQuery,
+    ) -> Vec<serde_json::Value> {
+        let tables = self.table_records_read(table).await;
+        let Some(rows) = tables.get(table) else {
+            return Vec::new();
+        };
+        let ids = {
+            let indexes = self.indexes.read().unwrap_or_else(PoisonError::into_inner);
+            indexes
+                .get(table)
+                .and_then(|idx| candidates_for(idx, compiled))
+        };
+        match ids {
+            Some(ids) => ids.iter().filter_map(|id| rows.get(id).cloned()).collect(),
+            None => rows.values().cloned().collect(),
+        }
+    }
+
+    /// Move row `id` of `table` from `old` to `new` in every index on that table.
+    /// Call with `tables` write-locked.
+    fn reindex(
+        &self,
+        table: &str,
+        id: &str,
+        old: Option<&serde_json::Value>,
+        new: Option<&serde_json::Value>,
+    ) {
+        let mut indexes = self.indexes.write().unwrap_or_else(PoisonError::into_inner);
+        let Some(list) = indexes.get_mut(table) else {
+            return;
+        };
+        for idx in list {
+            if let Some(old) = old {
+                idx.remove(id, old);
+            }
+            if let Some(new) = new {
+                idx.insert(id, new);
+            }
+        }
+    }
+
+    fn has_indexes(&self, table: &str) -> bool {
+        self.indexes
+            .read()
+            .unwrap_or_else(PoisonError::into_inner)
+            .contains_key(table)
     }
 }
 
@@ -281,12 +335,13 @@ impl DatabaseBackend for InMemoryBackend {
                 obj.insert("id".into(), record_id_json(table, &id));
             }
         }
-        self.tables
-            .write()
-            .await
+        let mut tables = self.tables.write().await;
+        let old = tables
             .entry(table.to_string())
             .or_default()
-            .insert(id, record.clone());
+            .insert(id.clone(), record.clone());
+        self.reindex(table, &id, old.as_ref(), Some(&record));
+        drop(tables);
         Ok(record)
     }
 
@@ -303,7 +358,8 @@ impl DatabaseBackend for InMemoryBackend {
         if !rows.contains_key(id) {
             return Err(Error::NotFound(format!("{table}:{id}")));
         }
-        rows.insert(id.to_string(), content.clone());
+        let old = rows.insert(id.to_string(), content.clone());
+        self.reindex(table, id, old.as_ref(), Some(&content));
         drop(tables);
         Ok(content)
     }
@@ -319,12 +375,16 @@ impl DatabaseBackend for InMemoryBackend {
         let existing = rows
             .entry(id.to_string())
             .or_insert_with(|| serde_json::json!({}));
+        let before = self.has_indexes(table).then(|| existing.clone());
         if let (Some(base), Some(patch_obj)) = (existing.as_object_mut(), patch.as_object()) {
             for (k, v) in patch_obj {
                 base.insert(k.clone(), v.clone());
             }
         }
         let merged = existing.clone();
+        if before.is_some() {
+            self.reindex(table, id, before.as_ref(), Some(&merged));
+        }
         drop(tables);
         Ok(merged)
     }
@@ -339,19 +399,24 @@ impl DatabaseBackend for InMemoryBackend {
         if let Some(obj) = record.as_object_mut() {
             obj.insert("id".into(), record_id_json(table, id));
         }
-        self.tables
-            .write()
-            .await
+        let mut tables = self.tables.write().await;
+        let old = tables
             .entry(table.to_string())
             .or_default()
             .insert(id.to_string(), record.clone());
+        self.reindex(table, id, old.as_ref(), Some(&record));
+        drop(tables);
         Ok(record)
     }
 
     async fn delete_record(&self, table: &str, id: &str) -> Result<()> {
-        if let Some(rows) = self.tables.write().await.get_mut(table) {
-            rows.remove(id);
+        let mut tables = self.tables.write().await;
+        if let Some(rows) = tables.get_mut(table) {
+            if let Some(old) = rows.remove(id) {
+                self.reindex(table, id, Some(&old), None);
+            }
         }
+        drop(tables);
         Ok(())
     }
 
@@ -412,6 +477,46 @@ impl DatabaseBackend for InMemoryBackend {
         Err(valence_core::Error::Internal(
             "unique indexes not supported on in-memory backend".into(),
         ))
+    }
+
+    /// Mem has no tables to create; this only indexes the layout's `indexed` and `unique`
+    /// fields, the ones queries look up by equality. Boot sync calls it through
+    /// [`DatabaseBackend::sync_typed_table`].
+    async fn ensure_typed_table(
+        &self,
+        layout: &valence_core::storage_layout::StorageLayout,
+    ) -> Result<()> {
+        for field in &layout.fields {
+            if (field.indexed || field.unique) && !field.primary_key {
+                self.define_index(&layout.table, &[field.name.as_str()])
+                    .await?;
+            }
+        }
+        Ok(())
+    }
+
+    /// Builds the index from the rows already stored, then keeps it current on every write.
+    async fn define_index(&self, table: &str, fields: &[&str]) -> Result<()> {
+        if fields.is_empty() {
+            return Err(Error::Internal(format!(
+                "define_index on {table} needs at least one field"
+            )));
+        }
+        // Hold the table lock so no write lands between the backfill and registration.
+        let tables = self.tables.write().await;
+        let mut indexes = self.indexes.write().unwrap_or_else(PoisonError::into_inner);
+        let list = indexes.entry(table.to_string()).or_default();
+        if list.iter().any(|idx| idx.covers(fields)) {
+            return Ok(());
+        }
+        let mut idx = EqIndex::new(fields);
+        if let Some(rows) = tables.get(table) {
+            for (id, row) in rows {
+                idx.insert(id, row);
+            }
+        }
+        list.push(idx);
+        Ok(())
     }
 
     fn ttl_capability(&self) -> valence_core::ttl::BackendTtlCapability {
@@ -479,6 +584,183 @@ mod tests {
 
         backend.delete_record("user", &id).await.unwrap();
         assert!(backend.get_record("user", &id).await.unwrap().is_none());
+    }
+
+    fn pending_query(model: &str, ids: &[&str]) -> CompiledQuery {
+        let mut params = vec![
+            ("model".to_string(), serde_json::json!(model)),
+            ("status".to_string(), serde_json::json!("pending_deletion")),
+        ];
+        let mut ors = Vec::new();
+        for (i, id) in ids.iter().enumerate() {
+            ors.push(format!("record_id = $record_id_{i}"));
+            params.push((format!("record_id_{i}"), serde_json::json!(id)));
+        }
+        CompiledQuery::new(
+            format!(
+                "SELECT record_id FROM valence_data_ownership WHERE valence_model = $model \
+                 AND status = $status AND ({})",
+                ors.join(" OR ")
+            ),
+            params,
+        )
+    }
+
+    async fn sorted_ids(backend: &InMemoryBackend, q: &CompiledQuery) -> Vec<String> {
+        let mut out: Vec<String> = backend
+            .execute_compiled_query(q)
+            .await
+            .unwrap()
+            .into_iter()
+            .map(|r| r["record_id"].as_str().unwrap().to_string())
+            .collect();
+        out.sort();
+        out
+    }
+
+    /// Same writes against an indexed and a plain backend must give the same answers,
+    /// including after status merges and deletes.
+    #[tokio::test]
+    async fn define_index_keeps_query_results_happy() {
+        let plain = InMemoryBackend::new();
+        let indexed = InMemoryBackend::new();
+        // Index defined after some rows exist, to cover the backfill.
+        for b in [&plain, &indexed] {
+            for (id, model, status) in [
+                ("o1", "team", "active"),
+                ("o2", "team", "pending_deletion"),
+                ("o3", "org", "pending_deletion"),
+            ] {
+                b.upsert_record(
+                    "valence_data_ownership",
+                    id,
+                    serde_json::json!({"valence_model": model, "record_id": id, "status": status}),
+                )
+                .await
+                .unwrap();
+            }
+        }
+        indexed
+            .define_index("valence_data_ownership", &["valence_model", "status"])
+            .await
+            .unwrap();
+        indexed
+            .define_index("valence_data_ownership", &["valence_model", "status"])
+            .await
+            .expect("second define is a no-op");
+
+        let all = ["o1", "o2", "o3", "o4"];
+        let q = pending_query("team", &all);
+        assert_eq!(sorted_ids(&indexed, &q).await, vec!["o2"]);
+        assert_eq!(sorted_ids(&plain, &q).await, sorted_ids(&indexed, &q).await);
+
+        for b in [&plain, &indexed] {
+            b.merge_record(
+                "valence_data_ownership",
+                "o1",
+                serde_json::json!({"status": "pending_deletion"}),
+            )
+            .await
+            .unwrap();
+            b.merge_record(
+                "valence_data_ownership",
+                "o2",
+                serde_json::json!({"status": "deleted"}),
+            )
+            .await
+            .unwrap();
+            b.create_record(
+                "valence_data_ownership",
+                serde_json::json!({"id": "o4", "valence_model": "team", "record_id": "o4", "status": "pending_deletion"}),
+            )
+            .await
+            .unwrap();
+        }
+        assert_eq!(sorted_ids(&indexed, &q).await, vec!["o1", "o4"]);
+        assert_eq!(sorted_ids(&plain, &q).await, sorted_ids(&indexed, &q).await);
+
+        for b in [&plain, &indexed] {
+            b.delete_record("valence_data_ownership", "o1")
+                .await
+                .unwrap();
+        }
+        assert_eq!(sorted_ids(&indexed, &q).await, vec!["o4"]);
+        assert_eq!(sorted_ids(&plain, &q).await, sorted_ids(&indexed, &q).await);
+
+        // A query that doesn't pin every indexed field still sees every row.
+        let by_model = CompiledQuery::new(
+            "SELECT * FROM valence_data_ownership WHERE valence_model = $model".into(),
+            vec![("model".into(), serde_json::json!("team"))],
+        );
+        assert_eq!(
+            indexed
+                .execute_compiled_query(&by_model)
+                .await
+                .unwrap()
+                .len(),
+            plain.execute_compiled_query(&by_model).await.unwrap().len()
+        );
+    }
+
+    fn layout_field(
+        name: &str,
+        primary_key: bool,
+        unique: bool,
+        indexed: bool,
+    ) -> valence_core::storage_layout::LayoutField {
+        valence_core::storage_layout::LayoutField {
+            name: name.into(),
+            storage: valence_core::storage_layout::FieldStorage::String,
+            primary_key,
+            nullable: !primary_key,
+            unique,
+            indexed,
+            default: None,
+            record_table: None,
+        }
+    }
+
+    #[tokio::test]
+    async fn typed_table_indexes_indexed_and_unique_fields_happy() {
+        let backend = InMemoryBackend::new();
+        let layout = valence_core::storage_layout::StorageLayout {
+            table: "permission".into(),
+            fields: vec![
+                layout_field("id", true, true, false),
+                layout_field("name", false, false, true),
+                layout_field("email", false, true, false),
+                layout_field("note", false, false, false),
+            ],
+        };
+        backend.sync_typed_table(&layout).await.unwrap();
+        // Idempotent: a second boot sync must not stack duplicate indexes.
+        backend.sync_typed_table(&layout).await.unwrap();
+        {
+            let indexes = backend.indexes.read().unwrap();
+            let list = indexes.get("permission").expect("indexes for permission");
+            assert_eq!(list.len(), 2);
+            assert!(list.iter().any(|i| i.covers(&["name"])));
+            assert!(list.iter().any(|i| i.covers(&["email"])));
+        }
+        for (id, name) in [("p1", "team.view"), ("p2", "team.edit")] {
+            backend
+                .upsert_record("permission", id, serde_json::json!({"name": name}))
+                .await
+                .unwrap();
+        }
+        let q = CompiledQuery::new(
+            "SELECT * FROM permission WHERE name = $n LIMIT 1".into(),
+            vec![("n".into(), serde_json::json!("team.edit"))],
+        );
+        let rows = backend.execute_compiled_query(&q).await.unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0]["name"], "team.edit");
+    }
+
+    #[tokio::test]
+    async fn define_index_without_fields_is_rejected_sad() {
+        let backend = InMemoryBackend::new();
+        assert!(backend.define_index("t", &[]).await.is_err());
     }
 
     #[test]

@@ -18,7 +18,7 @@
 //! | Concern | API |
 //! |---------|-----|
 //! | Declare TTL on a table | `ttl:` in `valence_schema!` → [`SchemaTtlPolicy`] on `Schema.ttl` |
-//! | Boot: apply or warn for every TTL schema | [`crate::Valence::ensure_ttl_for_all`] |
+//! | Boot: apply or log a notice for every TTL schema | [`crate::Valence::ensure_ttl_for_all`] |
 //! | Incremental single-table ensure | [`crate::Valence::ensure_ttl_for_table`] |
 //! | Stamp expire on create | [`prepare_create_content`] / [`EXPIRE_AT_FIELD`] |
 //! | Backend native apply | [`crate::DatabaseBackend::ttl_capability`] / `apply_ttl_policy` |

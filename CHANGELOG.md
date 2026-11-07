@@ -20,6 +20,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   backends) now sorts on every key with its own ASC/DESC, compares numbers numerically
   instead of skipping them, and reads `START n` as an offset.
 
+### Changed
+
+- The boot notice for schema TTL on Deferred backends (SQLite, Postgres, in-memory, Surreal)
+  is now logged at `info` instead of `warn`. These backends already get the expire-at index;
+  the notice only reminds the host to register `valence_platform::ttl_sweep`. Backends with
+  no TTL path still warn. The once-per-table emit counter and metric are unchanged.
+
 ### Added
 
 - `ValenceBuilder::extension` and `Valence::extension` give each `Valence` a typed slot for

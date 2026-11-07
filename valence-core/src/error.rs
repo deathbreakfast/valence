@@ -109,6 +109,16 @@ impl Error {
         Self::Validation(format!("{UNIQUE_VIOLATION_PREFIX}{table}.{field}"))
     }
 
+    /// Build the [`Error::Validation`] a write gets when it conflicts with a row the
+    /// actor cannot read.
+    ///
+    /// The message names no table, field or row, so it never varies with what the hidden
+    /// row holds. A conflict is still visible as a failure: a unique value is global.
+    #[must_use]
+    pub fn conflict() -> Self {
+        Self::Validation("Write conflicts with an existing record".to_string())
+    }
+
     /// The `(table, field)` named by an [`Error::unique_violation`], or `None`
     /// for any other error.
     #[must_use]

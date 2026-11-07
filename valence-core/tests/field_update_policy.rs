@@ -64,6 +64,7 @@ fn schema() -> &'static SchemaMetadata {
         ttl: None,
         partition_export: None,
         ownership: None,
+        partition_export: None,
         meta: SchemaMeta {
             retention: "1d".into(),
             row_count: 0,

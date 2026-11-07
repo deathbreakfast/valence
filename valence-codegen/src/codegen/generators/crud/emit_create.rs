@@ -83,6 +83,16 @@ pub(super) fn model_upsert_method_tokens(cx: &CrudEmitCtx<'_>) -> TokenStream {
             }
             let record = serde_json::to_value(&data)
                 .map_err(valence::Error::from)?;
+            if let Some(ref existing) = before_snapshot {
+                let existing_value = serde_json::to_value(existing)
+                    .map_err(valence::Error::from)?;
+                valence::PrivacyEvaluator::check_field_update_access(
+                    Self::__schema_metadata()?,
+                    Some(&existing_value),
+                    &record,
+                    valence.actor(),
+                )?;
+            }
             if before_snapshot.is_none() {
                 Self::__reject_unset_read_hidable(&record)?;
             }

@@ -73,6 +73,7 @@ impl DatabaseBackend for AcmeStubBackend {
         BackendCapabilities {
             supports_merge: true,
             supports_graph_edges: false,
+            supports_transactions: false,
             telemetry_label: "acme_stub",
         }
     }

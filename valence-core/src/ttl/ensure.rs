@@ -251,6 +251,7 @@ mod tests {
             crate::BackendCapabilities {
                 supports_merge: false,
                 supports_graph_edges: false,
+                supports_transactions: false,
                 telemetry_label: "fake",
             }
         }

@@ -188,6 +188,17 @@ impl DatabaseBackend for InstrumentedBackend {
         self.measured_delete_record(table, id).await
     }
 
+    async fn apply_batch(
+        &self,
+        ops: Vec<crate::backend::WriteOp>,
+    ) -> Result<Vec<serde_json::Value>> {
+        let result = self.inner.apply_batch(ops).await;
+        if let Err(e) = &result {
+            self.on_err("apply_batch", e);
+        }
+        result
+    }
+
     async fn relate_edge(
         &self,
         from: &crate::RecordId,

@@ -13,6 +13,8 @@ pub struct BackendCapabilities {
     pub supports_merge: bool,
     /// Whether graph edge methods (`relate_edge`, `unrelate_edge`, `get_edge_targets`) are supported.
     pub supports_graph_edges: bool,
+    /// Whether [`DatabaseBackend::apply_batch`] applies a batch atomically (not the default error stub).
+    pub supports_transactions: bool,
     /// Short label attached to instrumentation counters (e.g. `"mem"`, `"surrealdb"`).
     pub telemetry_label: &'static str,
 }
@@ -24,6 +26,7 @@ impl BackendCapabilities {
         Self {
             supports_merge: true,
             supports_graph_edges: true,
+            supports_transactions: true,
             telemetry_label: "mem",
         }
     }
@@ -41,6 +44,66 @@ pub struct EdgeRow {
     pub edge_type: String,
     /// Target record.
     pub to: RecordId,
+}
+
+/// One write inside a [`DatabaseBackend::apply_batch`] call.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum WriteOp {
+    /// Same as [`DatabaseBackend::create_record`].
+    Create {
+        /// Target table.
+        table: String,
+        /// Row content.
+        content: serde_json::Value,
+    },
+    /// Same as [`DatabaseBackend::update_record`].
+    Update {
+        /// Target table.
+        table: String,
+        /// Primary key of the row to replace.
+        id: String,
+        /// Replacement content.
+        content: serde_json::Value,
+    },
+    /// Same as [`DatabaseBackend::merge_record`].
+    Merge {
+        /// Target table.
+        table: String,
+        /// Primary key of the row to patch.
+        id: String,
+        /// Partial JSON object.
+        patch: serde_json::Value,
+    },
+    /// Same as [`DatabaseBackend::upsert_record`].
+    Upsert {
+        /// Target table.
+        table: String,
+        /// Explicit primary key.
+        id: String,
+        /// Row content.
+        content: serde_json::Value,
+    },
+    /// Same as [`DatabaseBackend::delete_record`].
+    Delete {
+        /// Target table.
+        table: String,
+        /// Primary key of the row to delete.
+        id: String,
+    },
+}
+
+impl WriteOp {
+    /// Table this operation writes to.
+    #[must_use]
+    pub fn table(&self) -> &str {
+        match self {
+            Self::Create { table, .. }
+            | Self::Update { table, .. }
+            | Self::Merge { table, .. }
+            | Self::Upsert { table, .. }
+            | Self::Delete { table, .. } => table,
+        }
+    }
 }
 
 /// Storage engine behind Valence: CRUD, compiled queries, and graph edges.
@@ -312,5 +375,17 @@ pub trait DatabaseBackend: Send + Sync + std::fmt::Debug + 'static {
     /// **Contract:** default is a no-op.
     async fn apply_ttl_policy(&self, _table: &str, _policy: &SchemaTtlPolicy) -> Result<()> {
         Ok(())
+    }
+
+    /// Apply several writes as one all-or-nothing unit on this backend.
+    ///
+    /// **Contract:** returns one row per op in order (`Value::Null` for deletes). When any op
+    /// fails, none of the batch is visible afterwards. Default returns `Error::Internal` —
+    /// override when [`BackendCapabilities::supports_transactions`] is `true`.
+    async fn apply_batch(&self, ops: Vec<WriteOp>) -> Result<Vec<serde_json::Value>> {
+        let _ = ops;
+        Err(Error::Internal(
+            "apply_batch is not supported by this database backend".into(),
+        ))
     }
 }

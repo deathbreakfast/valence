@@ -64,6 +64,7 @@ fn register_edge() {
             retired_fields: Vec::new(),
             ttl: None,
             ownership: None,
+            partition_export: None,
             meta: SchemaMeta {
                 retention: "365 days".to_string(),
                 row_count: 0,

@@ -342,6 +342,7 @@ fn m2m_conn(from: &str, to: &str, edge: &str, on_delete: &str) -> SchemaConnecti
         reverse_field: None,
         edge_table: Some(edge.into()),
         target_trait: None,
+        edge_policy: None,
     }
 }
 

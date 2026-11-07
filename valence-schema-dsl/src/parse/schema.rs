@@ -11,6 +11,7 @@ use super::connections::{parse_connections, ConnectionsConfig, ParsedConnection}
 use super::fields::{parse_fields, FieldsConfig, ParsedField};
 use super::ownership::{parse_ownership_block, OwnershipConfigBlock, ParsedOwnershipConfig};
 use super::privacy::{parse_policies_config, ParsedPolicies, PoliciesConfig, PrivacyConfig};
+use super::spectra_export::{parse_export_block, ParsedSpectraExportConfig, SpectraExportConfig};
 use super::ttl::{parse_ttl_config, ParsedTtlPolicy, TtlConfig};
 
 /// Root schema definition.
@@ -35,6 +36,8 @@ pub struct ParsedSchema {
     /// Optional `database:` — any Rust expression of type `&'static dyn DatabaseEvaluator`.
     pub database: Option<Expr>,
     pub ttl: Option<ParsedTtlPolicy>,
+    /// `spectra_export:` opt-in (presence = enabled), defaults resolved.
+    pub spectra_export: Option<ParsedSpectraExportConfig>,
     pub policies: Option<ParsedPolicies>,
     pub fields: Vec<ParsedField>,
     pub connections: Vec<ParsedConnection>,
@@ -73,6 +76,7 @@ pub enum SchemaItem {
     /// Nested `meta: { repository, retention?, owner?, description? }`.
     Meta(MetaConfig),
     Ttl(TtlConfig),
+    SpectraExport(SpectraExportConfig),
     /// Legacy `privacy:` block (parsed, ignored when building [`ParsedSchema`]).
     #[allow(dead_code)]
     Privacy(PrivacyConfig),
@@ -134,6 +138,7 @@ impl Parse for SchemaItem {
             "repository" => Ok(SchemaItem::Repository(input.parse()?)),
             "meta" => Ok(SchemaItem::Meta(input.parse()?)),
             "ttl" => Ok(SchemaItem::Ttl(input.parse()?)),
+            "spectra_export" => Ok(SchemaItem::SpectraExport(input.parse()?)),
             "privacy" => Ok(SchemaItem::Privacy(input.parse()?)),
             "policies" => Ok(SchemaItem::Policies(input.parse()?)),
             "fields" => Ok(SchemaItem::Fields(input.parse()?)),
@@ -300,6 +305,7 @@ impl SchemaSpec {
         let mut retention = "365 days".to_string();
         let mut owner = "system".to_string();
         let mut ttl = None;
+        let mut spectra_export_cfg: Option<&SpectraExportConfig> = None;
         let mut policies = None;
         let mut fields = Vec::new();
         let mut connections = Vec::new();
@@ -348,6 +354,7 @@ impl SchemaSpec {
                     }
                 }
                 SchemaItem::Ttl(t) => ttl = Some(parse_ttl_config(t)?),
+                SchemaItem::SpectraExport(c) => spectra_export_cfg = Some(c),
                 SchemaItem::Policies(p) => policies = Some(parse_policies_config(p)?),
                 SchemaItem::Fields(f) => fields = parse_fields(f)?,
                 SchemaItem::SideEffects(se) => {
@@ -396,6 +403,9 @@ impl SchemaSpec {
 
         let table_name =
             table_name.ok_or_else(|| syn::Error::new(self.name.span(), "Missing 'table' field"))?;
+        let spectra_export = spectra_export_cfg
+            .map(|c| parse_export_block(c, &table_name))
+            .transpose()?;
         let version = version.unwrap_or_else(|| "1.0.0".to_string());
         let repository = meta_repository
             .or(repository_top)
@@ -426,6 +436,7 @@ impl SchemaSpec {
             owner,
             database,
             ttl,
+            spectra_export,
             policies,
             fields,
             connections,

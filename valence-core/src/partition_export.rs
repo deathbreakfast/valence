@@ -1,0 +1,166 @@
+//! Schema opt-in for periodic Spectra partition export: cadence enum and resolved config.
+//!
+//! # Owns
+//!
+//! - [`PartitionExportCadence`] and the platform-owned cron string for each variant
+//! - [`PartitionExportConfig`], carried on `Schema.partition_export`
+//!
+//! # Does not own
+//!
+//! Chronon job registration and the export executor. Valence has no Spectra or Chronon
+//! dependency; those crates read this metadata from the schema registry.
+//!
+//! # Concern → API
+//!
+//! | Concern | API |
+//! |---------|-----|
+//! | Opt a table in | the export block of `valence_schema!` (cadence, optional job and target table names) |
+//! | Read the config | `Schema.partition_export` ([`PartitionExportConfig`]) |
+//! | Resolve the schedule | [`PartitionExportCadence::cron`] |
+
+use std::fmt;
+use std::str::FromStr;
+
+use serde::{Deserialize, Serialize};
+
+use crate::error::Error;
+
+/// Fixed export cadence. Schema authors choose a variant; they never write cron strings.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum PartitionExportCadence {
+    /// Previous hour bucket, every hour.
+    Hourly,
+    /// Previous 3-hour bucket, every 3 hours.
+    ThreeHours,
+    /// Previous 6-hour bucket, every 6 hours.
+    SixHours,
+    /// Previous 12-hour bucket, every 12 hours.
+    TwelveHours,
+    /// Previous calendar day, once per day.
+    Daily,
+    /// Previous calendar week, once per week.
+    Weekly,
+}
+
+impl PartitionExportCadence {
+    /// Every variant, in order of increasing period.
+    pub const ALL: [Self; 6] = [
+        Self::Hourly,
+        Self::ThreeHours,
+        Self::SixHours,
+        Self::TwelveHours,
+        Self::Daily,
+        Self::Weekly,
+    ];
+
+    /// Platform-owned Chronon cron for this cadence (UTC). Operators cannot override it per schema.
+    ///
+    /// `Weekly` fires Sunday 00:00 UTC.
+    #[must_use]
+    pub const fn cron(self) -> &'static str {
+        match self {
+            Self::Hourly => "0 * * * *",
+            Self::ThreeHours => "0 */3 * * *",
+            Self::SixHours => "0 */6 * * *",
+            Self::TwelveHours => "0 */12 * * *",
+            Self::Daily => "0 0 * * *",
+            Self::Weekly => "0 0 * * 0",
+        }
+    }
+
+    /// Variant name as written in the DSL.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Hourly => "Hourly",
+            Self::ThreeHours => "ThreeHours",
+            Self::SixHours => "SixHours",
+            Self::TwelveHours => "TwelveHours",
+            Self::Daily => "Daily",
+            Self::Weekly => "Weekly",
+        }
+    }
+}
+
+impl fmt::Display for PartitionExportCadence {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+impl FromStr for PartitionExportCadence {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Self::ALL
+            .into_iter()
+            .find(|c| c.as_str() == s)
+            .ok_or_else(|| Error::Validation(format!("unknown export cadence: {s:?}")))
+    }
+}
+
+/// Resolved export opt-in for one schema.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PartitionExportConfig {
+    pub cadence: PartitionExportCadence,
+    /// Chronon job name; defaults to `{table}_{cadence}_export`.
+    pub job_name: String,
+    /// Spectra table receiving partitions; defaults to `{table}_export`.
+    pub target_table: String,
+}
+
+impl PartitionExportConfig {
+    /// Platform cron derived from [`Self::cadence`].
+    #[must_use]
+    pub const fn cron(&self) -> &'static str {
+        self.cadence.cron()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn cron_mapping_is_platform_owned() {
+        let got: Vec<_> = PartitionExportCadence::ALL
+            .iter()
+            .map(|c| c.cron())
+            .collect();
+        assert_eq!(
+            got,
+            [
+                "0 * * * *",
+                "0 */3 * * *",
+                "0 */6 * * *",
+                "0 */12 * * *",
+                "0 0 * * *",
+                "0 0 * * 0"
+            ]
+        );
+    }
+
+    #[test]
+    fn name_round_trip_and_unknown() {
+        for c in PartitionExportCadence::ALL {
+            assert_eq!(c.as_str().parse::<PartitionExportCadence>().unwrap(), c);
+        }
+        assert!("0 0 * * *".parse::<PartitionExportCadence>().is_err());
+        assert!("daily".parse::<PartitionExportCadence>().is_err());
+    }
+
+    #[test]
+    fn config_serde_round_trip() {
+        let cfg = PartitionExportConfig {
+            cadence: PartitionExportCadence::SixHours,
+            job_name: "j".into(),
+            target_table: "t".into(),
+        };
+        let json = serde_json::to_string(&cfg).unwrap();
+        assert_eq!(
+            serde_json::from_str::<PartitionExportConfig>(&json).unwrap(),
+            cfg
+        );
+        assert_eq!(cfg.cron(), "0 */6 * * *");
+    }
+}

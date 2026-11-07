@@ -1,12 +1,14 @@
 //! Lower [`valence_schema_dsl`] AST into [`valence_core::Schema`] generator IR.
 
 use valence_core::{
-    DatabaseEvaluator, ForeignKeyRef, OwnershipConfig, Schema, SchemaConnection, SchemaEdge,
-    SchemaField, SchemaMeta, SchemaPolicies, SchemaPrivacy, SchemaTtlPolicy, DEFAULT_IN_MEMORY,
+    DatabaseEvaluator, ForeignKeyRef, OwnershipConfig, PartitionExportCadence,
+    PartitionExportConfig, Schema, SchemaConnection, SchemaEdge, SchemaField, SchemaMeta,
+    SchemaPolicies, SchemaPrivacy, SchemaTtlPolicy, DEFAULT_IN_MEMORY,
 };
 use valence_schema_dsl::{
     ParsedConnection, ParsedField, ParsedOwnershipConfig, ParsedPolicies, ParsedPolicyRules,
-    ParsedSchema, ParsedTraitSchema, ParsedTtlPolicy,
+    ParsedSchema, ParsedSpectraExportCadence, ParsedSpectraExportConfig, ParsedTraitSchema,
+    ParsedTtlPolicy,
 };
 
 use super::ParsedTraitDef;
@@ -62,6 +64,7 @@ pub fn lower_parsed_schema(parsed: &ParsedSchema) -> Schema {
         traits: parsed.traits.clone(),
         retired_fields: parsed.retired_fields.clone(),
         ttl: parsed.ttl.as_ref().map(lower_ttl),
+        partition_export: parsed.spectra_export.as_ref().map(lower_export_block),
         ownership: parsed.ownership.as_ref().map(lower_ownership),
         meta: SchemaMeta {
             retention: parsed.retention.clone(),
@@ -89,6 +92,21 @@ fn lower_ttl(ttl: &ParsedTtlPolicy) -> SchemaTtlPolicy {
     SchemaTtlPolicy {
         seconds: ttl.seconds,
         mode: ttl.mode.clone(),
+    }
+}
+
+fn lower_export_block(export: &ParsedSpectraExportConfig) -> PartitionExportConfig {
+    PartitionExportConfig {
+        cadence: match export.cadence {
+            ParsedSpectraExportCadence::Hourly => PartitionExportCadence::Hourly,
+            ParsedSpectraExportCadence::ThreeHours => PartitionExportCadence::ThreeHours,
+            ParsedSpectraExportCadence::SixHours => PartitionExportCadence::SixHours,
+            ParsedSpectraExportCadence::TwelveHours => PartitionExportCadence::TwelveHours,
+            ParsedSpectraExportCadence::Daily => PartitionExportCadence::Daily,
+            ParsedSpectraExportCadence::Weekly => PartitionExportCadence::Weekly,
+        },
+        job_name: export.job_name.clone(),
+        target_table: export.target_table.clone(),
     }
 }
 

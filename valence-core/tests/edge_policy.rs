@@ -81,6 +81,7 @@ fn schema(
         traits: Vec::new(),
         retired_fields: Vec::new(),
         ttl: None,
+        partition_export: None,
         ownership: None,
         meta: SchemaMeta {
             retention: "365 days".to_string(),

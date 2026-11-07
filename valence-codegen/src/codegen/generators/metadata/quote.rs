@@ -26,6 +26,7 @@ pub(super) fn quote_schema_metadata_method(p: &SchemaMetadataPieces) -> TokenStr
     let side_effects_code = &p.side_effects_code;
     let iters_code = &p.iters_code;
     let ttl_code = &p.ttl_code;
+    let partition_export_code = &p.partition_export_code;
     let composite_key_code = &p.composite_key_code;
     let ownership_code = &p.ownership_code;
     let database_evaluator_code = &p.database_evaluator_code;
@@ -103,6 +104,7 @@ pub(super) fn quote_schema_metadata_method(p: &SchemaMetadataPieces) -> TokenStr
                         traits: #trait_names_code,
                         retired_fields: #retired_fields_code,
                         ttl: #ttl_code,
+                        partition_export: #partition_export_code,
                         ownership: #ownership_code,
                         meta: valence::SchemaMeta {
                             retention: #retention_lit.to_string(),

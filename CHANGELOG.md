@@ -41,6 +41,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   without it still write raw, and deletion's edge cleanup stays unchecked. The attribute on
   any other cardinality is a compile error. `SchemaConnection` gains `edge_policy`, so code
   that builds it with a struct literal must add the field (`None`).
+- `spectra_export: { cadence, job_name?, target_table? }` in `valence_schema!`. The block opts a
+  table in to periodic Spectra export. `cadence` is `Hourly`, `ThreeHours`, `SixHours`,
+  `TwelveHours`, `Daily` or `Weekly`; cron strings are rejected because the schedule is
+  platform-owned (`PartitionExportCadence::cron`). `job_name` defaults to
+  `{table}_{cadence}_export` and `target_table` to `{table}_export`. The resolved config is
+  `Schema::partition_export`; the core name is neutral because `valence-core` keeps Spectra
+  out of its source. Code that builds a `Schema` with a struct literal must add the field
+  (`None`). Valence only records the opt-in; Chronon registration and the export executor
+  live in other crates.
 - `retired_fields: ["old"]` in `valence_schema!` (and `Schema::retired_fields`). A product
   can now remove a field whose column still exists: SQLite and Postgres boot sync keeps the
   column instead of refusing to start, typed reads leave it out, and new rows leave it NULL.

@@ -118,6 +118,7 @@ fn schema_with_delete_fields(
         traits: Vec::new(),
         retired_fields: Vec::new(),
         ttl: None,
+        partition_export: None,
         ownership: None,
         meta: SchemaMeta {
             retention: "1d".into(),

@@ -66,6 +66,7 @@ pub mod known_engines;
 pub mod model;
 pub mod owner_ref;
 pub mod ownership;
+pub mod partition_export;
 pub mod ports;
 pub mod privacy;
 pub mod privacy_policies;
@@ -161,6 +162,7 @@ pub use known_engines::KnownEngines;
 pub use model::{FieldOperation, Model, PrivacyError, SchemaMetadata};
 pub use owner_ref::{OwnerKind, OwnerRef, OwnershipConfig};
 pub use ownership::OwnershipService;
+pub use partition_export::{PartitionExportCadence, PartitionExportConfig};
 pub use ports::actor::{ActorContext, ActorFactory, JsonActorContext, JsonActorFactory};
 pub use ports::endpoints::{
     DatabaseEndpointResolver, EnvEndpointResolver, NoopEndpointResolver, StaticEndpointResolver,

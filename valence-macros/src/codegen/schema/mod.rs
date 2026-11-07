@@ -86,6 +86,7 @@ then `database: crate::MY_DB`.",
 
     let policies_code = policies::policies_tokens(parsed.policies.as_ref());
     let ttl_code = ttl_tokens(parsed.ttl.as_ref());
+    let partition_export_code = partition_export_tokens(parsed.spectra_export.as_ref());
     let fields_code = fields_tokens(&parsed.fields);
     let edges_code = edges_tokens(&parsed.fields);
     let connections_code =
@@ -137,6 +138,7 @@ then `database: crate::MY_DB`.",
             traits: #traits_code,
             retired_fields: #retired_fields_code,
             ttl: #ttl_code,
+            partition_export: #partition_export_code,
             ownership: #ownership_code,
             meta: valence::SchemaMeta {
                 retention: #retention_lit.to_string(),
@@ -245,6 +247,27 @@ fn ttl_tokens(ttl: Option<&valence_schema_dsl::ParsedTtlPolicy>) -> TokenStream2
         Some(valence::SchemaTtlPolicy {
             seconds: #seconds,
             mode: #mode_lit.to_string(),
+        })
+    }
+}
+
+fn partition_export_tokens(
+    export: Option<&valence_schema_dsl::ParsedSpectraExportConfig>,
+) -> TokenStream2 {
+    let Some(export) = export else {
+        return quote! { None };
+    };
+    let cadence = proc_macro2::Ident::new(
+        export.cadence.variant_name(),
+        proc_macro2::Span::call_site(),
+    );
+    let job_name = LitStr::new(&export.job_name, proc_macro2::Span::call_site());
+    let target_table = LitStr::new(&export.target_table, proc_macro2::Span::call_site());
+    quote! {
+        Some(valence::PartitionExportConfig {
+            cadence: valence::PartitionExportCadence::#cadence,
+            job_name: #job_name.to_string(),
+            target_table: #target_table.to_string(),
         })
     }
 }

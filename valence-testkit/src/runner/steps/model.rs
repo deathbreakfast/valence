@@ -178,11 +178,11 @@ async fn query_filter_miss(session: &mut BootstrapSession, mode: RunMode) -> Res
     Ok(())
 }
 
-const TYPED_AT_SECS: i64 = 1_700_000_000;
+const TYPED_AT_MILLIS: i64 = 1_700_000_000_123;
 
 fn seed_typed_probe(label: &str) -> Result<(TypedProbe, chrono::DateTime<Utc>), String> {
     let at = Utc
-        .timestamp_opt(TYPED_AT_SECS, 0)
+        .timestamp_millis_opt(TYPED_AT_MILLIS)
         .single()
         .ok_or("invalid typed probe timestamp")?;
     let probe = TypedProbe::new(
@@ -222,11 +222,11 @@ async fn typed_field_roundtrip(
         .map_err(|e| e.to_string())?
         .ok_or("typed_probe get returned none")?;
     if mode == RunMode::Correctness {
-        if fetched.at().timestamp() != at.timestamp() {
+        if fetched.at().timestamp_millis() != at.timestamp_millis() {
             return Err(format!(
                 "datetime mismatch: got {} want {}",
-                fetched.at().timestamp(),
-                at.timestamp()
+                fetched.at().timestamp_millis(),
+                at.timestamp_millis()
             ));
         }
         if fetched.price().amount_minor() != 12345 {
@@ -278,7 +278,7 @@ async fn query_filter_datetime(
                 rows.len()
             ));
         }
-        if hit.expect("hit").at().timestamp() != TYPED_AT_SECS {
+        if hit.expect("hit").at().timestamp_millis() != TYPED_AT_MILLIS {
             return Err("datetime Equals hit had wrong timestamp".into());
         }
     }

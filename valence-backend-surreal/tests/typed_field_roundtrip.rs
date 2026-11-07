@@ -56,7 +56,7 @@ async fn backend() -> SurrealEmbeddedBackend {
 #[tokio::test]
 async fn surreal_round_trip_json_as_currency_datetime() {
     let b = backend().await;
-    let at = Utc.timestamp_opt(1_700_000_000, 0).unwrap();
+    let at = Utc.timestamp_millis_opt(1_700_000_000_123).unwrap();
     let row = TypedRow {
         id: "r1".into(),
         payload: Payload { n: 9 },
@@ -69,7 +69,7 @@ async fn surreal_round_trip_json_as_currency_datetime() {
         .expect("create");
     assert_eq!(
         created.get("at").and_then(|v| v.as_i64()),
-        Some(1_700_000_000)
+        Some(1_700_000_000_123)
     );
     assert_eq!(
         created.pointer("/price/code").and_then(|v| v.as_str()),
@@ -83,8 +83,8 @@ async fn surreal_round_trip_json_as_currency_datetime() {
         .expect("exists");
     assert_eq!(
         fetched.get("at").and_then(|v| v.as_i64()),
-        Some(1_700_000_000),
-        "datetime stored as unix seconds: {fetched}"
+        Some(1_700_000_000_123),
+        "datetime stored as unix milliseconds: {fetched}"
     );
     assert_eq!(
         fetched.pointer("/price/code").and_then(|v| v.as_str()),
@@ -110,10 +110,10 @@ async fn surreal_round_trip_json_as_currency_datetime() {
         serde_json::from_value(fetched.get("price").cloned().unwrap()).expect("price");
     let at_back: chrono::DateTime<Utc> = {
         let v = fetched.get("at").cloned().unwrap();
-        if let Some(secs) = v.as_i64() {
-            Utc.timestamp_opt(secs, 0).unwrap()
+        if let Some(millis) = v.as_i64() {
+            Utc.timestamp_millis_opt(millis).unwrap()
         } else {
-            panic!("expected unix seconds for at, got {v}");
+            panic!("expected unix milliseconds for at, got {v}");
         }
     };
     assert_eq!(payload, row.payload);

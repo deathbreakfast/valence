@@ -2,7 +2,7 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 use valence_backend_sqlite::SqliteBackend;
 use valence_core::actor::Actor;
@@ -11,7 +11,7 @@ use valence_core::evaluator::DEFAULT_IN_MEMORY;
 use valence_core::privacy_policies::common::AUTHENTICATED;
 use valence_core::privacy_policies::owner::OWNER_BY_USER_FIELD;
 use valence_core::query::QueryCore;
-use valence_core::schema::{SchemaMetadata, SchemaRegistry};
+use valence_core::schema::{SchemaMetadata, SchemaMetadataInit};
 use valence_core::schema_api::{
     Schema, SchemaField, SchemaMeta, SchemaPolicies, SchemaPolicyRule, SchemaPolicyRules,
     SchemaPrivacy,
@@ -126,6 +126,19 @@ fn owner_schema(table: &str) -> &'static SchemaMetadata {
 
 const TABLES: [&str; 4] = ["qs_hidden", "qs_end", "qs_all_hidden", "qs_same"];
 
+/// Each fixture table, submitted through inventory so the merged test binary's
+/// global registry holds them whichever test reads the registry first.
+fn table_meta<const I: usize>() -> &'static SchemaMetadata {
+    static METAS: [OnceLock<&'static SchemaMetadata>; TABLES.len()] =
+        [const { OnceLock::new() }; TABLES.len()];
+    METAS[I].get_or_init(|| owner_schema(TABLES[I]))
+}
+
+valence_core::inventory::submit! { SchemaMetadataInit(table_meta::<0>) }
+valence_core::inventory::submit! { SchemaMetadataInit(table_meta::<1>) }
+valence_core::inventory::submit! { SchemaMetadataInit(table_meta::<2>) }
+valence_core::inventory::submit! { SchemaMetadataInit(table_meta::<3>) }
+
 fn purpose() -> DataUsePurpose {
     DataUsePurpose::new(
         r"**Test:** Runs windowed queries so the suite can compare returned rows with the backend row count. CI and developers running the suite only.",
@@ -136,15 +149,6 @@ fn purpose() -> DataUsePurpose {
 
 /// Ten rows `r00..r09`; alice owns `r01 r03 r04 r08`, bob the rest.
 async fn seed(table: &str) -> Valence {
-    static INIT: std::sync::Once = std::sync::Once::new();
-    // Queries resolve schemas through the global registry, which can be set once.
-    INIT.call_once(|| {
-        let mut registry = SchemaRegistry::new();
-        for t in TABLES {
-            registry.register(owner_schema(t));
-        }
-        SchemaRegistry::set_global(registry);
-    });
     assert!(TABLES.contains(&table));
     let sqlite = SqliteBackend::connect_memory()
         .await

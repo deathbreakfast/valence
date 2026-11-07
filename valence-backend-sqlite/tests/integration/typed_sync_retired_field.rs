@@ -1,13 +1,13 @@
 //! Boot sync keeps a retired column in place and leaves it out of reads.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-use std::sync::{Arc, Once};
+use std::sync::{Arc, OnceLock};
 
 use sqlx::Row;
 use valence_backend_sql::sync_typed_table_sqlite;
 use valence_backend_sqlite::SqliteBackend;
 use valence_core::evaluator::DEFAULT_IN_MEMORY;
-use valence_core::schema::{SchemaMetadata, SchemaRegistry};
+use valence_core::schema::{SchemaMetadata, SchemaMetadataInit};
 use valence_core::schema_api::{Schema, SchemaField, SchemaMeta, SchemaPrivacy};
 use valence_core::storage_layout::{FieldStorage, LayoutField, StorageLayout};
 use valence_core::{CompiledQuery, DatabaseBackend};
@@ -113,17 +113,18 @@ fn leak_retired_schema(table: &str) -> &'static Schema {
 
 const READ_TABLE: &str = "retired_read_demo";
 
-/// Install the global registry once, before any test touches it (it is a `OnceLock`).
-fn install_registry() {
-    static INSTALL: Once = Once::new();
-    INSTALL.call_once(|| {
-        let mut registry = SchemaRegistry::new();
-        registry.register(Box::leak(Box::new(SchemaMetadata::from_schema(
-            leak_retired_schema(READ_TABLE),
-        ))));
-        SchemaRegistry::set_global(registry);
-    });
+/// Submitted through inventory, so the merged test binary's global registry
+/// holds this fixture whichever test reads the registry first.
+fn read_table_meta() -> &'static SchemaMetadata {
+    static META: OnceLock<&'static SchemaMetadata> = OnceLock::new();
+    META.get_or_init(|| {
+        Box::leak(Box::new(SchemaMetadata::from_schema(leak_retired_schema(
+            READ_TABLE,
+        ))))
+    })
 }
+
+valence_core::inventory::submit! { SchemaMetadataInit(read_table_meta) }
 
 async fn column_names(backend: &SqliteBackend, table: &str) -> Vec<String> {
     sqlx::query(&format!("PRAGMA table_info(\"{table}\")"))
@@ -137,7 +138,6 @@ async fn column_names(backend: &SqliteBackend, table: &str) -> Vec<String> {
 
 #[tokio::test]
 async fn retired_field_sync_sqlite_accepts_orphan_happy() {
-    install_registry();
     let table = "retired_sync_demo";
     let backend = Arc::new(SqliteBackend::connect_memory().await.expect("connect"));
     backend
@@ -166,7 +166,6 @@ async fn retired_field_sync_sqlite_accepts_orphan_happy() {
 
 #[tokio::test]
 async fn unlisted_orphan_still_refused_sad() {
-    install_registry();
     let table = "retired_unlisted_demo";
     let backend = Arc::new(SqliteBackend::connect_memory().await.expect("connect"));
     backend
@@ -184,7 +183,6 @@ async fn unlisted_orphan_still_refused_sad() {
 
 #[tokio::test]
 async fn retired_not_null_column_refused_sad() {
-    install_registry();
     let table = "retired_not_null_demo";
     let backend = Arc::new(SqliteBackend::connect_memory().await.expect("connect"));
     backend
@@ -204,7 +202,6 @@ async fn retired_not_null_column_refused_sad() {
 
 #[tokio::test]
 async fn retired_field_not_in_reads_happy() {
-    install_registry();
     let table = READ_TABLE;
 
     let backend = Arc::new(SqliteBackend::connect_memory().await.expect("connect"));

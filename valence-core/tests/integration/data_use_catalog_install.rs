@@ -1,4 +1,4 @@
-//! Installing the process-wide data-use catalog (own test binary: one process, one install).
+//! Installing the process-wide data-use catalog (no other test in this binary installs one).
 
 #![allow(clippy::unwrap_used)]
 

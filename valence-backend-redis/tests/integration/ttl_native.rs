@@ -6,12 +6,12 @@
     clippy::print_stderr
 )]
 
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 use redis::AsyncCommands;
 use valence_backend_redis::{RedisBackend, KEY_PREFIX_ENV, TEST_URL_ENV, URL_ENV};
 use valence_core::evaluator::DEFAULT_IN_MEMORY;
-use valence_core::schema::{SchemaMetadata, SchemaRegistry};
+use valence_core::schema::{SchemaMetadata, SchemaMetadataInit, SchemaRegistry};
 use valence_core::schema_api::{Schema, SchemaField, SchemaMeta, SchemaPrivacy};
 use valence_core::ttl::SchemaTtlPolicy;
 use valence_core::DatabaseBackend;
@@ -67,6 +67,20 @@ fn leak_ttl_schema(table: &str, seconds: u64) -> &'static Schema {
     }))
 }
 
+/// Submitted through inventory, so the merged test binary's global registry
+/// holds this fixture whichever test reads the registry first.
+fn ttl_probe_meta() -> &'static SchemaMetadata {
+    static META: OnceLock<&'static SchemaMetadata> = OnceLock::new();
+    META.get_or_init(|| {
+        Box::leak(Box::new(SchemaMetadata::from_schema(leak_ttl_schema(
+            "ttl_redis_native_probe",
+            120,
+        ))))
+    })
+}
+
+valence_core::inventory::submit! { SchemaMetadataInit(ttl_probe_meta) }
+
 #[tokio::test]
 async fn redis_ttl_create_sets_expire_not_refreshed_on_update() {
     let backend = match RedisBackend::builder().from_env_defaults().build().await {
@@ -79,11 +93,6 @@ async fn redis_ttl_create_sets_expire_not_refreshed_on_update() {
 
     let table = "ttl_redis_native_probe";
     let id = "r1";
-    let mut registry = SchemaRegistry::new();
-    registry.register(Box::leak(Box::new(SchemaMetadata::from_schema(
-        leak_ttl_schema(table, 120),
-    ))));
-    SchemaRegistry::set_global(registry);
 
     let backend = Arc::new(backend);
     assert_eq!(

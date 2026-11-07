@@ -14,7 +14,7 @@ pub use apply::apply_deletion_node;
 pub use dag_privacy::{check_dag_delete_privacy, check_dag_delete_privacy_with_registry};
 pub use dispatch::{
     dispatch, is_deletion_dispatcher_registered, register_deletion_dispatcher,
-    register_noop_deletion_dispatcher_for_tests, DeletionRequest,
+    register_noop_deletion_dispatcher_for_tests, require_deletion_dispatcher, DeletionRequest,
 };
 pub use execute::{apply_deletion_dag, delete_entity_now};
 pub use prepare::{

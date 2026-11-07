@@ -107,6 +107,7 @@ pub(super) fn model_delete_method_tokens(cx: &CrudEmitCtx<'_>) -> TokenStream {
                 valence::deletion::PreparedDeletion::Missing
                 | valence::deletion::PreparedDeletion::Pending { .. } => Ok(()),
                 valence::deletion::PreparedDeletion::Ready { bare_id, .. } => {
+                    valence::deletion::require_deletion_dispatcher()?;
                     #mark
                     let actor_json = serde_json::to_value(valence.actor())
                         .unwrap_or(serde_json::Value::Null);

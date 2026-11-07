@@ -62,8 +62,8 @@ jobs:
             --features postgres,hybrid,surreal-rocksdb,cross-backend-hops \
             -- --test-threads=1
       - name: valence-backend-surreal rocksdb persistence
-        run: cargo test -p uf-valence-backend-surreal --features embedded-rocksdb --test rocksdb_persistence -- --test-threads=1
+        run: cargo test -p uf-valence-backend-surreal --features embedded-rocksdb --test integration -- --test-threads=1 rocksdb_persistence::
       - name: valence-backend-surreal contract (mem)
-        run: cargo test -p uf-valence-backend-surreal --features embedded-mem --test backend_contract -- --test-threads=1
+        run: cargo test -p uf-valence-backend-surreal --features embedded-mem --test integration -- --test-threads=1 backend_contract::
       - name: hybrid port contract
-        run: cargo test -p uf-valence-backend-hybrid --test backend_contract -- --test-threads=1
+        run: cargo test -p uf-valence-backend-hybrid --test integration -- --test-threads=1 backend_contract::

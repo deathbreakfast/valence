@@ -5972,6 +5972,7 @@ dependencies = [
  "sqlx",
  "tokio",
  "uf-valence-backend-sql",
+ "uf-valence-backend-sqlite",
  "uf-valence-core",
  "valence-testkit",
 ]
@@ -6265,6 +6266,7 @@ name = "valence-testkit"
 version = "0.1.5"
 dependencies = [
  "acme-valence-backend-stub",
+ "async-trait",
  "chrono",
  "cross-backend-model-host",
  "futures",

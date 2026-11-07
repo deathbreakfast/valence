@@ -1,7 +1,10 @@
 //! Minimal in-memory storage engine for tests and embedded hosts.
 
 use std::collections::{HashMap, HashSet};
+use std::future::Future;
+use std::pin::Pin;
 
+use crate::semi_join::{SemiJoin, Targets};
 use tokio::sync::{RwLock, RwLockReadGuard};
 use valence_core::{BackendCapabilities, CompiledQuery, DatabaseBackend, Error, RecordId, Result};
 
@@ -58,6 +61,68 @@ impl InMemoryBackend {
         Self::default()
     }
 
+    /// Rows of `table` that satisfy the compiled WHERE clause and every semi-join cut out of it.
+    async fn filtered_rows(
+        &self,
+        table: &str,
+        compiled: &CompiledQuery,
+        joins: &[SemiJoin],
+    ) -> Result<Vec<serde_json::Value>> {
+        let mut rows = {
+            let tables = self.table_records_read(table).await;
+            tables
+                .get(table)
+                .map(|m| m.values().cloned().collect::<Vec<_>>())
+                .unwrap_or_default()
+        };
+        rows = crate::query_filter::apply_equality_where(rows, compiled);
+        for join in joins {
+            let members = self.semi_join_members(table, join).await?;
+            rows.retain(|row| {
+                row.get("id")
+                    .and_then(crate::semi_join::bare_id)
+                    .is_some_and(|id| members.contains(&id))
+            });
+        }
+        Ok(rows)
+    }
+
+    /// Bare ids of `table` rows with an edge in `join.edge_table` to one of its targets.
+    fn semi_join_members<'a>(
+        &'a self,
+        table: &'a str,
+        join: &'a SemiJoin,
+    ) -> Pin<Box<dyn Future<Output = Result<HashSet<String>>> + Send + 'a>> {
+        Box::pin(async move {
+            let targets: Vec<RecordId> = match &join.targets {
+                Targets::Record { table, id } => {
+                    let id = id.rsplit(':').next().unwrap_or(id);
+                    vec![RecordId::new(table.clone(), id.to_string())]
+                }
+                Targets::Subquery(inner) => {
+                    let to_table = crate::semi_join::from_table(&inner.query_string)
+                        .ok_or_else(|| Error::Internal("semi-join subquery has no FROM".into()))?;
+                    let (inner_stripped, inner_joins) = crate::semi_join::split(inner)?;
+                    self.filtered_rows(&to_table, &inner_stripped, &inner_joins)
+                        .await?
+                        .iter()
+                        .filter_map(|r| r.get("id").and_then(crate::semi_join::bare_id))
+                        .map(|id| RecordId::new(to_table.clone(), id))
+                        .collect()
+                }
+            };
+            let mut members = HashSet::new();
+            for target in &targets {
+                for from in self.get_edge_sources(target, &join.edge_table).await? {
+                    if from.table() == table {
+                        members.insert(from.id().to_string());
+                    }
+                }
+            }
+            Ok(members)
+        })
+    }
+
     async fn table_records_read(
         &self,
         _table: &str,
@@ -80,6 +145,8 @@ impl DatabaseBackend for InMemoryBackend {
         &self,
         compiled: &CompiledQuery,
     ) -> Result<Vec<serde_json::Value>> {
+        let (stripped, joins) = crate::semi_join::split(compiled)?;
+        let compiled = &stripped;
         let q = compiled.query_string.trim();
         let upper = q.to_uppercase();
         if upper.starts_with("RETURN ") && upper.contains("OWNERSHIP_STATUS") {
@@ -109,14 +176,7 @@ impl DatabaseBackend for InMemoryBackend {
                         .unwrap_or("")
                         .trim();
                     if !table.is_empty() {
-                        let mut rows = {
-                            let tables = self.table_records_read(table).await;
-                            tables
-                                .get(table)
-                                .map(|m| m.values().cloned().collect::<Vec<_>>())
-                                .unwrap_or_default()
-                        };
-                        rows = crate::query_filter::apply_equality_where(rows, compiled);
+                        let rows = self.filtered_rows(table, compiled, &joins).await?;
                         let count = i64::try_from(rows.len()).unwrap_or(i64::MAX);
                         return Ok(vec![serde_json::json!(count)]);
                     }
@@ -179,14 +239,7 @@ impl DatabaseBackend for InMemoryBackend {
                     .unwrap_or("")
                     .trim();
                 if !table.is_empty() {
-                    let mut rows = {
-                        let tables = self.table_records_read(table).await;
-                        tables
-                            .get(table)
-                            .map(|m| m.values().cloned().collect::<Vec<_>>())
-                            .unwrap_or_default()
-                    };
-                    rows = crate::query_filter::apply_equality_where(rows, compiled);
+                    let mut rows = self.filtered_rows(table, compiled, &joins).await?;
                     rows =
                         crate::query_filter::apply_order_limit_offset(rows, &compiled.query_string);
                     if upper.contains("SELECT VALUE") || upper.contains("SELECT id") {

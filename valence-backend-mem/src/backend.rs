@@ -731,6 +731,7 @@ mod tests {
                 layout_field("email", false, true, false),
                 layout_field("note", false, false, false),
             ],
+            retired: Vec::new(),
         };
         backend.sync_typed_table(&layout).await.unwrap();
         // Idempotent: a second boot sync must not stack duplicate indexes.

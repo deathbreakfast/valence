@@ -408,6 +408,7 @@ pub(crate) fn adhoc_index_layout(table: &str, fields: &[&str]) -> StorageLayout 
     StorageLayout {
         table: table.to_string(),
         fields: layout_fields,
+        retired: Vec::new(),
     }
 }
 

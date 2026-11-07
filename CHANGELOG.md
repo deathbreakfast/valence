@@ -55,6 +55,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   out of its source. Code that builds a `Schema` with a struct literal must add the field
   (`None`). Valence only records the opt-in; Chronon registration and the export executor
   live in other crates.
+- `valence_core::data_migration`: a `DataMigration` trait and a `MigrationRunner` that
+  applies data rewrites in version order. Before anything runs, the runner refuses user
+  and anonymous actors, requires a `MigrationApproval` (approver and reason), and requires
+  `acknowledge_sensitive(id)` for each migration that touches sensitive data. Each run
+  writes an audit row to the append-only `valence_data_migrations` table (actor, approver,
+  reason, times, rows touched, outcome); failed runs get their own row with credentials
+  redacted, or with only the error kind when the migration touches sensitive data. Run one
+  runner per deployment at a time. Applied migrations are skipped on later runs, and an applied migration whose
+  version or description changed stops the run. `dry_run(true)` runs the gates and
+  `apply` without writing the ledger.
 - `retired_fields: ["old"]` in `valence_schema!` (and `Schema::retired_fields`). A product
   can now remove a field whose column still exists: SQLite and Postgres boot sync keeps the
   column instead of refusing to start, typed reads leave it out, and new rows leave it NULL.

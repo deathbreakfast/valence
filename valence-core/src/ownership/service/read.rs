@@ -46,6 +46,7 @@ impl OwnershipService {
     ) -> Result<Option<HashSet<String>>> {
         let sys = system_valence(v);
         let backend = Self::ownership_backend(valence_model, &sys)?;
+        super::ensure_lookup_index_once(&backend).await;
         let Some(compiled) = crate::compiled_query_factory::pending_deletion_record_ids(
             backend.engine_id(),
             valence_model,
@@ -141,6 +142,7 @@ impl OwnershipService {
     ) -> Result<u64> {
         let sys = system_valence(v);
         let backend = Self::ownership_backend(valence_model, &sys)?;
+        super::ensure_lookup_index_once(&backend).await;
         let owner_ids = owner_id_query_values(owner_id, owner_type);
         let compiled = crate::compiled_query_factory::count_ownership_rows_for_schema(
             backend.engine_id(),

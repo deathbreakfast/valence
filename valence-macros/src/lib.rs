@@ -164,6 +164,7 @@ pub fn valence_schema(input: TokenStream) -> TokenStream {
 /// | `required` | no | Whether the field must be present (default `false`) |
 /// | `primary_key` | no | Whether the field is a primary key (default `false`) |
 /// | `unique` | no | Whether values must be unique (default `false`) |
+/// | `indexed` | no | Ask the backend for a non-unique lookup index on the field, for fields that queries filter on by equality (default `false`) |
 /// | `default` | no | Default value expression |
 /// | `validations` | no | Validator expression list |
 /// | `policies` | no | Field-level policy bundle |

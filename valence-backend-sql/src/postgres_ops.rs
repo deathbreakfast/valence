@@ -83,6 +83,17 @@ pub async fn execute_select_postgres(
         {
             return Ok(vec![]);
         }
+        // 42703 undefined_column: `define_index` can create the ownership table before any
+        // ownership row exists, with only the indexed columns. Until the first write adds
+        // the rest it has no rows.
+        Err(e)
+            if sql.contains("valence_data_ownership")
+                && e.as_database_error()
+                    .and_then(|d| d.code())
+                    .is_some_and(|code| code == "42703") =>
+        {
+            return Ok(vec![]);
+        }
         Err(e) => return Err(Error::database(e.to_string())),
     };
 
@@ -348,6 +359,28 @@ pub async fn define_unique_index_postgres(
         ensure_layout_for_write_postgres(pool, &layout, ensured).await?;
     }
     define_unique_index_column_postgres(pool, table, field).await
+}
+
+/// Idempotent non-unique index over `fields`, adding the columns first when the table
+/// has no registry layout yet.
+pub async fn define_index_postgres(
+    pool: &PgPool,
+    table: &str,
+    fields: &[&str],
+    ensured: &WriteEnsureCache,
+) -> Result<()> {
+    let q = crate::sqlite_ops::composite_index_ddl(table, fields)?;
+    if let Ok(layout) = StorageLayout::from_registry_table(table) {
+        ensure_layout_for_write_postgres(pool, &layout, ensured).await?;
+    } else {
+        let layout = crate::sqlite_ops::adhoc_index_layout(table, fields);
+        ensure_layout_for_write_postgres(pool, &layout, ensured).await?;
+    }
+    sqlx::query(&q)
+        .execute(pool)
+        .await
+        .map_err(|e| Error::database(e.to_string()))?;
+    Ok(())
 }
 
 /// Idempotent non-unique index on `__valence_expire_at` for platform TTL sweep discovery.

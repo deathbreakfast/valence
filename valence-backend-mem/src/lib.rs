@@ -3,6 +3,7 @@
 #![deny(missing_docs)]
 
 mod backend;
+mod index;
 mod query_filter;
 
 pub use backend::{InMemoryBackend, ENGINE_ID};

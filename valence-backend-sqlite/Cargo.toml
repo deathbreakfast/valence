@@ -25,6 +25,7 @@ valence-core = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
+tempfile = { workspace = true }
 valence-testkit = { path = "../valence-testkit", default-features = false }
 
 [lints]

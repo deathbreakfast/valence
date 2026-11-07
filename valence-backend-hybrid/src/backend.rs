@@ -291,6 +291,10 @@ impl DatabaseBackend for HybridBackend {
         self.primary.define_unique_index(table, field).await
     }
 
+    async fn define_index(&self, table: &str, fields: &[&str]) -> Result<()> {
+        self.primary.define_index(table, fields).await
+    }
+
     fn ttl_capability(&self) -> BackendTtlCapability {
         self.primary.ttl_capability()
     }

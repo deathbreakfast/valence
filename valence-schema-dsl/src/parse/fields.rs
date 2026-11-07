@@ -17,6 +17,8 @@ pub struct ParsedField {
     pub required: bool,
     pub primary_key: bool,
     pub unique: bool,
+    /// Ask the backend for a non-unique lookup index on this field.
+    pub indexed: bool,
     pub default: Option<String>,
     pub validations: Vec<String>,
     pub policies: Option<ParsedPolicies>,
@@ -62,6 +64,7 @@ pub enum FieldAttr {
     Required(LitBool),
     PrimaryKey(LitBool),
     Unique(LitBool),
+    Indexed(LitBool),
     Default(TokenStream),
     Validations(ValidatorList),
     Policies(PoliciesConfig),
@@ -81,6 +84,7 @@ impl Parse for FieldAttr {
             "required" => Ok(FieldAttr::Required(input.parse()?)),
             "primary_key" => Ok(FieldAttr::PrimaryKey(input.parse()?)),
             "unique" => Ok(FieldAttr::Unique(input.parse()?)),
+            "indexed" => Ok(FieldAttr::Indexed(input.parse()?)),
             "default" => {
                 let tokens = parse_until_comma_or_end(input)?;
                 Ok(FieldAttr::Default(tokens))
@@ -151,6 +155,7 @@ pub(super) fn parse_fields(config: &FieldsConfig) -> Result<Vec<ParsedField>> {
         let mut required = true;
         let mut primary_key = false;
         let mut unique = false;
+        let mut indexed = false;
         let mut default = None;
         let mut validations = Vec::new();
         let mut policies = None;
@@ -166,6 +171,7 @@ pub(super) fn parse_fields(config: &FieldsConfig) -> Result<Vec<ParsedField>> {
                 FieldAttr::Required(b) => required = b.value,
                 FieldAttr::PrimaryKey(b) => primary_key = b.value,
                 FieldAttr::Unique(b) => unique = b.value,
+                FieldAttr::Indexed(b) => indexed = b.value,
                 FieldAttr::Default(d) => default = Some(crate::extract::extract_default_string(d)),
                 FieldAttr::Validations(v) => {
                     validations = v
@@ -193,6 +199,7 @@ pub(super) fn parse_fields(config: &FieldsConfig) -> Result<Vec<ParsedField>> {
             required,
             primary_key,
             unique,
+            indexed,
             default,
             validations,
             policies,

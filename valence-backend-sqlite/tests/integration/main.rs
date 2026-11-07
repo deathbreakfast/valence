@@ -8,6 +8,7 @@ mod memory_connection_recycle;
 mod query_stats;
 mod scan_enumeration;
 mod schema_version_sync;
+mod transfer;
 mod typed_sync_add_field;
 mod typed_sync_retired_field;
 mod unique_violation_mapping;

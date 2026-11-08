@@ -1,8 +1,8 @@
 //! Contract for moving a platform-shaped schema set between backends.
 //!
-//! Valence cannot depend on the platform crates, so this fixture mirrors the families an
-//! installer writes: identity, Gluon, Pion, Nucleus, Gauge, and sealed secrets with their
-//! hash-chained audit log. It runs [`TableTransfer`] over every table at once and checks
+//! Valence cannot depend on the platform crates, so this fixture mirrors the kinds of data an
+//! installer writes: identity, fleet, worker, placement and permission tables, and sealed
+//! secrets with their hash-chained audit log. It runs [`TableTransfer`] over every table at once and checks
 //! parity family by family: row counts, row contents, history rows, schema stamps and the
 //! edges that cross families.
 
@@ -34,20 +34,26 @@ const FAMILIES: [(&str, &[&str]); 6] = [
         ],
     ),
     (
-        "gluon",
-        &["valence_plat_gluon_cell", "valence_plat_gluon_node"],
+        "fleet",
+        &["valence_plat_fleet_cell", "valence_plat_fleet_node"],
     ),
-    ("pion", &["valence_plat_pion_pool", "valence_plat_pion_job"]),
     (
-        "nucleus",
+        "workers",
+        &["valence_plat_workers_pool", "valence_plat_workers_job"],
+    ),
+    (
+        "placement",
         &[
-            "valence_plat_nucleus_zone",
-            "valence_plat_nucleus_placement",
+            "valence_plat_placement_zone",
+            "valence_plat_placement_placement",
         ],
     ),
     (
-        "gauge",
-        &["valence_plat_gauge_grant", "valence_plat_gauge_role"],
+        "permissions",
+        &[
+            "valence_plat_permissions_grant",
+            "valence_plat_permissions_role",
+        ],
     ),
     ("sealed_secrets", &["valence_plat_secret", SECRETS_AUDIT]),
 ];
@@ -139,32 +145,32 @@ fn fixture_edges() -> Vec<EdgeRow> {
             ("valence_plat_user", "r1"),
         ),
         edge(
-            ("valence_plat_gluon_node", "r1"),
+            ("valence_plat_fleet_node", "r1"),
             "plat_in_cell",
-            ("valence_plat_gluon_cell", "r1"),
+            ("valence_plat_fleet_cell", "r1"),
         ),
         edge(
-            ("valence_plat_pion_job", "r2"),
+            ("valence_plat_workers_job", "r2"),
             "plat_runs_on",
-            ("valence_plat_pion_pool", "r1"),
+            ("valence_plat_workers_pool", "r1"),
         ),
         edge(
-            ("valence_plat_nucleus_placement", "r1"),
+            ("valence_plat_placement_placement", "r1"),
             "plat_in_zone",
-            ("valence_plat_nucleus_zone", "r1"),
+            ("valence_plat_placement_zone", "r1"),
         ),
         edge(
-            ("valence_plat_gluon_cell", "r1"),
+            ("valence_plat_fleet_cell", "r1"),
             "plat_placed_by",
-            ("valence_plat_nucleus_placement", "r1"),
+            ("valence_plat_placement_placement", "r1"),
         ),
         edge(
-            ("valence_plat_gauge_grant", "r1"),
+            ("valence_plat_permissions_grant", "r1"),
             "plat_grants",
-            ("valence_plat_gauge_role", "r1"),
+            ("valence_plat_permissions_role", "r1"),
         ),
         edge(
-            ("valence_plat_gauge_grant", "r2"),
+            ("valence_plat_permissions_grant", "r2"),
             "plat_for",
             ("valence_plat_user", "r2"),
         ),

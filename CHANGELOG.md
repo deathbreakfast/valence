@@ -81,6 +81,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   writes with `upsert_record` / `relate_edge`, so a run that fails partway leaves a
   `TransferCheckpoint` to resume from. `EdgeRow` now derives `Serialize` / `Deserialize`.
   `valence-testkit` gains `run_transfer_contract` and `run_transfer_resume_contract`.
+- `valence-testkit` gains `run_platform_transfer_contract`, which transfers a platform-shaped
+  set (identity, Gluon, Pion, Nucleus, Gauge, and sealed secrets with a hash-chained audit log)
+  and checks row counts, rows, schema stamps, cross-family edges and the audit chain per family.
+  SQLite-to-SQLite and SQLite-to-Postgres integration tests run it.
 - `retired_fields: ["old"]` in `valence_schema!` (and `Schema::retired_fields`). A product
   can now remove a field whose column still exists: SQLite and Postgres boot sync keeps the
   column instead of refusing to start, typed reads leave it out, and new rows leave it NULL.

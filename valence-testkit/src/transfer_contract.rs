@@ -127,7 +127,7 @@ async fn setup(source: &dyn DatabaseBackend, target: &dyn DatabaseBackend) -> Re
     Ok(())
 }
 
-async fn scan_rows(backend: &dyn DatabaseBackend, table: &str) -> Result<Vec<Value>> {
+pub(crate) async fn scan_rows(backend: &dyn DatabaseBackend, table: &str) -> Result<Vec<Value>> {
     let mut out: Vec<Value> = Vec::new();
     loop {
         let after = out

@@ -24,6 +24,7 @@ pub(super) fn fields_tokens(fields: &[valence_schema_dsl::ParsedField]) -> Vec<T
             let policies_code = policies::policies_tokens(field.policies.as_ref());
             let primary_key = field.primary_key;
             let unique = field.unique;
+            let indexed = field.indexed;
             let encrypted = field.encrypted;
             let nullable = !field.required;
 
@@ -53,7 +54,7 @@ pub(super) fn fields_tokens(fields: &[valence_schema_dsl::ParsedField]) -> Vec<T
                     field_type: #field_type_lit.to_string(),
                     primary: #primary_key,
                     nullable: #nullable,
-                    indexed: false,
+                    indexed: #indexed,
                     unique: #unique,
                     default: #default_code,
                     fk: #fk_code,

@@ -3,14 +3,14 @@
 use sqlx::postgres::PgPool;
 
 use valence_backend_sql::{
-    apply_ttl_policy_postgres, create_record_postgres, define_unique_index_postgres,
-    delete_record_postgres, ensure_edges_postgres, ensure_table_postgres,
-    ensure_typed_table_postgres, execute_select_postgres, get_edge_sources_postgres,
-    get_edge_targets_postgres, get_record_postgres, inspect_typed_layout_postgres,
-    merge_record_postgres, read_schema_version_postgres, relate_edge_postgres, scan_edges_postgres,
-    scan_table_typed_postgres, sql_capabilities, sync_typed_table_postgres, ttl_deferred,
-    unrelate_edge_postgres, update_record_postgres, write_schema_version_postgres,
-    WriteEnsureCache,
+    apply_ttl_policy_postgres, create_record_postgres, define_index_postgres,
+    define_unique_index_postgres, delete_record_postgres, ensure_edges_postgres,
+    ensure_table_postgres, ensure_typed_table_postgres, execute_select_postgres,
+    get_edge_sources_postgres, get_edge_targets_postgres, get_record_postgres,
+    inspect_typed_layout_postgres, merge_record_postgres, read_schema_version_postgres,
+    relate_edge_postgres, scan_edges_postgres, scan_table_typed_postgres, sql_capabilities,
+    sync_typed_table_postgres, ttl_deferred, unrelate_edge_postgres, update_record_postgres,
+    write_schema_version_postgres, WriteEnsureCache,
 };
 use valence_core::backend::{DatabaseBackend, EdgeRow};
 use valence_core::compiled_query::CompiledQuery;
@@ -242,6 +242,10 @@ impl DatabaseBackend for PostgresBackend {
         limit: usize,
     ) -> Result<Vec<EdgeRow>> {
         scan_edges_postgres(&self.pool, edge_type, after, limit).await
+    }
+
+    async fn define_index(&self, table: &str, fields: &[&str]) -> Result<()> {
+        define_index_postgres(&self.pool, table, fields, &self.layout_ensured).await
     }
 
     fn ttl_capability(&self) -> valence_core::ttl::BackendTtlCapability {

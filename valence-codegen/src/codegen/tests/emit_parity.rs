@@ -137,3 +137,40 @@ valence_schema! {
         "unexpected error: {err}"
     );
 }
+
+#[test]
+fn metadata_emits_indexed_field_flag_happy() {
+    let schema = r#"
+use valence::prelude::*;
+
+valence_schema! {
+    Lookup {
+        repository: "https://github.com/unified-field-dev/valence",
+        table: "lookup",
+        version: "0.1.0",
+        fields: [
+            id: { r#type: FieldType::String, primary_key: true, required: true },
+            name: { r#type: FieldType::String, required: true, indexed: true },
+            note: { r#type: FieldType::String, required: false },
+        ],
+    }
+}
+"#;
+    let path = write_temp_schema_file(schema, "emit_parity_indexed.rs");
+    let generated = generate_from_schema_file(&path, &HashMap::<String, ParsedTraitDef>::new())
+        .expect("codegen");
+    let compact: String = generated.split_whitespace().collect();
+    let name_row = compact
+        .split("valence::SchemaField{")
+        .find(|row| row.starts_with(r#"name:"name""#))
+        .expect("SchemaField row for `name`");
+    assert!(
+        name_row.contains("indexed:true"),
+        "`name` should be indexed"
+    );
+    assert_eq!(
+        compact.matches("indexed:true").count(),
+        1,
+        "only `name` should be indexed"
+    );
+}

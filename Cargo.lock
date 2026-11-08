@@ -6010,6 +6010,7 @@ dependencies = [
  "async-trait",
  "serde_json",
  "sqlx",
+ "tempfile",
  "tokio",
  "uf-valence-backend-sql",
  "uf-valence-core",

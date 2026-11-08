@@ -126,7 +126,7 @@ Follow the numbered **Getting started** guide in `cargo doc -p uf-valence` (wire
 |------------|--------|
 | Generated Model CRUD | Requires host `build.rs` + `valence-codegen` (see `examples/codegen-host`) |
 | Wire backends (postgres/mongodb/redis) | Need a live server URL; examples skip when unset |
-| Cross-backend transactions | **Not supported** — batch ops stay on one backend |
+| Multi-row transactions | `Valence::apply_batch` is atomic on one backend that reports `supports_transactions` (in-memory today); cross-backend transactions are **not supported** |
 | Privacy / ownership / deletion DAG | Schema-driven; see `examples/product-model-host` and crate rustdoc (`Model`, ownership, deletion) |
 | Third-party engines | Implement `DatabaseBackend` in a separate crate — no public crate change |
 

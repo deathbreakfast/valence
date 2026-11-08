@@ -6,7 +6,8 @@
 //!
 //! Cross-storage semantics:
 //! - Per-table `database:` evaluator → compound [`crate::router_key()`] → backend
-//! - Batch operations stay on a **single** backend
+//! - Batch operations ([`Valence::apply_batch`](crate::Valence::apply_batch)) stay on a **single**
+//!   backend and are atomic only where it reports `supports_transactions`
 //! - **No** cross-backend transactions
 
 use crate::backend::DatabaseBackend;

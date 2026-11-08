@@ -6,6 +6,7 @@
 mod backend_contract;
 mod safe_tweak_sync;
 mod scan_enumeration;
+mod transfer_from_sqlite;
 mod typed_null_binding;
 mod typed_sync_add_field;
 mod unique_violation_mapping;

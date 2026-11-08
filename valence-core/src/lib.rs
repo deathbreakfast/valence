@@ -53,6 +53,7 @@ pub mod compiled_query;
 pub mod compiled_query_factory;
 pub mod connection;
 pub mod currency;
+pub mod data_migration;
 pub mod data_use;
 pub mod database_retry;
 pub mod datetime_unix;

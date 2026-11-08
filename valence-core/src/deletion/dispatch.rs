@@ -46,9 +46,30 @@ pub fn register_noop_deletion_dispatcher_for_tests() {
 pub async fn dispatch(req: DeletionRequest) -> Result<()> {
     match DISPATCHER.get() {
         Some(f) => (f)(req).await,
-        None => Err(Error::Internal(
-            "Deletion dispatcher not registered; register a host dispatcher from server bootstrap"
-                .into(),
-        )),
+        None => Err(dispatcher_missing()),
     }
+}
+
+/// Fail when no deletion dispatcher is registered.
+///
+/// Queued deletes call this before marking a row `pending_deletion`, so a host without a
+/// dispatcher gets the error while the row is still visible, instead of a hidden row that
+/// nothing will ever purge.
+///
+/// # Errors
+///
+/// Returns [`Error::Internal`] when no dispatcher is registered.
+pub fn require_deletion_dispatcher() -> Result<()> {
+    if is_deletion_dispatcher_registered() {
+        Ok(())
+    } else {
+        Err(dispatcher_missing())
+    }
+}
+
+fn dispatcher_missing() -> Error {
+    Error::Internal(
+        "Deletion dispatcher not registered; register a host dispatcher from server bootstrap"
+            .into(),
+    )
 }

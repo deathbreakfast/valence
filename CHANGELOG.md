@@ -59,6 +59,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `where_connection_contains_many_to_many` filter against the backend's own edge store
   instead of being ignored. A semi-join it cannot cut out of the WHERE clause (inside an `OR`
   group) returns an error.
+- `DatabaseBackend::apply_batch` and `Valence::apply_batch` apply several writes (`WriteOp`:
+  create, update, merge, upsert, delete) as one all-or-nothing unit on a single backend.
+  `BackendCapabilities` gains `supports_transactions`; the in-memory backend implements it and
+  every other adapter keeps the default "unsupported" error. Batches that span backends are
+  rejected. The batch is a raw write: it skips model privacy policies and side effects.
 - `retired_fields: ["old"]` in `valence_schema!` (and `Schema::retired_fields`). A product
   can now remove a field whose column still exists: SQLite and Postgres boot sync keeps the
   column instead of refusing to start, typed reads leave it out, and new rows leave it NULL.
@@ -93,6 +98,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The `valence_error_log` and `valence_slow_op` event payloads now carry the table name as
   `table_name` instead of `table`. Spectra's schema macro generates its own `table` field,
   which kept these events from being registered. Readers of the old key must switch.
+- **Storage contract:** `FieldType::DateTime` is now persisted as UTC unix **milliseconds**
+  (was whole seconds), so rows and `updated_at` stamps written in the same second keep
+  their order. Reads accept both: an integer with magnitude below 1e11 is treated as legacy
+  seconds and anything larger as milliseconds (so an instant before March 1973 written in
+  milliseconds reads back as seconds); RFC3339 strings still parse. `DateTimePredicate`
+  filters now compare against milliseconds, so a legacy seconds row mis-orders in
+  predicates until it is rewritten. Nothing rewrites old rows automatically.
 
 ### Fixed
 
@@ -110,6 +122,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `(valence_model, status)` on each backend the first time it reads ownership rows.
   `ensure_lookup_indexes` uses the same index instead of SurrealQL that only Surreal
   accepted.
+- Queued `Model::delete` and `queue_delete_entity` now check for a registered deletion
+  dispatcher before marking the row `pending_deletion`. A host without one gets the error
+  with the row still visible, instead of a hidden row nothing will purge. The check is
+  exposed as `deletion::require_deletion_dispatcher`.
 - The document-row filter shared by the mem, IndraDB, Redis, MongoDB and hybrid backends
   flattened `(a = $x) AND (b = $y)` into one `OR`. A query filtering two record fields at
   once (a team and a user, say) returned every row matching either field, so a lookup for a

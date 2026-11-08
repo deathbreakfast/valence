@@ -123,7 +123,7 @@ pub use backend::SqlQueryCompiler;
 pub use backend::SurrealQueryCompiler;
 pub use backend::{
     create_record, delete_record, get_record, merge_record, update_record, upsert_record,
-    BackendCapabilities, DatabaseBackend, EdgeRow,
+    BackendCapabilities, DatabaseBackend, EdgeRow, WriteOp,
 };
 pub use batch::BatchCreatable;
 pub use compiled_query::CompiledQuery;
@@ -141,8 +141,8 @@ pub use deletion::{
     apply_deletion_dag, apply_deletion_node, check_dag_delete_privacy,
     check_dag_delete_privacy_with_registry, delete_entity_now, dispatch,
     is_deletion_dispatcher_registered, normalize_record_id_for_deletion, prepare_deletion,
-    register_deletion_dispatcher, register_noop_deletion_dispatcher_for_tests, DeletionMode,
-    DeletionRequest, DeletionService, PreparedDeletion,
+    register_deletion_dispatcher, register_noop_deletion_dispatcher_for_tests,
+    require_deletion_dispatcher, DeletionMode, DeletionRequest, DeletionService, PreparedDeletion,
 };
 #[doc(hidden)]
 pub use deletion::{
@@ -176,7 +176,8 @@ pub use privacy::{
 };
 pub use query::{
     DateTimePredicate, HopSource, HopType, IdOnlyRecord, IntPredicate, NullPredicate, QueryCore,
-    QueryStats, RecordPredicate, SortDirection, StringPredicate, MAX_QUERY_LIMIT, MAX_QUERY_OFFSET,
+    QueryStats, RecordPredicate, SortDirection, StringPredicate, MAX_QUERY_HIDDEN_SCAN,
+    MAX_QUERY_LIMIT, MAX_QUERY_OFFSET,
 };
 pub use query_compiler::QueryCompiler;
 pub use query_compiler_registry::{

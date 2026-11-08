@@ -1,7 +1,8 @@
 //! Table-keyed queued delete for admin tooling.
 
 use crate::deletion::{
-    dispatch, prepare_deletion, DeletionMode, DeletionRequest, DeletionService, PreparedDeletion,
+    dispatch, prepare_deletion, require_deletion_dispatcher, DeletionMode, DeletionRequest,
+    DeletionService, PreparedDeletion,
 };
 use crate::error::Result;
 use crate::ownership::OwnershipService;
@@ -36,6 +37,7 @@ pub async fn queue_delete_entity_returning_run_id(
     match prepare_deletion(table, id, DeletionMode::Queued, v).await? {
         PreparedDeletion::Missing | PreparedDeletion::Pending { .. } => Ok(None),
         PreparedDeletion::Ready { bare_id, dag } => {
+            require_deletion_dispatcher()?;
             OwnershipService::mark_pending_deletion(table, &bare_id, v).await?;
 
             let actor_json = serde_json::to_value(v.actor()).unwrap_or(serde_json::Value::Null);

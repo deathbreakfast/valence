@@ -379,6 +379,7 @@ impl DatabaseBackend for IndradbBackend {
         BackendCapabilities {
             supports_merge: true,
             supports_graph_edges: true,
+            supports_transactions: false,
             telemetry_label: "indradb",
         }
     }

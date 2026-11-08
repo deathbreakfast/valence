@@ -1088,7 +1088,7 @@ pub async fn merge_record_typed_postgres(
 /// Map a sqlx SQLite row with arbitrary columns into Valence JSON (SELECT *).
 ///
 /// SQLite type affinity lets `try_get::<String>` succeed for INTEGER columns
-/// (e.g. unix-second datetimes). Prefer the declared column type so those stay
+/// (e.g. unix-millisecond datetimes). Prefer the declared column type so those stay
 /// JSON numbers — otherwise `datetime_unix` treats `"1700000000"` as RFC3339 and
 /// fails with chrono's "premature end of input".
 ///
@@ -1122,7 +1122,7 @@ pub fn map_select_row_sqlite(table: &str, row: &sqlx::sqlite::SqliteRow) -> Valu
         }
         if upper == "INTEGER" || upper == "INT" || upper == "BIGINT" {
             // Prefer i64: sqlx can coerce any integer to bool (nonzero → true), which
-            // would destroy unix-second datetimes and other numeric cells.
+            // would destroy unix-millisecond datetimes and other numeric cells.
             if let Ok(i) = row.try_get::<i64, _>(name) {
                 fields.insert(name.to_string(), Value::Number(i.into()));
             }

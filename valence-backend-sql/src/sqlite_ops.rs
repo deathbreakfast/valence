@@ -517,6 +517,7 @@ pub const fn sql_capabilities(label: &'static str) -> valence_core::BackendCapab
     valence_core::BackendCapabilities {
         supports_merge: true,
         supports_graph_edges: true,
+        supports_transactions: false,
         telemetry_label: label,
     }
 }

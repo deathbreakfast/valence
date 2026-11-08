@@ -134,15 +134,15 @@ impl QueryCore {
         let (op, value) = match pred {
             DateTimePredicate::Equals(dt) => (
                 "=",
-                serde_json::Value::Number(dt.timestamp().into()),
+                serde_json::Value::Number(dt.timestamp_millis().into()),
             ),
             DateTimePredicate::After(dt) => (
                 ">",
-                serde_json::Value::Number(dt.timestamp().into()),
+                serde_json::Value::Number(dt.timestamp_millis().into()),
             ),
             DateTimePredicate::Before(dt) => (
                 "<",
-                serde_json::Value::Number(dt.timestamp().into()),
+                serde_json::Value::Number(dt.timestamp_millis().into()),
             ),
         };
         let params = vec![(param_key.clone(), value)];

@@ -501,7 +501,7 @@ impl DatabaseBackend for InMemoryBackend {
                     }
                 }
                 for (id, new) in &rows {
-                    if old_rows.map_or(true, |old| !old.contains_key(id)) {
+                    if old_rows.is_none_or(|old| !old.contains_key(id)) {
                         self.reindex(&table, id, None, Some(new));
                     }
                 }

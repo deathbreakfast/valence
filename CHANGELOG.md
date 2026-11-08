@@ -85,6 +85,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The `valence_error_log` and `valence_slow_op` event payloads now carry the table name as
   `table_name` instead of `table`. Spectra's schema macro generates its own `table` field,
   which kept these events from being registered. Readers of the old key must switch.
+- **Storage contract:** `FieldType::DateTime` is now persisted as UTC unix **milliseconds**
+  (was whole seconds), so rows and `updated_at` stamps written in the same second keep
+  their order. Reads accept both: an integer with magnitude below 1e11 is treated as legacy
+  seconds and anything larger as milliseconds (so an instant before March 1973 written in
+  milliseconds reads back as seconds); RFC3339 strings still parse. `DateTimePredicate`
+  filters now compare against milliseconds, so a legacy seconds row mis-orders in
+  predicates until it is rewritten. Nothing rewrites old rows automatically.
 
 ### Fixed
 

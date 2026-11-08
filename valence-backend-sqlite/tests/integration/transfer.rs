@@ -28,3 +28,14 @@ async fn sqlite_to_sqlite_transfer_resumes_after_failure() {
         .await
         .expect("transfer resume contract");
 }
+
+#[tokio::test]
+async fn sqlite_to_sqlite_platform_set_parity() {
+    let counts = valence_testkit::run_platform_transfer_contract(memory().await, memory().await)
+        .await
+        .expect("platform transfer contract");
+    assert_eq!(counts.len(), 6);
+    assert!(counts
+        .iter()
+        .all(|c| c.source_rows == c.target_rows && c.source_rows > 0));
+}

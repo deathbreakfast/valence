@@ -8,6 +8,7 @@
 )]
 #![cfg(feature = "surreal-inventory")]
 
+#[path = "e2e/support/mod.rs"]
 mod support;
 
 use valence::SchemaRegistry;

@@ -144,6 +144,8 @@ valence_core::inventory::submit! { SchemaMetadataInit(table_meta::<0>) }
 valence_core::inventory::submit! { SchemaMetadataInit(table_meta::<1>) }
 valence_core::inventory::submit! { SchemaMetadataInit(table_meta::<2>) }
 valence_core::inventory::submit! { SchemaMetadataInit(table_meta::<3>) }
+valence_core::inventory::submit! { SchemaMetadataInit(table_meta::<4>) }
+valence_core::inventory::submit! { SchemaMetadataInit(table_meta::<5>) }
 
 fn purpose() -> DataUsePurpose {
     DataUsePurpose::new(

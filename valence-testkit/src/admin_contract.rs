@@ -64,7 +64,9 @@ fn authenticated_only_schema() -> &'static SchemaMetadata {
             iters: Vec::new(),
             composite_key: Vec::new(),
             traits: Vec::new(),
+            retired_fields: Vec::new(),
             ttl: None,
+            partition_export: None,
             ownership: None,
             meta: SchemaMeta {
                 retention: "365 days".to_string(),

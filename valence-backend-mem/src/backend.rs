@@ -1,10 +1,15 @@
 //! Minimal in-memory storage engine for tests and embedded hosts.
 
 use std::collections::{HashMap, HashSet};
+use std::future::Future;
+use std::pin::Pin;
 use std::sync::{PoisonError, RwLock as SyncRwLock};
 
+use crate::semi_join::{SemiJoin, Targets};
 use tokio::sync::{RwLock, RwLockReadGuard};
-use valence_core::{BackendCapabilities, CompiledQuery, DatabaseBackend, Error, RecordId, Result};
+use valence_core::{
+    BackendCapabilities, CompiledQuery, DatabaseBackend, Error, RecordId, Result, WriteOp,
+};
 
 use crate::index::{candidates_for, EqIndex};
 
@@ -63,6 +68,85 @@ impl InMemoryBackend {
     /// Create an empty in-memory backend.
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Rows of `table` that satisfy the compiled WHERE clause and every semi-join cut out of it.
+    async fn filtered_rows(
+        &self,
+        table: &str,
+        compiled: &CompiledQuery,
+        joins: &[SemiJoin],
+    ) -> Result<Vec<serde_json::Value>> {
+        let mut rows = self.candidate_rows(table, compiled).await;
+        rows = crate::query_filter::apply_equality_where(rows, compiled);
+        for join in joins {
+            let members = self.semi_join_members(table, join).await?;
+            rows.retain(|row| {
+                row.get("id")
+                    .and_then(crate::semi_join::bare_id)
+                    .is_some_and(|id| members.contains(&id))
+            });
+        }
+        Ok(rows)
+    }
+
+    /// Bare ids of `table` rows with an edge in `join.edge_table` to one of its targets.
+    fn semi_join_members<'a>(
+        &'a self,
+        table: &'a str,
+        join: &'a SemiJoin,
+    ) -> Pin<Box<dyn Future<Output = Result<HashSet<String>>> + Send + 'a>> {
+        Box::pin(async move {
+            let targets: Vec<RecordId> = match &join.targets {
+                Targets::Record { table, id } => {
+                    let id = id.rsplit(':').next().unwrap_or(id);
+                    vec![RecordId::new(table.clone(), id.to_string())]
+                }
+                Targets::Subquery(inner) => {
+                    let to_table = crate::semi_join::from_table(&inner.query_string)
+                        .ok_or_else(|| Error::Internal("semi-join subquery has no FROM".into()))?;
+                    let (inner_stripped, inner_joins) = crate::semi_join::split(inner)?;
+                    self.filtered_rows(&to_table, &inner_stripped, &inner_joins)
+                        .await?
+                        .iter()
+                        .filter_map(|r| r.get("id").and_then(crate::semi_join::bare_id))
+                        .map(|id| RecordId::new(to_table.clone(), id))
+                        .collect()
+                }
+            };
+            let mut members = HashSet::new();
+            for target in &targets {
+                for from in self.get_edge_sources(target, &join.edge_table).await? {
+                    if from.table() == table {
+                        members.insert(from.id().to_string());
+                    }
+                }
+            }
+            Ok(members)
+        })
+    }
+
+    /// Validate `content` and compute the storage id and persisted row for a create.
+    fn prepare_create(
+        &self,
+        table: &str,
+        content: serde_json::Value,
+    ) -> Result<(String, serde_json::Value)> {
+        if let Ok(layout) = valence_core::storage_layout::StorageLayout::from_registry_table(table)
+        {
+            valence_core::storage_layout::validate_write_types(&layout, &content)?;
+        }
+        let mut content = content;
+        valence_core::ttl::prepare_create_content(table, self, &mut content)?;
+        let id = storage_id_from_content(&content).unwrap_or_else(uuid_simple);
+        let mut record = content;
+        if let Some(obj) = record.as_object_mut() {
+            let has_string_id = obj.get("id").and_then(|v| v.as_str()).is_some();
+            if !has_string_id {
+                obj.insert("id".into(), record_id_json(table, &id));
+            }
+        }
+        Ok((id, record))
     }
 
     async fn table_records_read(
@@ -140,6 +224,8 @@ impl DatabaseBackend for InMemoryBackend {
         &self,
         compiled: &CompiledQuery,
     ) -> Result<Vec<serde_json::Value>> {
+        let (stripped, joins) = crate::semi_join::split(compiled)?;
+        let compiled = &stripped;
         let q = compiled.query_string.trim();
         let upper = q.to_uppercase();
         if upper.starts_with("RETURN ") && upper.contains("OWNERSHIP_STATUS") {
@@ -169,8 +255,7 @@ impl DatabaseBackend for InMemoryBackend {
                         .unwrap_or("")
                         .trim();
                     if !table.is_empty() {
-                        let mut rows = self.candidate_rows(table, compiled).await;
-                        rows = crate::query_filter::apply_equality_where(rows, compiled);
+                        let rows = self.filtered_rows(table, compiled, &joins).await?;
                         let count = i64::try_from(rows.len()).unwrap_or(i64::MAX);
                         return Ok(vec![serde_json::json!(count)]);
                     }
@@ -233,8 +318,7 @@ impl DatabaseBackend for InMemoryBackend {
                     .unwrap_or("")
                     .trim();
                 if !table.is_empty() {
-                    let mut rows = self.candidate_rows(table, compiled).await;
-                    rows = crate::query_filter::apply_equality_where(rows, compiled);
+                    let mut rows = self.filtered_rows(table, compiled, &joins).await?;
                     rows =
                         crate::query_filter::apply_order_limit_offset(rows, &compiled.query_string);
                     if upper.contains("SELECT VALUE") || upper.contains("SELECT id") {
@@ -262,20 +346,7 @@ impl DatabaseBackend for InMemoryBackend {
         table: &str,
         content: serde_json::Value,
     ) -> Result<serde_json::Value> {
-        if let Ok(layout) = valence_core::storage_layout::StorageLayout::from_registry_table(table)
-        {
-            valence_core::storage_layout::validate_write_types(&layout, &content)?;
-        }
-        let mut content = content;
-        valence_core::ttl::prepare_create_content(table, self, &mut content)?;
-        let id = storage_id_from_content(&content).unwrap_or_else(uuid_simple);
-        let mut record = content;
-        if let Some(obj) = record.as_object_mut() {
-            let has_string_id = obj.get("id").and_then(|v| v.as_str()).is_some();
-            if !has_string_id {
-                obj.insert("id".into(), record_id_json(table, &id));
-            }
-        }
+        let (id, record) = self.prepare_create(table, content)?;
         let mut tables = self.tables.write().await;
         let old = tables
             .entry(table.to_string())
@@ -359,6 +430,86 @@ impl DatabaseBackend for InMemoryBackend {
         }
         drop(tables);
         Ok(())
+    }
+
+    async fn apply_batch(&self, ops: Vec<WriteOp>) -> Result<Vec<serde_json::Value>> {
+        // Validate and prepare creates before taking the lock; nothing is visible until commit.
+        let mut prepared_creates = Vec::new();
+        for op in &ops {
+            if let WriteOp::Create { table, content } = op {
+                prepared_creates.push(self.prepare_create(table, content.clone())?);
+            }
+        }
+        let mut prepared_creates = prepared_creates.into_iter();
+
+        let mut guard = self.tables.write().await;
+        // Work on a copy of the tables the batch touches; swap in only on success.
+        let mut staged: HashMap<String, HashMap<String, serde_json::Value>> = HashMap::new();
+        let mut results = Vec::with_capacity(ops.len());
+        for op in ops {
+            let table = op.table().to_string();
+            let rows = staged
+                .entry(table.clone())
+                .or_insert_with(|| guard.get(&table).cloned().unwrap_or_default());
+            match op {
+                WriteOp::Create { .. } => {
+                    let (id, record) = prepared_creates.next().ok_or_else(|| {
+                        Error::Internal("apply_batch: missing prepared create".into())
+                    })?;
+                    rows.insert(id, record.clone());
+                    results.push(record);
+                }
+                WriteOp::Update { id, content, .. } => {
+                    if !rows.contains_key(&id) {
+                        return Err(Error::NotFound(format!("{table}:{id}")));
+                    }
+                    rows.insert(id, content.clone());
+                    results.push(content);
+                }
+                WriteOp::Merge { id, patch, .. } => {
+                    let existing = rows.entry(id).or_insert_with(|| serde_json::json!({}));
+                    if let (Some(base), Some(patch_obj)) =
+                        (existing.as_object_mut(), patch.as_object())
+                    {
+                        for (k, v) in patch_obj {
+                            base.insert(k.clone(), v.clone());
+                        }
+                    }
+                    results.push(existing.clone());
+                }
+                WriteOp::Upsert {
+                    id, mut content, ..
+                } => {
+                    if let Some(obj) = content.as_object_mut() {
+                        obj.insert("id".into(), record_id_json(&table, &id));
+                    }
+                    rows.insert(id, content.clone());
+                    results.push(content);
+                }
+                WriteOp::Delete { id, .. } => {
+                    rows.remove(&id);
+                    results.push(serde_json::Value::Null);
+                }
+            }
+        }
+        for (table, rows) in staged {
+            if self.has_indexes(&table) {
+                let old_rows = guard.get(&table);
+                if let Some(old_rows) = old_rows {
+                    for (id, old) in old_rows {
+                        self.reindex(&table, id, Some(old), rows.get(id));
+                    }
+                }
+                for (id, new) in &rows {
+                    if old_rows.is_none_or(|old| !old.contains_key(id)) {
+                        self.reindex(&table, id, None, Some(new));
+                    }
+                }
+            }
+            guard.insert(table, rows);
+        }
+        drop(guard);
+        Ok(results)
     }
 
     async fn relate_edge(&self, from: &RecordId, edge_table: &str, to: &RecordId) -> Result<()> {
@@ -672,6 +823,7 @@ mod tests {
                 layout_field("email", false, true, false),
                 layout_field("note", false, false, false),
             ],
+            retired: Vec::new(),
         };
         backend.sync_typed_table(&layout).await.unwrap();
         // Idempotent: a second boot sync must not stack duplicate indexes.
@@ -696,6 +848,48 @@ mod tests {
         let rows = backend.execute_compiled_query(&q).await.unwrap();
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0]["name"], "team.edit");
+    }
+
+    #[tokio::test]
+    async fn apply_batch_keeps_equality_index_current_happy() {
+        let backend = InMemoryBackend::new();
+        backend.define_index("item", &["name"]).await.unwrap();
+        backend
+            .upsert_record("item", "a", serde_json::json!({"id": "a", "name": "old"}))
+            .await
+            .unwrap();
+        backend
+            .apply_batch(vec![
+                WriteOp::Update {
+                    table: "item".into(),
+                    id: "a".into(),
+                    content: serde_json::json!({"id": "a", "name": "new"}),
+                },
+                WriteOp::Create {
+                    table: "item".into(),
+                    content: serde_json::json!({"id": "b", "name": "old"}),
+                },
+            ])
+            .await
+            .unwrap();
+        let by_name = |name: &str| {
+            CompiledQuery::new(
+                "SELECT * FROM item WHERE name = $n".into(),
+                vec![("n".into(), serde_json::json!(name))],
+            )
+        };
+        let old = backend
+            .execute_compiled_query(&by_name("old"))
+            .await
+            .unwrap();
+        assert_eq!(old.len(), 1);
+        assert_eq!(old[0]["id"], "b");
+        let new = backend
+            .execute_compiled_query(&by_name("new"))
+            .await
+            .unwrap();
+        assert_eq!(new.len(), 1);
+        assert_eq!(new[0]["id"], "a");
     }
 
     #[tokio::test]

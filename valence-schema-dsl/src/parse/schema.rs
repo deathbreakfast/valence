@@ -11,6 +11,7 @@ use super::connections::{parse_connections, ConnectionsConfig, ParsedConnection}
 use super::fields::{parse_fields, FieldsConfig, ParsedField};
 use super::ownership::{parse_ownership_block, OwnershipConfigBlock, ParsedOwnershipConfig};
 use super::privacy::{parse_policies_config, ParsedPolicies, PoliciesConfig, PrivacyConfig};
+use super::spectra_export::{parse_export_block, ParsedSpectraExportConfig, SpectraExportConfig};
 use super::ttl::{parse_ttl_config, ParsedTtlPolicy, TtlConfig};
 
 /// Root schema definition.
@@ -35,6 +36,8 @@ pub struct ParsedSchema {
     /// Optional `database:` — any Rust expression of type `&'static dyn DatabaseEvaluator`.
     pub database: Option<Expr>,
     pub ttl: Option<ParsedTtlPolicy>,
+    /// `spectra_export:` opt-in (presence = enabled), defaults resolved.
+    pub spectra_export: Option<ParsedSpectraExportConfig>,
     pub policies: Option<ParsedPolicies>,
     pub fields: Vec<ParsedField>,
     pub connections: Vec<ParsedConnection>,
@@ -43,6 +46,8 @@ pub struct ParsedSchema {
     pub iters: Vec<String>,
     pub composite_key: Vec<String>,
     pub traits: Vec<String>,
+    /// `retired_fields: ["old"]` — live columns the schema no longer declares.
+    pub retired_fields: Vec<String>,
     pub ownership: Option<ParsedOwnershipConfig>,
 }
 
@@ -71,6 +76,7 @@ pub enum SchemaItem {
     /// Nested `meta: { repository, retention?, owner?, description? }`.
     Meta(MetaConfig),
     Ttl(TtlConfig),
+    SpectraExport(SpectraExportConfig),
     /// Legacy `privacy:` block (parsed, ignored when building [`ParsedSchema`]).
     #[allow(dead_code)]
     Privacy(PrivacyConfig),
@@ -82,6 +88,8 @@ pub enum SchemaItem {
     Iters(SideEffectsConfig),
     CompositeKey(CompositeKeyConfig),
     Traits(TraitsConfig),
+    /// `retired_fields: ["old_column"]` — columns kept in storage but no longer declared.
+    RetiredFields(RetiredFieldsConfig),
     Database(DatabaseConfig),
     Ownership(OwnershipConfigBlock),
 }
@@ -102,6 +110,22 @@ impl Parse for TraitsConfig {
     }
 }
 
+/// Retired field list: `retired_fields: ["project", "legacy_flag"]`
+pub struct RetiredFieldsConfig {
+    _bracket: token::Bracket,
+    pub names: Punctuated<LitStr, Token![,]>,
+}
+
+impl Parse for RetiredFieldsConfig {
+    fn parse(input: ParseStream) -> Result<Self> {
+        let content;
+        Ok(RetiredFieldsConfig {
+            _bracket: bracketed!(content in input),
+            names: content.parse_terminated(<LitStr as Parse>::parse, Token![,])?,
+        })
+    }
+}
+
 impl Parse for SchemaItem {
     fn parse(input: ParseStream) -> Result<Self> {
         let key: Ident = input.parse()?;
@@ -114,6 +138,7 @@ impl Parse for SchemaItem {
             "repository" => Ok(SchemaItem::Repository(input.parse()?)),
             "meta" => Ok(SchemaItem::Meta(input.parse()?)),
             "ttl" => Ok(SchemaItem::Ttl(input.parse()?)),
+            "spectra_export" => Ok(SchemaItem::SpectraExport(input.parse()?)),
             "privacy" => Ok(SchemaItem::Privacy(input.parse()?)),
             "policies" => Ok(SchemaItem::Policies(input.parse()?)),
             "fields" => Ok(SchemaItem::Fields(input.parse()?)),
@@ -122,6 +147,7 @@ impl Parse for SchemaItem {
             "iters" => Ok(SchemaItem::Iters(input.parse()?)),
             "composite_key" => Ok(SchemaItem::CompositeKey(input.parse()?)),
             "traits" => Ok(SchemaItem::Traits(input.parse()?)),
+            "retired_fields" => Ok(SchemaItem::RetiredFields(input.parse()?)),
             "database" => Ok(SchemaItem::Database(input.parse()?)),
             "ownership" => Ok(SchemaItem::Ownership(input.parse()?)),
             _ => Err(syn::Error::new(
@@ -279,6 +305,7 @@ impl SchemaSpec {
         let mut retention = "365 days".to_string();
         let mut owner = "system".to_string();
         let mut ttl = None;
+        let mut spectra_export_cfg: Option<&SpectraExportConfig> = None;
         let mut policies = None;
         let mut fields = Vec::new();
         let mut connections = Vec::new();
@@ -286,6 +313,7 @@ impl SchemaSpec {
         let mut iters = Vec::new();
         let mut composite_key = Vec::new();
         let mut traits = Vec::new();
+        let mut retired: Option<&RetiredFieldsConfig> = None;
         let mut database = None;
         let mut ownership: Option<ParsedOwnershipConfig> = None;
 
@@ -326,6 +354,7 @@ impl SchemaSpec {
                     }
                 }
                 SchemaItem::Ttl(t) => ttl = Some(parse_ttl_config(t)?),
+                SchemaItem::SpectraExport(c) => spectra_export_cfg = Some(c),
                 SchemaItem::Policies(p) => policies = Some(parse_policies_config(p)?),
                 SchemaItem::Fields(f) => fields = parse_fields(f)?,
                 SchemaItem::SideEffects(se) => {
@@ -339,6 +368,15 @@ impl SchemaSpec {
                 }
                 SchemaItem::Traits(t) => {
                     traits = t.traits.iter().map(|i| i.to_string()).collect();
+                }
+                SchemaItem::RetiredFields(r) => {
+                    if retired.is_some() {
+                        return Err(syn::Error::new(
+                            self.name.span(),
+                            "duplicate `retired_fields:` in valence_schema!",
+                        ));
+                    }
+                    retired = Some(r);
                 }
                 SchemaItem::Privacy(_) => {}
                 SchemaItem::Connections(c) => connections = parse_connections(c)?,
@@ -365,6 +403,9 @@ impl SchemaSpec {
 
         let table_name =
             table_name.ok_or_else(|| syn::Error::new(self.name.span(), "Missing 'table' field"))?;
+        let spectra_export = spectra_export_cfg
+            .map(|c| parse_export_block(c, &table_name))
+            .transpose()?;
         let version = version.unwrap_or_else(|| "1.0.0".to_string());
         let repository = meta_repository
             .or(repository_top)
@@ -381,6 +422,11 @@ impl SchemaSpec {
             ));
         }
 
+        let retired_fields = match retired {
+            Some(r) => lower_retired_fields(r, &fields)?,
+            None => Vec::new(),
+        };
+
         Ok(ParsedSchema {
             table_name,
             version,
@@ -390,6 +436,7 @@ impl SchemaSpec {
             owner,
             database,
             ttl,
+            spectra_export,
             policies,
             fields,
             connections,
@@ -397,7 +444,47 @@ impl SchemaSpec {
             iters,
             composite_key,
             traits,
+            retired_fields,
             ownership,
         })
     }
+}
+
+/// Validate `retired_fields:` names against the declared fields.
+fn lower_retired_fields(
+    config: &RetiredFieldsConfig,
+    fields: &[ParsedField],
+) -> Result<Vec<String>> {
+    let mut names: Vec<String> = Vec::with_capacity(config.names.len());
+    for lit in &config.names {
+        let name = lit.value();
+        if syn::parse_str::<Ident>(&name).is_err() {
+            return Err(syn::Error::new(
+                lit.span(),
+                format!("`retired_fields` entry \"{name}\" is not a valid field identifier"),
+            ));
+        }
+        if name == "id" {
+            return Err(syn::Error::new(
+                lit.span(),
+                "`retired_fields` cannot retire `id`",
+            ));
+        }
+        if names.contains(&name) {
+            return Err(syn::Error::new(
+                lit.span(),
+                format!("`retired_fields` lists \"{name}\" twice"),
+            ));
+        }
+        if fields.iter().any(|f| f.name == name) {
+            return Err(syn::Error::new(
+                lit.span(),
+                format!(
+                    "`retired_fields` entry \"{name}\" is still declared in `fields`; remove the field or drop it from `retired_fields`"
+                ),
+            ));
+        }
+        names.push(name);
+    }
+    Ok(names)
 }

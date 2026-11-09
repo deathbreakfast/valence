@@ -2,6 +2,7 @@
 
 use crate::evaluator::DatabaseEvaluator;
 use crate::owner_ref::OwnershipConfig;
+use crate::partition_export::PartitionExportConfig;
 use crate::privacy::PolicyEvaluator;
 use crate::ttl::SchemaTtlPolicy;
 use serde::{Deserialize, Serialize};
@@ -156,8 +157,21 @@ pub struct SchemaConnection {
     pub reverse_field: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub edge_table: Option<String>,
+    /// Privacy rule for relate/unrelate on a ManyToMany edge (DSL `edge_policy:`).
+    ///
+    /// `None` keeps the raw edge write. The only rule is
+    /// [`SchemaConnection::EDGE_POLICY_SOURCE_UPDATE_TARGET_READ`]; see
+    /// [`crate::Valence::relate_edge`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub edge_policy: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub target_trait: Option<String>,
+}
+
+impl SchemaConnection {
+    /// `edge_policy: SourceUpdateTargetRead`: a relate or unrelate needs Update on the
+    /// source row and Read on the target row.
+    pub const EDGE_POLICY_SOURCE_UPDATE_TARGET_READ: &'static str = "SourceUpdateTargetRead";
 }
 
 impl From<SchemaEdge> for SchemaConnection {
@@ -175,6 +189,7 @@ impl From<SchemaEdge> for SchemaConnection {
             model_path: None,
             reverse_field: None,
             edge_table: None,
+            edge_policy: None,
             target_trait: None,
         }
     }
@@ -216,8 +231,17 @@ pub struct Schema {
     pub composite_key: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub traits: Vec<String>,
+    /// Fields removed from the schema whose columns stay in storage.
+    ///
+    /// Boot sync accepts these live columns instead of refusing them, runs no DDL for
+    /// them, and typed reads leave them out. Set from `retired_fields: ["old"]`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub retired_fields: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ttl: Option<SchemaTtlPolicy>,
+    /// Export opt-in from the schema export block; presence enables periodic partition export.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub partition_export: Option<PartitionExportConfig>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ownership: Option<OwnershipConfig>,
     pub meta: SchemaMeta,

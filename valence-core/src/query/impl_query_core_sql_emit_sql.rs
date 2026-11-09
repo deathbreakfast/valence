@@ -43,7 +43,7 @@ impl QueryCore {
             } => Self::connection_exists_clause_sql_dialect(
                 from_field,
                 subquery,
-                "ce",
+                &format!("ce{}", *param_counter),
                 param_counter,
             ),
             WhereClause::ConnectionExistsReverse {
@@ -53,7 +53,7 @@ impl QueryCore {
             } => Self::connection_exists_reverse_clause_sql_dialect(
                 reverse_field,
                 subquery,
-                "cer",
+                &format!("cer{}", *param_counter),
                 param_counter,
                 table,
             ),
@@ -66,7 +66,7 @@ impl QueryCore {
                 Self::connection_exists_m2m_clause_sql_dialect(
                     edge_table,
                     subquery,
-                    "cemtm",
+                    &format!("cemtm{}", *param_counter),
                     param_counter,
                 )
             }
@@ -134,15 +134,15 @@ impl QueryCore {
         let (op, value) = match pred {
             DateTimePredicate::Equals(dt) => (
                 "=",
-                serde_json::Value::Number(dt.timestamp().into()),
+                serde_json::Value::Number(dt.timestamp_millis().into()),
             ),
             DateTimePredicate::After(dt) => (
                 ">",
-                serde_json::Value::Number(dt.timestamp().into()),
+                serde_json::Value::Number(dt.timestamp_millis().into()),
             ),
             DateTimePredicate::Before(dt) => (
                 "<",
-                serde_json::Value::Number(dt.timestamp().into()),
+                serde_json::Value::Number(dt.timestamp_millis().into()),
             ),
         };
         let params = vec![(param_key.clone(), value)];

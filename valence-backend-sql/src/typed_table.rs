@@ -143,6 +143,7 @@ pub async fn inspect_typed_layout_sqlite(
             .to_ascii_uppercase();
         let notnull: i64 = r.try_get("notnull").unwrap_or(0);
         let pk: i64 = r.try_get("pk").unwrap_or(0);
+        let default: Option<String> = r.try_get("dflt_value").unwrap_or(None);
         let storage = match ctype.as_str() {
             "INTEGER" => FieldStorage::Integer,
             "REAL" => FieldStorage::Decimal,
@@ -156,13 +157,14 @@ pub async fn inspect_typed_layout_sqlite(
             nullable: notnull == 0 && pk == 0,
             unique: false,
             indexed: false,
-            default: None,
+            default,
             record_table: None,
         });
     }
     Ok(Some(StorageLayout {
         table: table.to_string(),
         fields,
+        retired: Vec::new(),
     }))
 }
 
@@ -213,6 +215,7 @@ pub async fn inspect_typed_layout_postgres(
     Ok(Some(StorageLayout {
         table: table.to_string(),
         fields,
+        retired: Vec::new(),
     }))
 }
 
@@ -724,11 +727,14 @@ fn bind_postgres<'q>(
 }
 
 /// Prefer registry field storage kinds (Json/Currency/DateTime) over PRAGMA TEXT→String.
+///
+/// Drops the schema's retired columns so their stale values never reach a read.
 fn layout_with_registry_storage(table: &str, live: StorageLayout) -> StorageLayout {
     let Ok(reg) = StorageLayout::from_registry_table(table) else {
         return live;
     };
     let mut fields = live.fields;
+    fields.retain(|f| !reg.retired.contains(&f.name));
     for f in &mut fields {
         if let Some(rf) = reg.fields.iter().find(|r| r.name == f.name) {
             f.storage = rf.storage;
@@ -737,6 +743,7 @@ fn layout_with_registry_storage(table: &str, live: StorageLayout) -> StorageLayo
     StorageLayout {
         table: live.table,
         fields,
+        retired: reg.retired,
     }
 }
 
@@ -799,6 +806,75 @@ pub async fn get_record_typed_postgres(
         .await
         .map_err(|e| Error::database(e.to_string()))?;
     Ok(row.map(|r| row_from_sqlx_postgres(table, &layout, &r)))
+}
+
+/// One page of typed rows ordered by primary key (SQLite). Missing table → empty.
+pub async fn scan_table_typed_sqlite(
+    pool: &sqlx::SqlitePool,
+    table: &str,
+    after: Option<&str>,
+    limit: usize,
+) -> Result<Vec<Value>> {
+    assert_safe_table(table)?;
+    let Some(live) = inspect_typed_layout_sqlite(pool, table).await? else {
+        return Ok(Vec::new());
+    };
+    if live.fields.is_empty() {
+        return Ok(Vec::new());
+    }
+    let layout = layout_with_registry_storage(table, live);
+    let q = format!(
+        "SELECT {} FROM {} WHERE (? IS NULL OR {id} > ?) ORDER BY {id} LIMIT ?",
+        column_list(&layout),
+        quote_sql_ident(table),
+        id = quote_sql_ident("id")
+    );
+    let limit = i64::try_from(limit).unwrap_or(i64::MAX);
+    let rows = sqlx::query(&q)
+        .bind(after)
+        .bind(after)
+        .bind(limit)
+        .fetch_all(pool)
+        .await
+        .map_err(|e| Error::database(e.to_string()))?;
+    Ok(rows
+        .iter()
+        .map(|r| row_from_sqlx_sqlite(table, &layout, r))
+        .collect())
+}
+
+/// One page of typed rows ordered by primary key (Postgres). Missing table → empty.
+pub async fn scan_table_typed_postgres(
+    pool: &sqlx::PgPool,
+    table: &str,
+    after: Option<&str>,
+    limit: usize,
+) -> Result<Vec<Value>> {
+    assert_safe_table(table)?;
+    let Some(live) = inspect_typed_layout_postgres(pool, table).await? else {
+        return Ok(Vec::new());
+    };
+    if live.fields.is_empty() {
+        return Ok(Vec::new());
+    }
+    let layout = layout_with_registry_storage(table, live);
+    let q = format!(
+        "SELECT {} FROM {} WHERE ($1::text IS NULL OR {id} > $1) ORDER BY {id} LIMIT $2",
+        column_list(&layout),
+        quote_sql_ident(table),
+        id = quote_sql_ident("id")
+    );
+    let limit = i64::try_from(limit).unwrap_or(i64::MAX);
+    let rows = sqlx::query(&q)
+        .bind(after)
+        .bind(limit)
+        .fetch_all(pool)
+        .await
+        .map_err(|e| Error::database(e.to_string()))?;
+    Ok(rows
+        .iter()
+        .map(|r| row_from_sqlx_postgres(table, &layout, r))
+        .collect())
 }
 
 fn row_from_sqlx_sqlite(
@@ -1012,7 +1088,7 @@ pub async fn merge_record_typed_postgres(
 /// Map a sqlx SQLite row with arbitrary columns into Valence JSON (SELECT *).
 ///
 /// SQLite type affinity lets `try_get::<String>` succeed for INTEGER columns
-/// (e.g. unix-second datetimes). Prefer the declared column type so those stay
+/// (e.g. unix-millisecond datetimes). Prefer the declared column type so those stay
 /// JSON numbers — otherwise `datetime_unix` treats `"1700000000"` as RFC3339 and
 /// fails with chrono's "premature end of input".
 ///
@@ -1046,7 +1122,7 @@ pub fn map_select_row_sqlite(table: &str, row: &sqlx::sqlite::SqliteRow) -> Valu
         }
         if upper == "INTEGER" || upper == "INT" || upper == "BIGINT" {
             // Prefer i64: sqlx can coerce any integer to bool (nonzero → true), which
-            // would destroy unix-second datetimes and other numeric cells.
+            // would destroy unix-millisecond datetimes and other numeric cells.
             if let Ok(i) = row.try_get::<i64, _>(name) {
                 fields.insert(name.to_string(), Value::Number(i.into()));
             }
@@ -1139,10 +1215,13 @@ fn map_select_row_sqlite_with_layout(
         };
         fields.insert(f.name.clone(), val);
     }
-    // Include any unexpected SELECT columns (best-effort).
+    // Include any unexpected SELECT columns (best-effort), never retired ones.
     for col in row.columns() {
         let name = col.name();
-        if name.eq_ignore_ascii_case("id") || fields.contains_key(name) {
+        if name.eq_ignore_ascii_case("id")
+            || fields.contains_key(name)
+            || layout.retired.iter().any(|r| r == name)
+        {
             continue;
         }
         if let Ok(s) = row.try_get::<String, _>(name) {
@@ -1199,7 +1278,10 @@ fn map_select_row_postgres_with_layout(
     }
     for col in row.columns() {
         let name = col.name();
-        if name.eq_ignore_ascii_case("id") || fields.contains_key(name) {
+        if name.eq_ignore_ascii_case("id")
+            || fields.contains_key(name)
+            || layout.retired.iter().any(|r| r == name)
+        {
             continue;
         }
         if let Ok(v) = row.try_get::<Value, _>(name) {

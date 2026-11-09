@@ -42,8 +42,11 @@ mod hops;
 mod matrix;
 mod model_contract;
 mod on_delete;
+mod platform_transfer_contract;
 mod runner;
+mod scan_contract;
 mod scenario;
+mod transfer_contract;
 
 #[cfg(feature = "surreal-mem")]
 pub use admin_contract::run_admin_contract_surreal_mem;
@@ -87,8 +90,11 @@ pub use on_delete::{
     run_on_delete_cascade_same_backend, run_on_delete_hop_pairs, run_on_delete_remove_edge,
     run_on_delete_restrict_blocks, run_on_delete_set_null, run_on_delete_set_null_cross_engine,
 };
+pub use platform_transfer_contract::{run_platform_transfer_contract, FamilyCount};
 pub use runner::{RunMode, ScenarioResult, ScenarioRunner, StepTiming};
+pub use scan_contract::run_scan_contract;
 pub use scenario::{ScenarioSpec, ScenarioStep};
+pub use transfer_contract::{run_transfer_contract, run_transfer_resume_contract};
 
 pub use fixtures::{CATALOG_TTL_PROBE_SECONDS, CATALOG_TTL_PROBE_TABLE};
 

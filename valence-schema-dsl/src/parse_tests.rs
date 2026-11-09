@@ -395,3 +395,240 @@ fn defer_to_edge_empty_edge_sad() {
         "{err_msg}"
     );
 }
+
+fn retired_schema(retired: &str) -> String {
+    format!(
+        r#"
+            Task {{
+                repository: "https://github.com/unified-field-dev/valence",
+                table: "task",
+                version: "0.2.0",
+                fields: [
+                    id: {{ r#type: FieldType::String, primary_key: true, required: true }},
+                    title: {{ r#type: FieldType::String, required: true }}
+                ],
+                retired_fields: {retired}
+            }}
+        "#
+    )
+}
+
+fn retired_err(retired: &str) -> String {
+    let schema = syn::parse_str::<SchemaSpec>(&retired_schema(retired)).expect("parse");
+    match schema.to_schema() {
+        Ok(_) => panic!("expected retired_fields error for {retired}"),
+        Err(e) => e.to_string(),
+    }
+}
+
+#[test]
+fn retired_fields_parse_happy() {
+    let schema = syn::parse_str::<SchemaSpec>(&retired_schema(r#"["project", "legacy_flag"]"#))
+        .expect("parse");
+    let parsed = schema.to_schema().expect("to_schema");
+    assert_eq!(parsed.retired_fields, vec!["project", "legacy_flag"]);
+    assert_eq!(parsed.fields.len(), 2);
+}
+
+#[test]
+fn retired_fields_also_in_fields_compile_error_sad() {
+    let err = retired_err(r#"["title"]"#);
+    assert!(err.contains("still declared in `fields`"), "{err}");
+}
+
+#[test]
+fn retired_fields_id_compile_error_sad() {
+    let err = retired_err(r#"["id"]"#);
+    assert!(err.contains("cannot retire `id`"), "{err}");
+}
+
+#[test]
+fn retired_fields_duplicate_compile_error_sad() {
+    let err = retired_err(r#"["project", "project"]"#);
+    assert!(err.contains("twice"), "{err}");
+}
+
+#[test]
+fn retired_fields_invalid_ident_compile_error_sad() {
+    let err = retired_err(r#"["not a name"]"#);
+    assert!(err.contains("not a valid field identifier"), "{err}");
+}
+
+fn edge_policy_schema(connection: &str) -> String {
+    format!(
+        r#"
+            Doc {{
+                repository: "https://github.com/unified-field-dev/valence",
+                table: "doc",
+                version: "0.1.0",
+                fields: [
+                    id: {{ r#type: FieldType::String, primary_key: true, required: true }},
+                    owner: {{ r#type: FieldType::Record("user"), required: true }}
+                ],
+                connections: [ {connection} ]
+            }}
+        "#
+    )
+}
+
+fn edge_policy_err(connection: &str) -> String {
+    let schema = syn::parse_str::<SchemaSpec>(&edge_policy_schema(connection)).expect("parse");
+    match schema.to_schema() {
+        Ok(_) => panic!("expected edge_policy error for {connection}"),
+        Err(e) => e.to_string(),
+    }
+}
+
+#[test]
+fn edge_policy_parses_on_many_to_many_happy() {
+    let schema = syn::parse_str::<SchemaSpec>(&edge_policy_schema(
+        r#"labels: { table: "label", cardinality: ManyToMany, edge_table: "doc_label",
+                     edge_policy: SourceUpdateTargetRead, on_delete: Cascade }"#,
+    ))
+    .expect("parse");
+    let parsed = schema.to_schema().expect("to_schema");
+    assert_eq!(
+        parsed.connections[0].edge_policy.as_deref(),
+        Some("SourceUpdateTargetRead")
+    );
+}
+
+#[test]
+fn edge_policy_on_has_one_compile_error_sad() {
+    let err = edge_policy_err(
+        r#"owner: { table: "user", edge_policy: SourceUpdateTargetRead, on_delete: Cascade }"#,
+    );
+    assert!(
+        err.contains("only applies to cardinality ManyToMany"),
+        "{err}"
+    );
+    assert!(err.contains("HasOne"), "{err}");
+}
+
+#[test]
+fn edge_policy_unknown_value_compile_error_sad() {
+    let err = edge_policy_err(
+        r#"labels: { table: "label", cardinality: ManyToMany, edge_table: "doc_label",
+                     edge_policy: AnyoneMayLink, on_delete: Cascade }"#,
+    );
+    assert!(err.contains("unknown edge_policy `AnyoneMayLink`"), "{err}");
+}
+
+fn spectra_export_schema(block: &str) -> syn::Result<ParsedSchema> {
+    let input = format!(
+        r#"
+            UserCounter {{
+                repository: "https://github.com/unified-field-dev/valence",
+                table: "user_counter",
+                version: "0.1.0",
+                {block}
+                fields: [
+                    id: {{ r#type: FieldType::String, primary_key: true, required: true }}
+                ]
+            }}
+        "#
+    );
+    syn::parse_str::<SchemaSpec>(&input)?.to_schema()
+}
+
+#[test]
+fn test_export_block_absent_is_opt_out() {
+    assert!(spectra_export_schema("").unwrap().spectra_export.is_none());
+}
+
+#[test]
+fn test_export_block_explicit_names() {
+    let parsed = spectra_export_schema(
+        r#"spectra_export: { cadence: Daily, job_name: "user-counter-nightly", target_table: "user_counter_export" },"#,
+    )
+    .unwrap();
+    let cfg = parsed.spectra_export.expect("spectra_export");
+    assert_eq!(cfg.cadence, ParsedSpectraExportCadence::Daily);
+    assert_eq!(cfg.job_name, "user-counter-nightly");
+    assert_eq!(cfg.target_table, "user_counter_export");
+}
+
+#[test]
+fn test_export_block_defaults_even_when_declared_before_table() {
+    let input = r#"
+        UserCounter {
+            spectra_export: { cadence: ThreeHours },
+            repository: "https://github.com/unified-field-dev/valence",
+            table: "user_counter",
+            version: "0.1.0",
+            fields: [ id: { r#type: FieldType::String, primary_key: true, required: true } ]
+        }
+    "#;
+    let parsed = syn::parse_str::<SchemaSpec>(input)
+        .unwrap()
+        .to_schema()
+        .unwrap();
+    let cfg = parsed.spectra_export.unwrap();
+    assert_eq!(cfg.job_name, "user_counter_three_hours_export");
+    assert_eq!(cfg.target_table, "user_counter_export");
+}
+
+#[test]
+fn test_export_block_every_cadence_parses() {
+    for (name, snake) in [
+        ("Hourly", "hourly"),
+        ("ThreeHours", "three_hours"),
+        ("SixHours", "six_hours"),
+        ("TwelveHours", "twelve_hours"),
+        ("Daily", "daily"),
+        ("Weekly", "weekly"),
+    ] {
+        let cfg = spectra_export_schema(&format!("spectra_export: {{ cadence: {name} }},"))
+            .unwrap()
+            .spectra_export
+            .unwrap();
+        assert_eq!(cfg.cadence.variant_name(), name);
+        assert_eq!(cfg.job_name, format!("user_counter_{snake}_export"));
+    }
+}
+
+#[test]
+fn test_export_block_unknown_cadence_rejected() {
+    let err = spectra_export_schema("spectra_export: { cadence: Monthly },").unwrap_err();
+    let msg = err.to_string();
+    assert!(
+        msg.contains("Unknown spectra_export cadence `Monthly`"),
+        "{msg}"
+    );
+    assert!(msg.contains("Daily"), "{msg}");
+}
+
+#[test]
+fn test_export_block_cron_string_rejected() {
+    let err = spectra_export_schema(r#"spectra_export: { cadence: "0 0 * * *" },"#).unwrap_err();
+    assert!(err.to_string().contains("not a cron string"), "{err}");
+}
+
+#[test]
+fn test_export_block_sad_paths() {
+    for (block, needle) in [
+        (
+            "spectra_export: { job_name: \"x\" },",
+            "cadence is required",
+        ),
+        (
+            "spectra_export: { cadence: Daily, cron: \"x\" },",
+            "Unknown spectra_export key",
+        ),
+        (
+            "spectra_export: { cadence: Daily, cadence: Weekly },",
+            "Duplicate spectra_export key",
+        ),
+        (
+            "spectra_export: { cadence: Daily, job_name: \"\" },",
+            "job_name must be non-empty",
+        ),
+        (
+            "spectra_export: { cadence: Daily, target_table: \"a b\" },",
+            "target_table must be non-empty",
+        ),
+    ] {
+        let err = spectra_export_schema(block).unwrap_err();
+        assert!(err.to_string().contains(needle), "{block}: {err}");
+    }
+}

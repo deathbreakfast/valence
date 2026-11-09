@@ -71,7 +71,8 @@ pub fn use_(input: TokenStream) -> TokenStream {
 /// | `database` | no | Path to a `const`/`static` `DatabaseEvaluator`; defaults to `DEFAULT_IN_MEMORY` |
 /// | `policies` | no | Read/write/update/delete allow lists |
 /// | `connections` | no | Graph/FK edges (`Cardinality`, `OnDelete`) |
-/// | `ttl` | no | Create-only TTL (`ttl: { seconds }`); native Redis/Mongo; Deferred backends stamp `__valence_expire_at`, ensure an expire-at index, and warn until `valence_platform::ttl_sweep::register_ttl_service`; boot with `Valence::ensure_ttl_for_all` (see `valence::ttl`) |
+/// | `ttl` | no | Create-only TTL (`ttl: { seconds }`); native Redis/Mongo; Deferred backends stamp `__valence_expire_at`, ensure an expire-at index, and log an info notice until `valence_platform::ttl_sweep::register_ttl_service`; boot with `Valence::ensure_ttl_for_all` (see `valence::ttl`) |
+/// | `spectra_export` | no | Opt in to periodic Spectra partition export: `spectra_export: { cadence: Daily, job_name?, target_table? }`. `cadence` is `Hourly`, `ThreeHours`, `SixHours`, `TwelveHours`, `Daily` or `Weekly` (cron strings are rejected; the schedule is platform-owned). Defaults: `job_name` `{table}_{cadence}_export`, `target_table` `{table}_export`. Surfaces as `Schema.partition_export` |
 /// | `side_effects` | no | Mutation hooks |
 /// | `composite_key` | no | Multi-field primary key |
 /// | `traits` | no | Mix in `valence_trait_schema!` names |
@@ -86,7 +87,7 @@ pub fn use_(input: TokenStream) -> TokenStream {
 ///   `.serde_error(JsonAsSerdeError::Panic|Error)` (default `Error`)
 /// - `FieldType::Record("table")` — `RecordId`; optional `.target("path::Model")` for hops
 /// - `FieldType::Currency` — `valence::Currency` (`CurrencyCode` + `amount_minor`)
-/// - `FieldType::DateTime` — Model API `chrono::DateTime<Utc>`; storage is **UTC unix seconds**
+/// - `FieldType::DateTime` — Model API `chrono::DateTime<Utc>`; storage is **UTC unix milliseconds**; legacy seconds still read
 ///
 /// Connections accept `model:` or `target:` (aliases) for an explicit model path.
 ///
@@ -160,7 +161,7 @@ pub fn valence_schema(input: TokenStream) -> TokenStream {
 ///
 /// | Attribute | Required | Description |
 /// |-----------|----------|-------------|
-/// | `r#type` (or `type`) | yes | `FieldType` expression. Supported variants include `String`, `Integer`, `Boolean`, `DateTime` (Model API `DateTime<Utc>`; storage is **UTC unix seconds**), `Json` (`serde_json::Value`), `JsonAs("path::Type")` (typed JSON; optional `.serde_error(JsonAsSerdeError::Panic\|Error)`, default `Error`), `Record("table")` (optional `.target("path::Model")` for connection hops), `Currency` (`valence::Currency` / ISO-4217 `CurrencyCode`), `Enum` / `ExternalEnum`. |
+/// | `r#type` (or `type`) | yes | `FieldType` expression. Supported variants include `String`, `Integer`, `Boolean`, `DateTime` (Model API `DateTime<Utc>`; storage is **UTC unix milliseconds**; legacy seconds still read), `Json` (`serde_json::Value`), `JsonAs("path::Type")` (typed JSON; optional `.serde_error(JsonAsSerdeError::Panic\|Error)`, default `Error`), `Record("table")` (optional `.target("path::Model")` for connection hops), `Currency` (`valence::Currency` / ISO-4217 `CurrencyCode`), `Enum` / `ExternalEnum`. |
 /// | `required` | no | Whether the field must be present (default `false`) |
 /// | `primary_key` | no | Whether the field is a primary key (default `false`) |
 /// | `unique` | no | Whether values must be unique (default `false`) |

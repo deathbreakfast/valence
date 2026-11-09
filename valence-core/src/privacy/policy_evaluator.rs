@@ -11,6 +11,10 @@ use std::any::Any;
 /// Per-rule evaluator referenced from schema metadata (not registered on the builder).
 ///
 /// Attach consts in `valence_schema!` `policies:` blocks. See [`crate::privacy`].
+///
+/// An evaluator that needs a host port (a bot gate, say) reads it from the `&Valence` it is
+/// given with [`Valence::extension`]; the host registers it per runtime with
+/// [`crate::ValenceBuilder::extension`].
 #[async_trait]
 pub trait PolicyEvaluator: Send + Sync + std::fmt::Debug + Any + 'static {
     fn name(&self) -> &'static str;

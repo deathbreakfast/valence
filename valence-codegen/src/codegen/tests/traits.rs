@@ -333,6 +333,36 @@ valence_schema! {
 }
 
 #[test]
+fn trait_model_datetime_fields_use_unix_serde() {
+    let trait_schema = r#"
+use valence::prelude::*;
+
+valence_trait_schema! {
+    Stamped {
+        repository: "https://github.com/unified-field-dev/valence",
+        fields: [
+            created_at: { r#type: FieldType::Datetime, required: true },
+            deleted_at: { r#type: FieldType::Datetime, required: false },
+        ],
+    }
+}
+"#;
+    let path = write_temp_schema_file(trait_schema, "stamped_valence_trait.rs");
+    let generated = generate_from_trait_file(&path).expect("trait codegen failed");
+
+    assert!(
+        generated.contains("#[serde(with = \"valence::datetime_unix\")]\n    created_at"),
+        "Expected required datetime serde attribute on StampedModel"
+    );
+    assert!(
+        generated.contains(
+            "#[serde(default, with = \"valence::datetime_unix::option\")]\n    deleted_at"
+        ),
+        "Expected optional datetime serde attribute on StampedModel"
+    );
+}
+
+#[test]
 fn trait_field_keeps_indexed_flag_on_the_model_happy() {
     let trait_schema = r#"
 use valence::prelude::*;

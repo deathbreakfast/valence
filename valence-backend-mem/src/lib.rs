@@ -5,6 +5,7 @@
 mod backend;
 mod index;
 mod query_filter;
+mod semi_join;
 
 pub use backend::{InMemoryBackend, ENGINE_ID};
 pub use valence_core::{router_key, DatabaseRouter, KnownEngines, DEFAULT_IN_MEMORY_ROUTER_KEY};

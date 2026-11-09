@@ -53,6 +53,7 @@ pub mod compiled_query;
 pub mod compiled_query_factory;
 pub mod connection;
 pub mod currency;
+pub mod data_migration;
 pub mod data_use;
 pub mod database_retry;
 pub mod datetime_unix;
@@ -66,6 +67,7 @@ pub mod known_engines;
 pub mod model;
 pub mod owner_ref;
 pub mod ownership;
+pub mod partition_export;
 pub mod ports;
 pub mod privacy;
 pub mod privacy_policies;
@@ -122,7 +124,7 @@ pub use backend::SqlQueryCompiler;
 pub use backend::SurrealQueryCompiler;
 pub use backend::{
     create_record, delete_record, get_record, merge_record, update_record, upsert_record,
-    BackendCapabilities, DatabaseBackend,
+    BackendCapabilities, DatabaseBackend, EdgeRow, WriteOp,
 };
 pub use batch::BatchCreatable;
 pub use compiled_query::CompiledQuery;
@@ -140,8 +142,8 @@ pub use deletion::{
     apply_deletion_dag, apply_deletion_node, check_dag_delete_privacy,
     check_dag_delete_privacy_with_registry, delete_entity_now, dispatch,
     is_deletion_dispatcher_registered, normalize_record_id_for_deletion, prepare_deletion,
-    register_deletion_dispatcher, register_noop_deletion_dispatcher_for_tests, DeletionMode,
-    DeletionRequest, DeletionService, PreparedDeletion,
+    register_deletion_dispatcher, register_noop_deletion_dispatcher_for_tests,
+    require_deletion_dispatcher, DeletionMode, DeletionRequest, DeletionService, PreparedDeletion,
 };
 #[doc(hidden)]
 pub use deletion::{
@@ -161,10 +163,12 @@ pub use known_engines::KnownEngines;
 pub use model::{FieldOperation, Model, PrivacyError, SchemaMetadata};
 pub use owner_ref::{OwnerKind, OwnerRef, OwnershipConfig};
 pub use ownership::OwnershipService;
+pub use partition_export::{PartitionExportCadence, PartitionExportConfig};
 pub use ports::actor::{ActorContext, ActorFactory, JsonActorContext, JsonActorFactory};
 pub use ports::endpoints::{
     DatabaseEndpointResolver, EnvEndpointResolver, NoopEndpointResolver, StaticEndpointResolver,
 };
+pub use ports::extensions::PortExtensions;
 pub use ports::secrets::{EnvSecretProvider, NoOpSecretProvider, SecretProvider};
 pub use privacy::{
     parent_op_for_defer, privacy_bypass_active, PolicyEvaluator, PrivacyEvaluator,
@@ -173,7 +177,8 @@ pub use privacy::{
 };
 pub use query::{
     DateTimePredicate, HopSource, HopType, IdOnlyRecord, IntPredicate, NullPredicate, QueryCore,
-    RecordPredicate, SortDirection, StringPredicate, MAX_QUERY_LIMIT, MAX_QUERY_OFFSET,
+    QueryStats, RecordPredicate, SortDirection, StringPredicate, MAX_QUERY_HIDDEN_SCAN,
+    MAX_QUERY_LIMIT, MAX_QUERY_OFFSET,
 };
 pub use query_compiler::QueryCompiler;
 pub use query_compiler_registry::{

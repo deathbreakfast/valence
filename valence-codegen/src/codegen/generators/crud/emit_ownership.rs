@@ -110,6 +110,10 @@ pub(super) fn emit_batch_creatable_tokens(cx: &CrudEmitCtx<'_>) -> TokenStream {
                 self.id = Some(id);
             }
 
+            fn validate_batch_row(row: &serde_json::Value) -> valence::Result<()> {
+                Self::__reject_unset_read_hidable(row)
+            }
+
             #ownership_hook
         }
     }
@@ -218,6 +222,27 @@ fn unique_constraint_helpers_tokens(unique_field_names: &[LitStr]) -> TokenStrea
                 if excluding_id.is_some_and(|id| id == matched_id) {
                     continue;
                 }
+                // The probe reads storage directly. Only name the table and field when the
+                // actor could read the conflicting row; otherwise the error would show that
+                // a hidden row holds this value. Lookup failures also stay generic.
+                let readable = match valence
+                    .backend_for_table(<Self as valence::Model>::table_name())?
+                    .get_record(<Self as valence::Model>::table_name(), &matched_id)
+                    .await
+                {
+                    Ok(Some(existing)) => match Self::__schema_metadata() {
+                        Ok(schema) => valence::PrivacyEvaluator::check_entity_read(
+                            schema, &existing, valence,
+                        )
+                        .await
+                        .is_ok(),
+                        Err(_) => false,
+                    },
+                    Ok(None) | Err(_) => false,
+                };
+                if !readable {
+                    return Err(valence::Error::conflict());
+                }
                 return Err(valence::Error::unique_violation(
                     <Self as valence::Model>::table_name(),
                     field_name,
@@ -284,5 +309,19 @@ pub(super) fn emit_model_privacy_and_unique_impl(cx: &CrudEmitCtx<'_>) -> TokenS
             #privacy
             #update_with_before
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn unique_probe_names_the_field_only_after_a_read_check() {
+        let code = unique_constraint_helpers_tokens(&[]).to_string();
+        let read_check = code.find("check_entity_read").expect("read check");
+        let conflict = code.find("Error :: conflict").expect("generic conflict");
+        let named = code.find("unique_violation").expect("named violation");
+        assert!(read_check < conflict && conflict < named);
     }
 }

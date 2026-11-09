@@ -7,7 +7,7 @@ use crate::error::{Error, Result};
 pub enum FieldStorage {
     /// UTF-8 text / record id string.
     String,
-    /// Signed integer (also DateTime unix seconds).
+    /// Signed integer (also DateTime unix milliseconds).
     Integer,
     /// Decimal / floating numeric.
     Decimal,
@@ -120,7 +120,7 @@ pub fn logical_type_to_storage(field_type: &str) -> Result<FieldStorage> {
         .to_ascii_lowercase();
     match base.as_str() {
         "string" | "enum" | "text" | "uuid" => Ok(FieldStorage::String),
-        // Codegen metadata maps `datetime` → `timestamptz` (unix seconds as integer).
+        // Codegen metadata maps `datetime` → `timestamptz` (unix milliseconds as integer).
         "integer" | "int" | "datetime" | "timestamptz" | "timestamp" => Ok(FieldStorage::Integer),
         "decimal" | "float" | "number" => Ok(FieldStorage::Decimal),
         "boolean" | "bool" => Ok(FieldStorage::Boolean),

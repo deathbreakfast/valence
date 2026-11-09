@@ -237,6 +237,59 @@ valence_schema! {
 }
 
 #[test]
+fn many_to_many_edge_writes_check_update_privacy_first() {
+    let schema = r#"
+use valence::prelude::*;
+
+valence_schema! {
+    TestArticle {
+        repository: "https://github.com/unified-field-dev/valence",
+        table: "test_article",
+        version: "0.1.0",
+        description: "Article with ManyToMany tags",
+
+        fields: [
+            id: { r#type: FieldType::String, primary_key: true, required: true },
+            title: { r#type: FieldType::String, required: true },
+        ],
+        connections: [
+            tags: {
+                table: "test_tag",
+                cardinality: ManyToMany,
+                edge_table: "article_tag",
+                on_delete: Cascade,
+                model: "crate::generated::TestTag",
+            },
+        ],
+    }
+}
+"#;
+
+    let path = write_temp_schema_file(schema, "manytomany_edge_privacy_schema.rs");
+    let generated = generate_from_schema_file(&path, &HashMap::<String, ParsedTraitDef>::new())
+        .expect("codegen with ManyToMany connection failed");
+    let compact: String = generated.split_whitespace().collect();
+
+    for (method, raw) in [
+        ("relate_to_tag", ".relate_edge("),
+        ("unrelate_from_tag", ".unrelate_edge("),
+    ] {
+        let body = compact
+            .split_once(&format!("fn{method}("))
+            .unwrap_or_else(|| panic!("missing {method}"))
+            .1;
+        let check = body
+            .find("stored.check_update_privacy(valence).await?")
+            .unwrap();
+        let write = body.find(raw).unwrap();
+        assert!(
+            check < write,
+            "{method} must check update privacy before the edge write"
+        );
+    }
+}
+
+#[test]
 fn test_no_policies_on_connection() {
     // Connections without policies key should parse (policies omitted per design)
     let schema = r#"
@@ -374,5 +427,49 @@ valence_schema! {
         result.is_ok(),
         "ManyToMany connection without FK should parse: {:?}",
         result.err()
+    );
+}
+
+#[test]
+fn edge_policy_emitted_in_connection_metadata_happy() {
+    let schema = r#"
+use valence::prelude::*;
+
+valence_schema! {
+    TestNote {
+        repository: "https://github.com/unified-field-dev/valence",
+        table: "test_note",
+        version: "0.1.0",
+        description: "Note whose ManyToMany tag edges are privacy-checked",
+
+        fields: [
+            id: { r#type: FieldType::String, primary_key: true, required: true },
+        ],
+        connections: [
+            tags: {
+                table: "test_tag",
+                cardinality: ManyToMany,
+                edge_table: "note_tag",
+                edge_policy: SourceUpdateTargetRead,
+                on_delete: Cascade,
+                model: "crate::generated::TestTag",
+            },
+        ],
+    }
+}
+"#;
+
+    let path = write_temp_schema_file(schema, "edge_policy_schema.rs");
+    let generated = generate_from_schema_file(&path, &HashMap::<String, ParsedTraitDef>::new())
+        .expect("codegen with edge_policy failed");
+    let compact: String = generated.chars().filter(|c| !c.is_whitespace()).collect();
+
+    assert!(
+        compact.contains(r#"edge_policy:Some("SourceUpdateTargetRead".to_string())"#),
+        "Expected edge_policy in SchemaConnection metadata"
+    );
+    assert!(
+        compact.contains(r#".relate_edge("note_tag",from_rid,to_rid,purpose)"#),
+        "Expected relate_to_tag to go through Valence::relate_edge"
     );
 }

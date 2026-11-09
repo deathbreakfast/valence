@@ -41,32 +41,9 @@ valence-testkit = { path = "../valence-testkit", default-features = false, featu
 tempfile = "3"
 
 [[test]]
-name = "embedded_crud"
+name = "integration"
+path = "tests/integration/main.rs"
 required-features = ["embedded-mem"]
-
-[[test]]
-name = "compiled_query"
-required-features = ["embedded-mem"]
-
-[[test]]
-name = "graph_edges"
-required-features = ["embedded-mem"]
-
-[[test]]
-name = "rocksdb_persistence"
-required-features = ["embedded-rocksdb"]
-
-[[test]]
-name = "backend_contract"
-required-features = ["embedded-mem"]
-
-[[test]]
-name = "typed_field_roundtrip"
-required-features = ["embedded-mem"]
-
-[[test]]
-name = "bootstrap_inventory"
-required-features = ["embedded-mem", "inventory"]
 
 [lints]
 workspace = true

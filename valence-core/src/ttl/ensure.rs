@@ -46,13 +46,25 @@ fn warn_non_native_once(table: &str, engine_id: &str, capability: BackendTtlCapa
         BackendTtlCapability::SupportedNative => "native",
     };
     WARN_EMIT_COUNT.fetch_add(1, Ordering::SeqCst);
-    tracing::warn!(
-        target: "valence_ttl",
-        table,
-        engine_id,
-        capability = capability_label,
-        "schema TTL is not natively supported on this backend; wire valence_platform::ttl_sweep (register_ttl_service) for Deferred engines"
-    );
+    // Deferred engines already have the expire-at index; only the host-side sweeper is
+    // missing, which is a setup reminder rather than a fault.
+    if capability == BackendTtlCapability::Deferred {
+        tracing::info!(
+            target: "valence_ttl",
+            table,
+            engine_id,
+            capability = capability_label,
+            "schema TTL is not native on this backend; expired rows are deleted only once the host registers valence_platform::ttl_sweep::register_ttl_service"
+        );
+    } else {
+        tracing::warn!(
+            target: "valence_ttl",
+            table,
+            engine_id,
+            capability = capability_label,
+            "schema TTL is not supported on this backend; expired rows are never deleted"
+        );
+    }
     #[cfg(feature = "instrumentation")]
     crate::instrumentation::ttl::record_non_native_warn(capability_label, engine_id);
 }
@@ -221,7 +233,9 @@ mod tests {
             iters: Vec::new(),
             composite_key: Vec::new(),
             traits: Vec::new(),
+            retired_fields: Vec::new(),
             ttl,
+            partition_export: None,
             ownership: None,
             meta: SchemaMeta {
                 retention: "365 days".to_string(),
@@ -250,6 +264,7 @@ mod tests {
             crate::BackendCapabilities {
                 supports_merge: false,
                 supports_graph_edges: false,
+                supports_transactions: false,
                 telemetry_label: "fake",
             }
         }
@@ -387,6 +402,56 @@ mod tests {
             .unwrap();
         assert_eq!(ttl_warn_emit_count_for_tests(), 1);
         assert_eq!(*backend.apply_calls.lock().unwrap(), 0);
+    }
+
+    struct LevelCapture(std::sync::Arc<Mutex<Vec<tracing::Level>>>);
+
+    impl tracing::Subscriber for LevelCapture {
+        fn enabled(&self, _: &tracing::Metadata<'_>) -> bool {
+            true
+        }
+        fn new_span(&self, _: &tracing::span::Attributes<'_>) -> tracing::span::Id {
+            tracing::span::Id::from_u64(1)
+        }
+        fn record(&self, _: &tracing::span::Id, _: &tracing::span::Record<'_>) {}
+        fn record_follows_from(&self, _: &tracing::span::Id, _: &tracing::span::Id) {}
+        fn event(&self, event: &tracing::Event<'_>) {
+            if event.metadata().target() == "valence_ttl"
+                && *event.metadata().level() <= tracing::Level::INFO
+            {
+                self.0.lock().unwrap().push(*event.metadata().level());
+            }
+        }
+        fn enter(&self, _: &tracing::span::Id) {}
+        fn exit(&self, _: &tracing::span::Id) {}
+    }
+
+    async fn levels_for(capability: BackendTtlCapability, table: &str) -> Vec<tracing::Level> {
+        let seen = std::sync::Arc::new(Mutex::new(Vec::new()));
+        let backend = FakeBackend {
+            capability,
+            apply_calls: std::sync::Mutex::new(0),
+            apply_err: false,
+        };
+        let _guard = tracing::subscriber::set_default(LevelCapture(seen.clone()));
+        ensure_ttl_for_table_on_backend(table, &backend, &policy())
+            .await
+            .unwrap();
+        let out = seen.lock().unwrap().clone();
+        out
+    }
+
+    #[tokio::test]
+    async fn deferred_notice_is_info_unsupported_is_warn() {
+        let _lock = lock_warn_tests();
+        reset_warn_state();
+        let deferred = levels_for(BackendTtlCapability::Deferred, "t_level_deferred").await;
+        let unsupported =
+            levels_for(BackendTtlCapability::Unsupported, "t_level_unsupported").await;
+        assert!(deferred.contains(&tracing::Level::INFO));
+        assert!(!deferred.contains(&tracing::Level::WARN));
+        assert_eq!(unsupported, vec![tracing::Level::WARN]);
+        assert_eq!(ttl_warn_emit_count_for_tests(), 2);
     }
 
     #[tokio::test]

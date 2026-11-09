@@ -3,6 +3,7 @@
 use serde_json::Value;
 use sqlx::postgres::PgPool;
 use sqlx::{Column, Row};
+use valence_core::backend::EdgeRow;
 use valence_core::error::{Error, Result};
 use valence_core::record_id::RecordId;
 use valence_core::storage_layout::StorageLayout;
@@ -79,6 +80,17 @@ pub async fn execute_select_postgres(
             if e.as_database_error()
                 .and_then(|d| d.code())
                 .is_some_and(|code| code == "42P01") =>
+        {
+            return Ok(vec![]);
+        }
+        // 42703 undefined_column: `define_index` can create the ownership table before any
+        // ownership row exists, with only the indexed columns. Until the first write adds
+        // the rest it has no rows.
+        Err(e)
+            if sql.contains("valence_data_ownership")
+                && e.as_database_error()
+                    .and_then(|d| d.code())
+                    .is_some_and(|code| code == "42703") =>
         {
             return Ok(vec![]);
         }
@@ -276,6 +288,36 @@ pub async fn get_edge_sources_postgres(
         .collect())
 }
 
+pub async fn scan_edges_postgres(
+    pool: &PgPool,
+    edge_type: Option<&str>,
+    after: Option<&EdgeRow>,
+    limit: usize,
+) -> Result<Vec<EdgeRow>> {
+    ensure_edges_postgres(pool).await?;
+    let limit = i64::try_from(limit).unwrap_or(i64::MAX);
+    let rows = sqlx::query(crate::edges::scan_edges_postgres_sql())
+        .bind(edge_type)
+        .bind(after.is_some())
+        .bind(after.map_or("", |a| a.from.table()))
+        .bind(after.map_or("", |a| a.from.id()))
+        .bind(after.map_or("", |a| a.edge_type.as_str()))
+        .bind(after.map_or("", |a| a.to.table()))
+        .bind(after.map_or("", |a| a.to.id()))
+        .bind(limit)
+        .fetch_all(pool)
+        .await
+        .map_err(|e| Error::database(e.to_string()))?;
+    Ok(rows
+        .iter()
+        .map(|r| EdgeRow {
+            from: RecordId::new(r.get::<String, _>(0), r.get::<String, _>(1)),
+            edge_type: r.get::<String, _>(2),
+            to: RecordId::new(r.get::<String, _>(3), r.get::<String, _>(4)),
+        })
+        .collect())
+}
+
 pub async fn define_unique_index_postgres(
     pool: &PgPool,
     table: &str,
@@ -312,6 +354,7 @@ pub async fn define_unique_index_postgres(
                     record_table: None,
                 },
             ],
+            retired: Vec::new(),
         };
         ensure_layout_for_write_postgres(pool, &layout, ensured).await?;
     }
@@ -377,6 +420,7 @@ pub async fn apply_ttl_policy_postgres(
                     record_table: None,
                 },
             ],
+            retired: Vec::new(),
         };
         ensure_layout_for_write_postgres(pool, &layout, ensured).await?;
     }

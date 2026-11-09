@@ -259,6 +259,7 @@ impl valence::Model for TestEntity {
             valence::deletion::PreparedDeletion::Missing
             | valence::deletion::PreparedDeletion::Pending { .. } => Ok(()),
             valence::deletion::PreparedDeletion::Ready { bare_id, .. } => {
+                valence::deletion::require_deletion_dispatcher()?;
                 valence::ownership::OwnershipService::mark_pending_deletion(
                         Self::table_name(),
                         &bare_id,
@@ -299,6 +300,16 @@ impl valence::Model for TestEntity {
             data.check_create_privacy(valence).await?;
         }
         let record = serde_json::to_value(&data).map_err(valence::Error::from)?;
+        if let Some(ref existing) = before_snapshot {
+            let existing_value = serde_json::to_value(existing)
+                .map_err(valence::Error::from)?;
+            valence::PrivacyEvaluator::check_field_update_access(
+                Self::__schema_metadata()?,
+                Some(&existing_value),
+                &record,
+                valence.actor(),
+            )?;
+        }
         if before_snapshot.is_none() {
             Self::__reject_unset_read_hidable(&record)?;
         }
@@ -439,6 +450,30 @@ impl TestEntity {
             if excluding_id.is_some_and(|id| id == matched_id) {
                 continue;
             }
+            let readable = match valence
+                .backend_for_table(<Self as valence::Model>::table_name())?
+                .get_record(<Self as valence::Model>::table_name(), &matched_id)
+                .await
+            {
+                Ok(Some(existing)) => {
+                    match Self::__schema_metadata() {
+                        Ok(schema) => {
+                            valence::PrivacyEvaluator::check_entity_read(
+                                    schema,
+                                    &existing,
+                                    valence,
+                                )
+                                .await
+                                .is_ok()
+                        }
+                        Err(_) => false,
+                    }
+                }
+                Ok(None) | Err(_) => false,
+            };
+            if !readable {
+                return Err(valence::Error::conflict());
+            }
             return Err(
                 valence::Error::unique_violation(
                     <Self as valence::Model>::table_name(),
@@ -544,12 +579,41 @@ impl TestEntity {
         data.check_update_privacy(valence).await?;
         let record = serde_json::to_value(&data).map_err(valence::Error::from)?;
         Self::__assert_unique_constraints_for_record(&record, Some(id), valence).await?;
+        let __stored = valence::QueryCore::get_record_json(
+                <Self as valence::Model>::table_name(),
+                id,
+                valence,
+                valence::use_!(
+                    r"When a model **updates a row**, we **load the stored row first** so Update privacy is checked against what is actually saved. The same request path performing the update uses this load."
+                ),
+            )
+            .await?;
+        if let Some(__stored) = &__stored {
+            valence::PrivacyEvaluator::check_entity_access(
+                    Self::__schema_metadata()?,
+                    valence::PrivacyOperation::Update,
+                    __stored,
+                    valence,
+                )
+                .await?;
+            let (__visible, _) = valence::PrivacyEvaluator::filter_entity_fields(
+                Self::__schema_metadata()?,
+                __stored,
+                valence.actor(),
+            )?;
+            let __visible = serde_json::Value::Object(__visible.into_iter().collect());
+            valence::PrivacyEvaluator::check_field_update_access(
+                Self::__schema_metadata()?,
+                Some(&__visible),
+                &record,
+                valence.actor(),
+            )?;
+        }
         let (
             before_snapshot,
             sparse_patch,
         ): (Option<Self>, Option<serde_json::Map<String, serde_json::Value>>) = match before {
             Some(existing) => {
-                existing.check_update_privacy(valence).await?;
                 let existing_value = serde_json::to_value(&existing)
                     .map_err(valence::Error::from)?;
                 let mut patch = serde_json::Map::new();
@@ -572,9 +636,6 @@ impl TestEntity {
                         valence::DataUsePurpose::framework_nested(),
                     )
                     .await?;
-                if let Some(ref existing) = fetched {
-                    existing.check_update_privacy(valence).await?;
-                }
                 (fetched, None)
             }
         };
@@ -705,6 +766,9 @@ impl valence::BatchCreatable for TestEntity {
     }
     fn set_id(&mut self, id: valence::RecordId) {
         self.id = Some(id);
+    }
+    fn validate_batch_row(row: &serde_json::Value) -> valence::Result<()> {
+        Self::__reject_unset_read_hidable(row)
     }
     async fn ensure_ownership_after_batch_create(
         created_row: serde_json::Value,
@@ -919,6 +983,22 @@ impl<'a> TestEntityQuery<'a> {
         let mut results = self.limit(1).await?;
         Ok(results.pop())
     }
+    /// Execute the query and also return [`valence::QueryStats`].
+    ///
+    /// Rows match `.await`. `fetched` counts rows the backend returned for this
+    /// window before read privacy, so it can exceed the rows returned; page
+    /// until `fetched < limit`. Do not show it to users: it can reveal that
+    /// hidden rows exist.
+    pub async fn fetch_with_stats(
+        self,
+    ) -> valence::Result<(Vec<TestEntity>, valence::QueryStats)> {
+        self.inner
+            .execute_with_stats(
+                self.valence,
+                valence::DataUsePurpose::framework_nested(),
+            )
+            .await
+    }
 }
 impl<'a> std::future::IntoFuture for TestEntityQuery<'a> {
     type Output = valence::Result<Vec<TestEntity>>;
@@ -1004,7 +1084,9 @@ impl TestEntitySchema {
                     iters: Vec::new(),
                     composite_key: Vec::new(),
                     traits: Vec::new(),
+                    retired_fields: Vec::new(),
                     ttl: None,
+                    partition_export: None,
                     ownership: None,
                     meta: valence::SchemaMeta {
                         retention: "365 days".to_string(),

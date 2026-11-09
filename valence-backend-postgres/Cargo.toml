@@ -24,7 +24,8 @@ valence-core = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
-valence-testkit = { path = "../valence-testkit", default-features = false, features = ["postgres"] }
+valence-testkit = { path = "../valence-testkit", default-features = false, features = ["postgres", "sqlite"] }
+valence-backend-sqlite = { path = "../valence-backend-sqlite", package = "uf-valence-backend-sqlite" }
 
 [lints]
 workspace = true

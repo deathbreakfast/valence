@@ -1,6 +1,7 @@
 //! Valence runtime handle and builder.
 
 mod builder;
+mod edge_policy;
 mod factory;
 
 pub use builder::ValenceBuilder;
@@ -8,10 +9,11 @@ pub use factory::{RouterValenceFactory, RouterValenceFactoryConfig, ValenceFacto
 
 use crate::actor::Actor;
 use crate::backend::DatabaseBackend;
-use crate::error::Result;
+use crate::error::{Error, Result};
 use crate::owner_ref::OwnerRef;
 use crate::ports::actor::ActorFactory;
 use crate::ports::endpoints::DatabaseEndpointResolver;
+use crate::ports::extensions::PortExtensions;
 use crate::ports::secrets::SecretProvider;
 use crate::record_id::RecordId;
 use crate::request_cache::RequestPermissionCache;
@@ -30,6 +32,7 @@ pub struct Valence {
     secret_provider: Arc<dyn SecretProvider>,
     actor_factory: Arc<dyn ActorFactory>,
     endpoint_resolver: Arc<dyn DatabaseEndpointResolver>,
+    port_extensions: PortExtensions,
     actor: Actor,
     owner_override: Option<OwnerRef>,
     permission_cache: Option<RequestPermissionCache>,
@@ -68,6 +71,40 @@ impl Valence {
             })
     }
 
+    /// Apply several writes atomically on the backend that owns their tables.
+    ///
+    /// Raw backend-level batch: it does not run model privacy policies, ownership hooks or
+    /// side effects, so use it for rows the caller is already allowed to write.
+    /// Every table must route to the same backend, and that backend must report
+    /// [`crate::BackendCapabilities::supports_transactions`].
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::Validation`] when the ops span more than one backend or the backend
+    /// has no transaction support, and any error the backend raises while applying the batch
+    /// (in which case none of the writes are visible).
+    pub async fn apply_batch(&self, ops: Vec<crate::WriteOp>) -> Result<Vec<serde_json::Value>> {
+        let Some(first) = ops.first() else {
+            return Ok(Vec::new());
+        };
+        let backend = self.backend_for_table(first.table())?;
+        for op in &ops[1..] {
+            if !Arc::ptr_eq(&backend, &self.backend_for_table(op.table())?) {
+                return Err(Error::Validation(
+                    "cross-backend transactions are not supported: batch tables route to different backends"
+                        .into(),
+                ));
+            }
+        }
+        if !backend.capabilities().supports_transactions {
+            return Err(Error::Validation(format!(
+                "backend {} does not support transactions",
+                backend.engine_id()
+            )));
+        }
+        backend.apply_batch(ops).await
+    }
+
     pub fn telemetry_sink(&self) -> &Arc<dyn TelemetrySink> {
         &self.telemetry_sink
     }
@@ -82,6 +119,14 @@ impl Valence {
 
     pub fn endpoint_resolver(&self) -> &Arc<dyn DatabaseEndpointResolver> {
         &self.endpoint_resolver
+    }
+
+    /// Host port registered with [`ValenceBuilder::extension`], if any.
+    ///
+    /// Handles made with [`Self::with_actor`] and [`Self::with_owner_override`] share the
+    /// same ports. Meant for [`crate::PolicyEvaluator::evaluate`], which receives this handle.
+    pub fn extension<T: Send + Sync + 'static>(&self) -> Option<Arc<T>> {
+        self.port_extensions.get::<T>()
     }
 
     pub fn actor(&self) -> &Actor {
@@ -148,11 +193,22 @@ impl Valence {
     ///
     /// # Security
     ///
-    /// Raw edge write — no schema privacy. Hosts must authorize before calling.
+    /// The check depends on the ManyToMany connection on `from`'s schema whose `edge_table`
+    /// matches:
+    ///
+    /// - With `edge_policy: SourceUpdateTargetRead`, Valence loads both stored rows and
+    ///   refuses the write unless the actor passes the source schema's Update policy on
+    ///   `from` and the target schema's Read policy on `to`. Bypasses come only from those
+    ///   policies (for example `always_allow: [SYSTEM_ONLY]`).
+    /// - Without it, this is a raw edge write with no schema privacy, and hosts must
+    ///   authorize before calling. The generated `relate_to_*` methods always check the stored
+    ///   source row's Update policy first; prefer them.
     ///
     /// # Errors
     ///
-    /// Returns an error when the requested operation cannot be completed.
+    /// On a checked edge: [`crate::Error::NotFound`] when either row (or its table) is
+    /// missing, [`crate::Error::Privacy`] when a policy denies, and nothing is written.
+    /// Otherwise any backend error.
     pub async fn relate_edge(
         &self,
         edge_table: &str,
@@ -160,7 +216,7 @@ impl Valence {
         to: &RecordId,
         purpose: crate::data_use::DataUsePurpose,
     ) -> Result<()> {
-        let _ = purpose;
+        edge_policy::check_edge_write(self, edge_table, from, to, purpose).await?;
         let backend = self.active_backend()?;
         backend.relate_edge(from, edge_table, to).await
     }
@@ -169,11 +225,17 @@ impl Valence {
     ///
     /// # Security
     ///
-    /// Raw edge delete — no schema privacy. Hosts must authorize before calling.
+    /// Checked the same way as [`Self::relate_edge`]: an edge whose connection sets
+    /// `edge_policy: SourceUpdateTargetRead` needs Update on `from` and Read on `to`, so an
+    /// actor who can only read the source can't strip its links. Without the attribute this
+    /// is a raw edge delete, and hosts must authorize before calling. The generated
+    /// `unrelate_from_*` methods always check the stored source row's Update policy first.
     ///
     /// # Errors
     ///
-    /// Returns an error when the requested operation cannot be completed.
+    /// On a checked edge: [`crate::Error::NotFound`] when either row (or its table) is
+    /// missing, [`crate::Error::Privacy`] when a policy denies, and nothing is removed.
+    /// Otherwise any backend error.
     pub async fn unrelate_edge(
         &self,
         edge_table: &str,
@@ -181,7 +243,18 @@ impl Valence {
         to: &RecordId,
         purpose: crate::data_use::DataUsePurpose,
     ) -> Result<()> {
-        let _ = purpose;
+        edge_policy::check_edge_write(self, edge_table, from, to, purpose).await?;
+        self.unrelate_edge_unchecked(edge_table, from, to).await
+    }
+
+    /// Raw edge delete for the deletion engine, which has already checked Delete on the
+    /// root row and must remove links whose endpoint row may already be gone.
+    pub(crate) async fn unrelate_edge_unchecked(
+        &self,
+        edge_table: &str,
+        from: &RecordId,
+        to: &RecordId,
+    ) -> Result<()> {
         let backend = self.active_backend()?;
         backend.unrelate_edge(from, edge_table, to).await
     }

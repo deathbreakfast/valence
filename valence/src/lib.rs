@@ -9,7 +9,7 @@
 //! - **Schema DSL** — fields, connections, policies, ownership, TTL, and trait mixins
 //!   ([`valence_schema!`], [`valence_trait_schema!`])
 //! - **Table TTL** — declare `ttl: { seconds }` on a schema; call [`Valence::ensure_ttl_for_all`]
-//!   once at boot ([`ttl`] module: native Redis/Mongo, Deferred stamp + warn otherwise)
+//!   once at boot ([`ttl`] module: native Redis/Mongo, Deferred stamp + notice otherwise)
 //! - **Build-time codegen** — typed models from host `schemas/` via `valence-codegen`
 //! - **Composable backends** — in-memory, SQLite, IndraDB, SurrealDB, Postgres, MongoDB, Redis
 //! - **Multi-backend routing** — one [`DatabaseRouter`]; each schema picks a backend with
@@ -33,7 +33,7 @@
 //! - **Currency fields** — Money as ISO [`CurrencyCode`] plus signed minor units in one cell,
 //!   with typed query helpers for code and amount. [Get started](#currency-fields).
 //! - **DateTime unix storage** — Timestamps stay `chrono::DateTime<Utc>` in Rust while
-//!   persistence uses UTC unix seconds and [`DateTimePredicate`] filters.
+//!   persistence uses UTC unix milliseconds (legacy seconds still read) and [`DateTimePredicate`] filters.
 //!   [Get started](#datetime-unix-storage).
 //! - **Query privacy** — [`QueryCore::execute`] / `Model::query` post-filter rows by entity read
 //!   policy and field policies
@@ -322,7 +322,8 @@
 //! # DateTime unix storage
 //!
 //! `FieldType::DateTime` keeps the Model API on `chrono::DateTime<Utc>` while SQL and Surreal
-//! cells store signed UTC **unix seconds**. Predicates take chrono values and emit numeric
+//! cells store signed UTC **unix milliseconds** (integers below 1e11 are read as legacy seconds, so
+//! such rows mis-order in predicates until rewritten). Predicates take chrono values and emit numeric
 //! comparisons on the wire. Prefer this for event times and audit stamps so adapters share one
 //! integer layout.
 //!
@@ -351,12 +352,12 @@
 //!     }
 //! }
 //!
-//! let at = Utc.timestamp_opt(1_700_000_000, 0).single().unwrap();
+//! let at = Utc.timestamp_millis_opt(1_700_000_000_123).single().unwrap();
 //! Event::create(Event::new(at)?, &valence, valence::use_!(r#"For the **DateTime filter demo**, we **seed an event at a known unix timestamp** so later equality filters have a concrete row to match. Developers reading the crate docs use this example."#)).await?;
-//! let hits = Event::query(&valence, valence::use_!(r#"In the **DateTime filter demo**, we **find events at the seeded unix timestamp** so readers can see chrono predicates map to stored seconds. Developers reading the crate docs use this result."#))
+//! let hits = Event::query(&valence, valence::use_!(r#"In the **DateTime filter demo**, we **find events at the seeded unix timestamp** so readers can see chrono predicates map to stored milliseconds. Developers reading the crate docs use this result."#))
 //!     .where_at(DateTimePredicate::Equals(at))
 //!     .await?;
-//! assert_eq!(hits[0].at().timestamp(), 1_700_000_000);
+//! assert_eq!(hits[0].at().timestamp_millis(), 1_700_000_000_123);
 //! ```
 //!
 //! Observable outcome: `Equals` / `After` / `Before` return the expected rows; a far-future
@@ -534,7 +535,7 @@
 //! Add `ttl: { seconds: N }` on a table schema (create-only clock). After backends are
 //! registered, call [`Valence::ensure_ttl_for_all`] once — it scrapes the schema registry
 //! for every TTL table (no hand list). See the [`ttl`] module for capabilities, the reserved
-//! [`ttl::EXPIRE_AT_FIELD`], and Deferred/non-native warnings. Hosts wire
+//! [`ttl::EXPIRE_AT_FIELD`], and the Deferred (info) and Unsupported (warn) boot notices. Hosts wire
 //! `valence_platform::ttl_sweep::register_ttl_service` so Deferred engines delete expired rows.
 //!
 //! ## 3. Set up build-time codegen

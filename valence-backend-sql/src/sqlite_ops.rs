@@ -2,6 +2,7 @@
 
 use serde_json::Value;
 use sqlx::{Column, Row};
+use valence_core::backend::EdgeRow;
 use valence_core::compiled_query::CompiledQuery;
 use valence_core::error::{Error, Result};
 use valence_core::record_id::RecordId;
@@ -76,6 +77,14 @@ pub async fn execute_select_sqlite(
     let rows = match q.fetch_all(pool).await {
         Ok(rows) => rows,
         Err(e) if e.to_string().to_lowercase().contains("no such table") => return Ok(vec![]),
+        // `define_index` can create the ownership table before any ownership row exists, with
+        // only the indexed columns. Until the first write adds the rest it has no rows.
+        Err(e)
+            if sql.contains("valence_data_ownership")
+                && e.to_string().to_lowercase().contains("no such column") =>
+        {
+            return Ok(vec![]);
+        }
         Err(e) => return Err(Error::database(e.to_string())),
     };
 
@@ -293,6 +302,38 @@ pub async fn get_edge_sources_sqlite(
         .collect())
 }
 
+pub async fn scan_edges_sqlite(
+    pool: &sqlx::SqlitePool,
+    edge_type: Option<&str>,
+    after: Option<&EdgeRow>,
+    limit: usize,
+) -> Result<Vec<EdgeRow>> {
+    ensure_edges_sqlite(pool).await?;
+    let limit = i64::try_from(limit).unwrap_or(i64::MAX);
+    let rows = sqlx::query(crate::edges::scan_edges_sqlite_sql())
+        .bind(edge_type)
+        .bind(edge_type)
+        .bind(i64::from(after.is_some()))
+        .bind(after.map_or("", |a| a.from.table()))
+        .bind(after.map_or("", |a| a.from.id()))
+        .bind(after.map_or("", |a| a.edge_type.as_str()))
+        .bind(after.map_or("", |a| a.to.table()))
+        .bind(after.map_or("", |a| a.to.id()))
+        .bind(limit)
+        .fetch_all(pool)
+        .await
+        .map_err(|e| Error::database(e.to_string()))?;
+    Ok(rows.iter().map(edge_row_sqlite).collect())
+}
+
+fn edge_row_sqlite(r: &sqlx::sqlite::SqliteRow) -> EdgeRow {
+    EdgeRow {
+        from: RecordId::new(r.get::<String, _>(0), r.get::<String, _>(1)),
+        edge_type: r.get::<String, _>(2),
+        to: RecordId::new(r.get::<String, _>(3), r.get::<String, _>(4)),
+    }
+}
+
 pub async fn define_unique_index_sqlite(
     pool: &sqlx::SqlitePool,
     table: &str,
@@ -330,6 +371,7 @@ pub async fn define_unique_index_sqlite(
                     record_table: None,
                 },
             ],
+            retired: Vec::new(),
         };
         ensure_layout_for_write_sqlite(pool, &layout, ensured).await?;
     }
@@ -366,6 +408,7 @@ pub(crate) fn adhoc_index_layout(table: &str, fields: &[&str]) -> StorageLayout 
     StorageLayout {
         table: table.to_string(),
         fields: layout_fields,
+        retired: Vec::new(),
     }
 }
 
@@ -455,6 +498,7 @@ pub async fn apply_ttl_policy_sqlite(
                     record_table: None,
                 },
             ],
+            retired: Vec::new(),
         };
         ensure_layout_for_write_sqlite(pool, &layout, ensured).await?;
     }
@@ -473,6 +517,7 @@ pub const fn sql_capabilities(label: &'static str) -> valence_core::BackendCapab
     valence_core::BackendCapabilities {
         supports_merge: true,
         supports_graph_edges: true,
+        supports_transactions: false,
         telemetry_label: label,
     }
 }

@@ -49,6 +49,7 @@ fn has_many(name: &str, from: &str, to: &str, reverse: &str, on_delete: &str) ->
         model_path: None,
         reverse_field: Some(reverse.into()),
         edge_table: None,
+        edge_policy: None,
         target_trait: None,
     }
 }
@@ -115,7 +116,9 @@ fn schema_with_delete_fields(
         iters: Vec::new(),
         composite_key: Vec::new(),
         traits: Vec::new(),
+        retired_fields: Vec::new(),
         ttl: None,
+        partition_export: None,
         ownership: None,
         meta: SchemaMeta {
             retention: "1d".into(),

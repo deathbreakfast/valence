@@ -38,23 +38,13 @@ tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
 valence = { workspace = true, default-features = false, features = ["mem", "surreal-inventory"] }
 
 [[test]]
-name = "admin_runtime_catalog"
-path = "tests/admin_runtime_catalog.rs"
+name = "e2e"
+path = "tests/e2e/main.rs"
 harness = true
 
 [[test]]
-name = "cross_backend_hops"
-path = "tests/cross_backend_hops.rs"
-harness = true
-
-[[test]]
-name = "matrix_catalog"
-path = "tests/matrix_catalog.rs"
-harness = true
-
-[[test]]
-name = "model_runtime_catalog"
-path = "tests/model_runtime_catalog.rs"
+name = "schema_registry_databases"
+path = "tests/schema_registry_databases.rs"
 harness = true
 
 [lints]

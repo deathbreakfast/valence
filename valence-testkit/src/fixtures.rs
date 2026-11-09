@@ -42,7 +42,9 @@ pub fn empty_policies_schema() -> &'static SchemaMetadata {
             iters: Vec::new(),
             composite_key: Vec::new(),
             traits: Vec::new(),
+            retired_fields: Vec::new(),
             ttl: None,
+            partition_export: None,
             ownership: None,
             meta: SchemaMeta {
                 retention: "365 days".to_string(),
@@ -97,7 +99,9 @@ pub fn authenticated_only_schema() -> &'static SchemaMetadata {
             iters: Vec::new(),
             composite_key: Vec::new(),
             traits: Vec::new(),
+            retired_fields: Vec::new(),
             ttl: None,
+            partition_export: None,
             ownership: None,
             meta: SchemaMeta {
                 retention: "365 days".to_string(),
@@ -198,7 +202,9 @@ pub fn system_only_field_schema() -> &'static SchemaMetadata {
             iters: Vec::new(),
             composite_key: Vec::new(),
             traits: Vec::new(),
+            retired_fields: Vec::new(),
             ttl: None,
+            partition_export: None,
             ownership: None,
             meta: SchemaMeta {
                 retention: "365 days".to_string(),
@@ -272,10 +278,12 @@ fn catalog_ttl_probe_schema() -> &'static Schema {
             iters: Vec::new(),
             composite_key: Vec::new(),
             traits: Vec::new(),
+            retired_fields: Vec::new(),
             ttl: Some(valence_core::ttl::SchemaTtlPolicy {
                 seconds: CATALOG_TTL_PROBE_SECONDS,
                 mode: "backend_capability".into(),
             }),
+            partition_export: None,
             ownership: None,
             meta: SchemaMeta {
                 retention: "365 days".to_string(),
@@ -359,7 +367,9 @@ fn catalog_iter_probe_schema() -> &'static Schema {
             iters: Vec::new(),
             composite_key: Vec::new(),
             traits: Vec::new(),
+            retired_fields: Vec::new(),
             ttl: None,
+            partition_export: None,
             ownership: None,
             meta: SchemaMeta {
                 retention: "365 days".to_string(),

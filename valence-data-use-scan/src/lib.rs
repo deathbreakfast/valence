@@ -154,7 +154,8 @@
 //! Observable outcome: empty gap list means Pass; gap codes name the failure.
 //!
 //! `BAN_TEMPLATE` fires on any of [`TEMPLATE_PHRASES`] and `HEDGE` on any of
-//! [`HEDGE_PHRASES`] ("not necessarily", "unless that feature"). Both match after
+//! [`HEDGE_PHRASES`] ("not necessarily", "unless that feature", "might be used",
+//! "where applicable"). Both match after
 //! [`lint_purpose::phrase_text`] drops markdown `*` and straightens curly apostrophes,
 //! so `not **necessarily**` and `feature’s` are caught. To fix either, follow the result
 //! to its consumer and say what data is read or written, why, and which product feature

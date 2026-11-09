@@ -81,10 +81,19 @@ fn collect_trait_definition_pieces(trait_def: &ParsedTraitDef) -> TraitDefinitio
         .map(|f| {
             let name = format_ident!("{}", f.name);
             let rtype = rust_type_for_field(f, trait_name);
-            if f.stored_optional() {
-                quote! { #name: Option<#rtype> }
+            let serde_attrs = if f.field_type == "datetime" {
+                if f.stored_optional() {
+                    quote! { #[serde(default, with = "valence::datetime_unix::option")] }
+                } else {
+                    quote! { #[serde(with = "valence::datetime_unix")] }
+                }
             } else {
-                quote! { #name: #rtype }
+                quote! {}
+            };
+            if f.stored_optional() {
+                quote! { #serde_attrs #name: Option<#rtype> }
+            } else {
+                quote! { #serde_attrs #name: #rtype }
             }
         })
         .collect();
@@ -296,6 +305,17 @@ fn quote_trait_definition_bundle(p: &TraitDefinitionPieces) -> TokenStream {
             pub async fn first(self) -> valence::Result<Option<#model_struct_name>> {
                 let mut results = self.limit(1).await?;
                 Ok(results.pop())
+            }
+
+            /// Execute the query and also return [`valence::QueryStats`].
+            ///
+            /// `fetched` is the sum of each table's backend rows before read privacy and
+            /// the merge window, an upper bound. Do not show it to users: it can reveal
+            /// that hidden rows exist.
+            pub async fn fetch_with_stats(self) -> valence::Result<(Vec<#model_struct_name>, valence::QueryStats)> {
+                self.inner
+                    .execute_with_stats(self.valence, valence::DataUsePurpose::framework_nested())
+                    .await
             }
 
             pub fn into_parts(self) -> (valence::QueryCore, &'a valence::Valence) {

@@ -13,10 +13,11 @@ use valence_backend_sql::{
     delete_record_sqlite, ensure_table_sqlite, ensure_typed_table_sqlite, execute_select_sqlite,
     get_edge_sources_sqlite, get_edge_targets_sqlite, get_record_sqlite,
     inspect_typed_layout_sqlite, merge_record_sqlite, read_schema_version_sqlite,
-    relate_edge_sqlite, sql_capabilities, sync_typed_table_sqlite, ttl_deferred,
-    unrelate_edge_sqlite, update_record_sqlite, write_schema_version_sqlite, WriteEnsureCache,
+    relate_edge_sqlite, scan_edges_sqlite, scan_table_typed_sqlite, sql_capabilities,
+    sync_typed_table_sqlite, ttl_deferred, unrelate_edge_sqlite, update_record_sqlite,
+    write_schema_version_sqlite, WriteEnsureCache,
 };
-use valence_core::backend::DatabaseBackend;
+use valence_core::backend::{DatabaseBackend, EdgeRow};
 use valence_core::compiled_query::CompiledQuery;
 use valence_core::error::{Error, Result};
 use valence_core::record_id::RecordId;
@@ -288,6 +289,24 @@ impl DatabaseBackend for SqliteBackend {
 
     async fn define_unique_index(&self, table: &str, field: &str) -> Result<()> {
         define_unique_index_sqlite(&self.pool, table, field, &self.layout_ensured).await
+    }
+
+    async fn scan_table(
+        &self,
+        table: &str,
+        after: Option<&str>,
+        limit: usize,
+    ) -> Result<Vec<serde_json::Value>> {
+        scan_table_typed_sqlite(&self.pool, table, after, limit).await
+    }
+
+    async fn scan_edges(
+        &self,
+        edge_type: Option<&str>,
+        after: Option<&EdgeRow>,
+        limit: usize,
+    ) -> Result<Vec<EdgeRow>> {
+        scan_edges_sqlite(&self.pool, edge_type, after, limit).await
     }
 
     async fn define_index(&self, table: &str, fields: &[&str]) -> Result<()> {

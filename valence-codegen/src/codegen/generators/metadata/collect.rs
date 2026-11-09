@@ -30,9 +30,11 @@ pub(super) struct SchemaMetadataPieces {
     pub owner_lit: LitStr,
     pub policies_code: TokenStream,
     pub trait_names_code: TokenStream,
+    pub retired_fields_code: TokenStream,
     pub side_effects_code: TokenStream,
     pub iters_code: TokenStream,
     pub ttl_code: TokenStream,
+    pub partition_export_code: TokenStream,
     pub composite_key_code: TokenStream,
     pub ownership_code: TokenStream,
     pub database_evaluator_code: TokenStream,
@@ -65,7 +67,8 @@ pub(super) fn collect_schema_metadata_pieces(schema: &SchemaContext) -> SchemaMe
 
     for (idx, field) in schema.fields.iter().enumerate() {
         let field_policies = schema.field_policies.get(idx).and_then(|p| p.as_ref());
-        let (edge_ts, row_ts) = schema_field_and_edge_tokens(field, field_policies);
+        let (edge_ts, row_ts) =
+            schema_field_and_edge_tokens(&schema.table_name, field, field_policies);
         if let Some(e) = edge_ts {
             edges.push(e);
         }
@@ -99,6 +102,7 @@ pub(super) fn collect_schema_metadata_pieces(schema: &SchemaContext) -> SchemaMe
     let policies_code = generate_policies_code(schema.policies.as_ref());
 
     let trait_names_code = string_names_to_vec_code(&schema.traits);
+    let retired_fields_code = string_names_to_vec_code(&schema.schema.retired_fields);
     let side_effects_code = string_names_to_vec_code(&schema.side_effects);
     let iters_code = string_names_to_vec_code(&schema.iters);
     let composite_key_code = string_names_to_vec_code(&schema.composite_key);
@@ -110,6 +114,22 @@ pub(super) fn collect_schema_metadata_pieces(schema: &SchemaContext) -> SchemaMe
             Some(valence::SchemaTtlPolicy {
                 seconds: #seconds,
                 mode: #mode_lit.to_string(),
+            })
+        }
+    } else {
+        quote! { None }
+    };
+
+    let partition_export_code = if let Some(export) = &schema.schema.partition_export {
+        let cadence =
+            proc_macro2::Ident::new(export.cadence.as_str(), proc_macro2::Span::call_site());
+        let job_name = LitStr::new(&export.job_name, proc_macro2::Span::call_site());
+        let target_table = LitStr::new(&export.target_table, proc_macro2::Span::call_site());
+        quote! {
+            Some(valence::PartitionExportConfig {
+                cadence: valence::PartitionExportCadence::#cadence,
+                job_name: #job_name.to_string(),
+                target_table: #target_table.to_string(),
             })
         }
     } else {
@@ -156,9 +176,11 @@ pub(super) fn collect_schema_metadata_pieces(schema: &SchemaContext) -> SchemaMe
         owner_lit,
         policies_code,
         trait_names_code,
+        retired_fields_code,
         side_effects_code,
         iters_code,
         ttl_code,
+        partition_export_code,
         composite_key_code,
         ownership_code,
         database_evaluator_code,

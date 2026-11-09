@@ -12,6 +12,10 @@ pub const MAX_QUERY_LIMIT: u32 = 1000;
 /// Maximum query offset accepted by [`QueryCore`].
 pub const MAX_QUERY_OFFSET: u32 = 1_000_000;
 
+/// Rows past `offset + limit` a query may scan looking for readable rows, when read
+/// privacy hides rows inside the window.
+pub const MAX_QUERY_HIDDEN_SCAN: u32 = 10_000;
+
 mod predicates;
 #[cfg(any(
     feature = "compiler-sql",
@@ -32,7 +36,7 @@ pub use predicates::{
     SortDirection, StringPredicate,
 };
 pub use sql_row_filter::{apply_equality_where, apply_order_limit_offset};
-pub use types::{HopSource, HopType, QueryCore, WhereClause};
+pub use types::{HopSource, HopType, QueryCore, QueryStats, WhereClause};
 
 #[cfg(test)]
 mod clamp_tests {

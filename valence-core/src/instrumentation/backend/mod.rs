@@ -100,6 +100,24 @@ impl DatabaseBackend for InstrumentedBackend {
         self.inner.write_schema_version(table, version).await
     }
 
+    async fn scan_table(
+        &self,
+        table: &str,
+        after: Option<&str>,
+        limit: usize,
+    ) -> Result<Vec<serde_json::Value>> {
+        self.inner.scan_table(table, after, limit).await
+    }
+
+    async fn scan_edges(
+        &self,
+        edge_type: Option<&str>,
+        after: Option<&crate::backend::EdgeRow>,
+        limit: usize,
+    ) -> Result<Vec<crate::backend::EdgeRow>> {
+        self.inner.scan_edges(edge_type, after, limit).await
+    }
+
     async fn define_unique_index(&self, table: &str, field: &str) -> Result<()> {
         self.inner.define_unique_index(table, field).await
     }
@@ -172,6 +190,17 @@ impl DatabaseBackend for InstrumentedBackend {
 
     async fn delete_record(&self, table: &str, id: &str) -> Result<()> {
         self.measured_delete_record(table, id).await
+    }
+
+    async fn apply_batch(
+        &self,
+        ops: Vec<crate::backend::WriteOp>,
+    ) -> Result<Vec<serde_json::Value>> {
+        let result = self.inner.apply_batch(ops).await;
+        if let Err(e) = &result {
+            self.on_err("apply_batch", e);
+        }
+        result
     }
 
     async fn relate_edge(
@@ -281,6 +310,39 @@ mod tests {
         ) -> Result<Vec<crate::RecordId>> {
             Ok(vec![])
         }
+
+        async fn scan_table(
+            &self,
+            table: &str,
+            _after: Option<&str>,
+            _limit: usize,
+        ) -> Result<Vec<serde_json::Value>> {
+            Ok(vec![serde_json::json!({"scanned": table})])
+        }
+
+        async fn scan_edges(
+            &self,
+            edge_type: Option<&str>,
+            _after: Option<&crate::backend::EdgeRow>,
+            _limit: usize,
+        ) -> Result<Vec<crate::backend::EdgeRow>> {
+            Ok(vec![crate::backend::EdgeRow {
+                from: crate::RecordId::new("a", "1"),
+                edge_type: edge_type.unwrap_or("any").to_string(),
+                to: crate::RecordId::new("b", "2"),
+            }])
+        }
+    }
+
+    #[tokio::test]
+    async fn decorator_forwards_scans() {
+        let wrapped = wrap_backend(Arc::new(MockBackend {
+            gets: AtomicUsize::new(0),
+        }));
+        let rows = wrapped.scan_table("t", None, 5).await.unwrap();
+        assert_eq!(rows, vec![serde_json::json!({"scanned": "t"})]);
+        let edges = wrapped.scan_edges(Some("e"), None, 5).await.unwrap();
+        assert_eq!(edges[0].edge_type, "e");
     }
 
     #[tokio::test]

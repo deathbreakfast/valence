@@ -80,7 +80,16 @@ pub const TEMPLATE_PHRASES: &[&str] = &[
 ];
 
 /// Hedges that say the author did not check how the data is used.
-pub const HEDGE_PHRASES: &[&str] = &["not necessarily", "unless that feature"];
+///
+/// "may be shown" is left out on purpose: a fleet scan found it once, in a
+/// rewritten purpose where it states a real condition ("once results may be
+/// shown").
+pub const HEDGE_PHRASES: &[&str] = &[
+    "not necessarily",
+    "unless that feature",
+    "might be used",
+    "where applicable",
+];
 
 /// Normalize a purpose for template and hedge matching.
 ///

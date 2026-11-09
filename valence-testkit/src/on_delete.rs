@@ -101,7 +101,9 @@ fn public_delete_schema_with_fields(
         iters: Vec::new(),
         composite_key: Vec::new(),
         traits: Vec::new(),
+        retired_fields: Vec::new(),
         ttl: None,
+        partition_export: None,
         ownership: None,
         meta: SchemaMeta {
             retention: "1d".into(),
@@ -134,6 +136,7 @@ fn has_many_conn(
         model_path: None,
         reverse_field: Some(reverse.into()),
         edge_table: None,
+        edge_policy: None,
         target_trait: None,
     }
 }
@@ -151,6 +154,7 @@ fn m2m_conn(name: &str, from: &str, to: &str, edge: &str, on_delete: &str) -> Sc
         model_path: None,
         reverse_field: None,
         edge_table: Some(edge.into()),
+        edge_policy: None,
         target_trait: None,
     }
 }

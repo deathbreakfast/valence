@@ -185,3 +185,22 @@ async fn query_as(viewer: &Valence) -> Vec<Profile> {
     .await
     .expect("query")
 }
+
+#[test]
+fn batch_row_missing_hidable_required_field_is_refused() {
+    use valence::BatchCreatable;
+
+    let missing = serde_json::json!({"user": "alice", "display_name": "Ali"});
+    let err = Profile::validate_batch_row(&missing).expect_err("row lacks legal_name");
+    assert!(
+        matches!(&err, valence::Error::Validation(m) if m == "profile.legal_name is required"),
+        "{err:?}"
+    );
+
+    let null = serde_json::json!({"user": "alice", "legal_name": null, "display_name": "Ali"});
+    assert!(Profile::validate_batch_row(&null).is_err());
+
+    let full =
+        serde_json::json!({"user": "alice", "legal_name": "Alice Rivera", "display_name": "Ali"});
+    Profile::validate_batch_row(&full).expect("complete row passes");
+}

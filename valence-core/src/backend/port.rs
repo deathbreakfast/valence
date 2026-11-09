@@ -13,6 +13,8 @@ pub struct BackendCapabilities {
     pub supports_merge: bool,
     /// Whether graph edge methods (`relate_edge`, `unrelate_edge`, `get_edge_targets`) are supported.
     pub supports_graph_edges: bool,
+    /// Whether [`DatabaseBackend::apply_batch`] applies a batch atomically (not the default error stub).
+    pub supports_transactions: bool,
     /// Short label attached to instrumentation counters (e.g. `"mem"`, `"surrealdb"`).
     pub telemetry_label: &'static str,
 }
@@ -24,7 +26,82 @@ impl BackendCapabilities {
         Self {
             supports_merge: true,
             supports_graph_edges: true,
+            supports_transactions: true,
             telemetry_label: "mem",
+        }
+    }
+}
+
+/// One directed edge as stored by a backend (`from --edge_type--> to`).
+///
+/// Also used as the keyset cursor for [`DatabaseBackend::scan_edges`]: pass the last
+/// row of a page as `after` to fetch the next one.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+pub struct EdgeRow {
+    /// Source record.
+    pub from: RecordId,
+    /// Edge table / type name.
+    pub edge_type: String,
+    /// Target record.
+    pub to: RecordId,
+}
+
+/// One write inside a [`DatabaseBackend::apply_batch`] call.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum WriteOp {
+    /// Same as [`DatabaseBackend::create_record`].
+    Create {
+        /// Target table.
+        table: String,
+        /// Row content.
+        content: serde_json::Value,
+    },
+    /// Same as [`DatabaseBackend::update_record`].
+    Update {
+        /// Target table.
+        table: String,
+        /// Primary key of the row to replace.
+        id: String,
+        /// Replacement content.
+        content: serde_json::Value,
+    },
+    /// Same as [`DatabaseBackend::merge_record`].
+    Merge {
+        /// Target table.
+        table: String,
+        /// Primary key of the row to patch.
+        id: String,
+        /// Partial JSON object.
+        patch: serde_json::Value,
+    },
+    /// Same as [`DatabaseBackend::upsert_record`].
+    Upsert {
+        /// Target table.
+        table: String,
+        /// Explicit primary key.
+        id: String,
+        /// Row content.
+        content: serde_json::Value,
+    },
+    /// Same as [`DatabaseBackend::delete_record`].
+    Delete {
+        /// Target table.
+        table: String,
+        /// Primary key of the row to delete.
+        id: String,
+    },
+}
+
+impl WriteOp {
+    /// Table this operation writes to.
+    #[must_use]
+    pub fn table(&self) -> &str {
+        match self {
+            Self::Create { table, .. }
+            | Self::Update { table, .. }
+            | Self::Merge { table, .. }
+            | Self::Upsert { table, .. }
+            | Self::Delete { table, .. } => table,
         }
     }
 }
@@ -233,6 +310,50 @@ pub trait DatabaseBackend: Send + Sync + std::fmt::Debug + 'static {
         Ok(Vec::new())
     }
 
+    /// Enumerate one page of rows in `table`, ordered by primary key.
+    ///
+    /// Rows are returned in the same wire shape as [`Self::get_record`]. `after` is the
+    /// last primary key of the previous page (exclusive); `None` starts at the beginning.
+    /// A missing table returns `Ok(vec![])`. A page shorter than `limit` is the last one.
+    ///
+    /// This reads below privacy policy, like the rest of the port: the caller owns the
+    /// actor and privacy decision.
+    ///
+    /// **Contract:** default returns `Error::Internal` — override for engines that can
+    /// enumerate a table (SQLite and Postgres do).
+    async fn scan_table(
+        &self,
+        table: &str,
+        after: Option<&str>,
+        limit: usize,
+    ) -> Result<Vec<serde_json::Value>> {
+        let _ = (table, after, limit);
+        Err(Error::Internal(format!(
+            "scan_table not supported for {}",
+            self.engine_id()
+        )))
+    }
+
+    /// Enumerate one page of edges, ordered by `(from table, from id, edge type, to table, to id)`.
+    ///
+    /// `edge_type` restricts the scan to one edge table; `after` is the last row of the
+    /// previous page (exclusive). A page shorter than `limit` is the last one.
+    ///
+    /// **Contract:** default returns `Error::Internal` — override for engines that store
+    /// edges in an enumerable form.
+    async fn scan_edges(
+        &self,
+        edge_type: Option<&str>,
+        after: Option<&EdgeRow>,
+        limit: usize,
+    ) -> Result<Vec<EdgeRow>> {
+        let _ = (edge_type, after, limit);
+        Err(Error::Internal(format!(
+            "scan_edges not supported for {}",
+            self.engine_id()
+        )))
+    }
+
     /// Define a unique index on `table.field` when the engine supports DDL.
     ///
     /// **Contract:** default returns `Error::Internal`.
@@ -265,5 +386,17 @@ pub trait DatabaseBackend: Send + Sync + std::fmt::Debug + 'static {
     /// **Contract:** default is a no-op.
     async fn apply_ttl_policy(&self, _table: &str, _policy: &SchemaTtlPolicy) -> Result<()> {
         Ok(())
+    }
+
+    /// Apply several writes as one all-or-nothing unit on this backend.
+    ///
+    /// **Contract:** returns one row per op in order (`Value::Null` for deletes). When any op
+    /// fails, none of the batch is visible afterwards. Default returns `Error::Internal` —
+    /// override when [`BackendCapabilities::supports_transactions`] is `true`.
+    async fn apply_batch(&self, ops: Vec<WriteOp>) -> Result<Vec<serde_json::Value>> {
+        let _ = ops;
+        Err(Error::Internal(
+            "apply_batch is not supported by this database backend".into(),
+        ))
     }
 }

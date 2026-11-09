@@ -10,7 +10,13 @@
 //! | Secrets | [`SecretProvider`](secrets::SecretProvider) | [`NoOpSecretProvider`](secrets::NoOpSecretProvider), [`EnvSecretProvider`](secrets::EnvSecretProvider) | [`.secret_provider(...)`](crate::ValenceBuilder::secret_provider) |
 //! | Identity | [`ActorFactory`](actor::ActorFactory) | [`JsonActorFactory`](actor::JsonActorFactory) | [`.actor_factory(...)`](crate::ValenceBuilder::actor_factory) |
 //! | Endpoints | [`DatabaseEndpointResolver`](endpoints::DatabaseEndpointResolver) | [`NoopEndpointResolver`](endpoints::NoopEndpointResolver), [`EnvEndpointResolver`](endpoints::EnvEndpointResolver) | [`.endpoint_resolver(...)`](crate::ValenceBuilder::endpoint_resolver) |
+//! | Extensions | any `Send + Sync` type | none (empty by default) | [`.extension(...)`](crate::ValenceBuilder::extension) |
 //! | Deletion | host registration hook | no-op default | [`crate::deletion::register_deletion_dispatcher`] |
+//!
+//! Ports that only a host's privacy evaluators consult (a bot gate, a rate limiter) have no
+//! trait here. Register them by type with [`crate::ValenceBuilder::extension`] and read them
+//! back inside [`crate::PolicyEvaluator::evaluate`] with [`crate::Valence::extension`], so each
+//! `Valence` carries its own instead of the host keeping a process-global.
 //!
 //! Privacy rules are **not** builder ports — attach [`crate::PolicyEvaluator`] consts in
 //! `valence_schema!` (see [`crate::privacy`]).
@@ -36,4 +42,5 @@
 
 pub mod actor;
 pub mod endpoints;
+pub mod extensions;
 pub mod secrets;

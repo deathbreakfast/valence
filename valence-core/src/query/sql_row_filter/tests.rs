@@ -289,13 +289,13 @@ mod clause_matching {
     #[test]
     fn neither_team_nor_user_matches_returns_nothing() {
         let out = apply_equality_where(edges(), &team_user_query(Some("t9"), Some("uC")));
-        assert!(out.is_empty());
+        assert_eq!(out, Vec::<serde_json::Value>::new());
     }
 
     #[test]
     fn user_exists_only_on_other_team_returns_nothing() {
         let out = apply_equality_where(edges(), &team_user_query(Some("t2"), Some("uB")));
-        assert!(out.is_empty());
+        assert_eq!(out, Vec::<serde_json::Value>::new());
     }
 
     #[test]
@@ -397,7 +397,7 @@ mod clause_matching {
             sql,
             vec![("p0", "x".into()), ("p1", "y".into()), ("p2", "zz".into())],
         );
-        assert!(out.is_empty());
+        assert_eq!(out, Vec::<serde_json::Value>::new());
         assert!(run(sql, vec![]).is_empty());
     }
 
@@ -506,4 +506,276 @@ mod clause_matching {
         let null = "SELECT * FROM t WHERE a = NULL OR b = $p0";
         assert_eq!(run(null, vec![("p0", "q".into())]), ["r2"]);
     }
+
+    fn view(id: &str, surface: &str, scope: &str, owner: &str) -> serde_json::Value {
+        serde_json::json!({
+            "id": id,
+            "surface": surface,
+            "scope_kind": scope,
+            "owner_user": {"table": "user", "id": owner},
+        })
+    }
+
+    /// v1 (list, org, uA), v2 (list, org, uB), v3 (board, org, uA), v4 (list, team, uA).
+    fn views() -> Vec<serde_json::Value> {
+        vec![
+            view("v1", "list", "org", "uA"),
+            view("v2", "list", "org", "uB"),
+            view("v3", "board", "org", "uA"),
+            view("v4", "list", "team", "uA"),
+        ]
+    }
+
+    /// The compiled shape of string predicates plus a record predicate, from the real builder.
+    fn string_and_record_query(strings: &[(&str, &str)], owner: &str) -> CompiledQuery {
+        let mut q = QueryCore::new("saved_view".to_string());
+        for (field, value) in strings {
+            q = q.where_string(
+                (*field).into(),
+                crate::query::StringPredicate::Equals((*value).into()),
+            );
+        }
+        q = q.where_record(
+            "owner_user".into(),
+            RecordPredicate::Equals(RecordId::new("user", owner)),
+        );
+        let (sql, params) = q.to_sql().expect("compile");
+        CompiledQuery::new(sql, params)
+    }
+
+    #[test]
+    fn string_and_record_predicates_both_apply() {
+        let q = string_and_record_query(&[("surface", "list")], "uA");
+        assert_eq!(ids(&apply_equality_where(views(), &q)), ["v1", "v4"]);
+    }
+
+    #[test]
+    fn two_string_predicates_and_a_record_predicate_all_apply() {
+        let q = string_and_record_query(&[("surface", "list"), ("scope_kind", "org")], "uA");
+        assert_eq!(ids(&apply_equality_where(views(), &q)), ["v1"]);
+    }
+
+    #[test]
+    fn string_miss_drops_rows_the_record_predicate_matches() {
+        let q = string_and_record_query(&[("surface", "calendar")], "uA");
+        assert!(apply_equality_where(views(), &q).is_empty());
+    }
+
+    #[test]
+    fn record_predicate_before_string_predicate_both_apply() {
+        let mut q = QueryCore::new("saved_view".to_string());
+        q = q.where_record(
+            "owner_user".into(),
+            RecordPredicate::Equals(RecordId::new("user", "uA")),
+        );
+        q = q.where_string(
+            "surface".into(),
+            crate::query::StringPredicate::Equals("board".into()),
+        );
+        let (sql, params) = q.to_sql().expect("compile");
+        let out = apply_equality_where(views(), &CompiledQuery::new(sql, params));
+        assert_eq!(ids(&out), ["v3"]);
+    }
+
+    #[test]
+    fn and_only_clause_with_unsupported_operator_excludes_every_row() {
+        for unsupported in [
+            "a IS NULL",
+            "a IS NOT NULL",
+            "a != $p1",
+            "a <> $p1",
+            "a IN ($p1, $p2)",
+            "a NOT LIKE $p1",
+            "n BETWEEN $p1 AND $p2",
+            "a = $missing",
+            "a = 'unterminated",
+            "(a = $p1",
+        ] {
+            let sql = format!("SELECT * FROM t WHERE b = $p0 AND {unsupported}");
+            let params = vec![("p0", "p".into()), ("p1", "x".into()), ("p2", "y".into())];
+            assert!(
+                run(&sql, params).is_empty(),
+                "{unsupported} must fail closed"
+            );
+        }
+    }
+
+    #[test]
+    fn and_only_clause_does_not_confuse_param_prefixes() {
+        let sql = "SELECT * FROM t WHERE a = $param_1";
+        let params = vec![("param_10", "y".into()), ("param_1", "x".into())];
+        assert_eq!(run(sql, params), ["r1", "r2"]);
+    }
+}
+
+fn ids(rows: &[serde_json::Value]) -> Vec<&str> {
+    rows.iter().map(|r| r["id"].as_str().unwrap()).collect()
+}
+
+#[test]
+fn order_by_sorts_numbers_numerically() {
+    let rows = vec![
+        serde_json::json!({"id": "a", "created_at": 100}),
+        serde_json::json!({"id": "b", "created_at": 2}),
+        serde_json::json!({"id": "c", "created_at": 10}),
+        serde_json::json!({"id": "d", "created_at": -5}),
+        serde_json::json!({"id": "e", "created_at": 2.5}),
+    ];
+    let asc = apply_order_limit_offset(rows.clone(), "SELECT * FROM t ORDER BY created_at ASC");
+    assert_eq!(ids(&asc), ["d", "b", "e", "c", "a"]);
+    let desc = apply_order_limit_offset(rows, "SELECT * FROM t ORDER BY created_at DESC");
+    assert_eq!(ids(&desc), ["a", "c", "e", "b", "d"]);
+}
+
+#[test]
+fn order_by_uses_every_key_with_its_own_direction() {
+    let rows = vec![
+        serde_json::json!({"id": "a", "g": "x", "n": 1}),
+        serde_json::json!({"id": "b", "g": "y", "n": 5}),
+        serde_json::json!({"id": "c", "g": "x", "n": 9}),
+        serde_json::json!({"id": "d", "g": "y", "n": 7}),
+    ];
+    let out = apply_order_limit_offset(rows, "SELECT * FROM t ORDER BY g ASC, n DESC");
+    assert_eq!(ids(&out), ["c", "a", "d", "b"]);
+}
+
+#[test]
+fn order_by_json_extract_keys_and_missing_fields() {
+    let rows = vec![
+        serde_json::json!({"id": "a", "body": {"rank": 3}}),
+        serde_json::json!({"id": "b"}),
+        serde_json::json!({"id": "c", "body": {"rank": 20}}),
+    ];
+    let out = apply_order_limit_offset(
+        rows.clone(),
+        "SELECT * FROM t ORDER BY json_extract(body, '$.rank') ASC, id ASC",
+    );
+    assert_eq!(ids(&out), ["b", "a", "c"]);
+    let out = apply_order_limit_offset(
+        rows,
+        "SELECT * FROM t ORDER BY json_extract(body, '$.rank') DESC",
+    );
+    assert_eq!(ids(&out), ["c", "a", "b"]);
+}
+
+#[test]
+fn order_by_then_offset_and_limit_window() {
+    let rows: Vec<_> = (0..6)
+        .map(|n| serde_json::json!({"id": format!("r{n}"), "n": n * 10}))
+        .collect();
+    let sql = "SELECT * FROM t ORDER BY n DESC LIMIT 2 OFFSET 1";
+    assert_eq!(
+        ids(&apply_order_limit_offset(rows.clone(), sql)),
+        ["r4", "r3"]
+    );
+    let surreal = "SELECT * FROM t ORDER BY n DESC LIMIT 2 START 1";
+    assert_eq!(ids(&apply_order_limit_offset(rows, surreal)), ["r4", "r3"]);
+}
+
+/// `param_0` to `param_10`, listed with `param_10` first so a lookup that stops at the first
+/// name sharing a prefix with `param_1` finds the wrong value.
+fn eleven_params(
+    one: serde_json::Value,
+    ten: serde_json::Value,
+) -> Vec<(String, serde_json::Value)> {
+    let mut params: Vec<_> = (0..11)
+        .map(|i| {
+            (
+                format!("param_{i}"),
+                serde_json::json!(format!("unused{i}")),
+            )
+        })
+        .collect();
+    params[1].1 = one;
+    params[10].1 = ten;
+    params.reverse();
+    params
+}
+
+#[test]
+fn equality_keeps_param_1_and_param_10_apart() {
+    let compiled = CompiledQuery::new(
+        "SELECT * FROM t WHERE a = $param_1 AND b = $param_10".into(),
+        eleven_params(serde_json::json!("a1"), serde_json::json!("b10")),
+    );
+    let rows = vec![
+        serde_json::json!({"id": "1", "a": "a1", "b": "b10"}),
+        serde_json::json!({"id": "2", "a": "b10", "b": "a1"}),
+        serde_json::json!({"id": "3", "a": "a1", "b": "other"}),
+    ];
+    let out = apply_equality_where(rows, &compiled);
+    assert_eq!(out.len(), 1);
+    assert_eq!(out[0]["id"], "1");
+}
+
+#[test]
+fn comparison_keeps_param_1_and_param_10_apart() {
+    let params = eleven_params(serde_json::json!(5), serde_json::json!(50));
+    let compiled = CompiledQuery::new(
+        "SELECT * FROM t WHERE n >= $param_1 AND n < $param_10".into(),
+        params,
+    );
+    let rows = (0..60)
+        .map(|n| serde_json::json!({"id": n.to_string(), "n": n}))
+        .collect();
+    let out = apply_equality_where(rows, &compiled);
+    assert_eq!(out.len(), 45);
+}
+
+#[test]
+fn like_keeps_param_1_and_param_10_apart() {
+    let params = eleven_params(serde_json::json!("x%"), serde_json::json!("%z"));
+    let compiled = CompiledQuery::new(
+        "SELECT * FROM t WHERE s LIKE $param_1 AND s LIKE $param_10".into(),
+        params,
+    );
+    let rows = vec![
+        serde_json::json!({"id": "1", "s": "xyz"}),
+        serde_json::json!({"id": "2", "s": "xyy"}),
+    ];
+    let out = apply_equality_where(rows, &compiled);
+    assert_eq!(out.len(), 1);
+    assert_eq!(out[0]["id"], "1");
+}
+
+#[test]
+fn or_clause_keeps_param_1_and_param_10_apart() {
+    let compiled = CompiledQuery::new(
+        "SELECT * FROM t WHERE a = $param_1 OR b = $param_10".into(),
+        eleven_params(serde_json::json!("a1"), serde_json::json!("b10")),
+    );
+    let rows = vec![
+        serde_json::json!({"id": "1", "a": "a1", "b": "x"}),
+        serde_json::json!({"id": "2", "a": "x", "b": "b10"}),
+        serde_json::json!({"id": "3", "a": "b10", "b": "a1"}),
+    ];
+    let out = apply_equality_where(rows, &compiled);
+    assert_eq!(out.len(), 2);
+}
+
+#[test]
+fn filters_datetime_after_separates_rows_in_the_same_second() {
+    let compiled = CompiledQuery::new(
+        "SELECT id, body FROM typed_probe WHERE json_extract(body, '$.at') > $param_0".into(),
+        vec![("param_0".into(), serde_json::json!(1_700_000_000_001_i64))],
+    );
+    let rows = vec![
+        serde_json::json!({"id": "1", "at": 1_700_000_000_001_i64}),
+        serde_json::json!({"id": "2", "at": 1_700_000_000_002_i64}),
+    ];
+    let out = apply_equality_where(rows, &compiled);
+    assert_eq!(out.len(), 1);
+    assert_eq!(out[0]["id"], "2");
+}
+
+#[test]
+fn legacy_seconds_row_sorts_before_millisecond_predicate() {
+    // Predicates compare milliseconds; an unrewritten seconds row is far below the bound.
+    let compiled = CompiledQuery::new(
+        "SELECT id, body FROM typed_probe WHERE json_extract(body, '$.at') > $param_0".into(),
+        vec![("param_0".into(), serde_json::json!(1_000_000_000_000_i64))],
+    );
+    let rows = vec![serde_json::json!({"id": "legacy", "at": 1_700_000_000_i64})];
+    let out = apply_equality_where(rows, &compiled);
+    assert_eq!(out, Vec::<serde_json::Value>::new());
 }

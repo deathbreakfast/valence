@@ -129,6 +129,7 @@ impl DatabaseBackend for HybridBackend {
         BackendCapabilities {
             supports_merge: primary_caps.supports_merge,
             supports_graph_edges: true,
+            supports_transactions: false,
             telemetry_label: "hybrid",
         }
     }

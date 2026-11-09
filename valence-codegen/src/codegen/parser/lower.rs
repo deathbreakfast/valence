@@ -1,12 +1,14 @@
 //! Lower [`valence_schema_dsl`] AST into [`valence_core::Schema`] generator IR.
 
 use valence_core::{
-    DatabaseEvaluator, ForeignKeyRef, OwnershipConfig, Schema, SchemaConnection, SchemaEdge,
-    SchemaField, SchemaMeta, SchemaPolicies, SchemaPrivacy, SchemaTtlPolicy, DEFAULT_IN_MEMORY,
+    DatabaseEvaluator, ForeignKeyRef, OwnershipConfig, PartitionExportCadence,
+    PartitionExportConfig, Schema, SchemaConnection, SchemaEdge, SchemaField, SchemaMeta,
+    SchemaPolicies, SchemaPrivacy, SchemaTtlPolicy, DEFAULT_IN_MEMORY,
 };
 use valence_schema_dsl::{
     ParsedConnection, ParsedField, ParsedOwnershipConfig, ParsedPolicies, ParsedPolicyRules,
-    ParsedSchema, ParsedTraitSchema, ParsedTtlPolicy,
+    ParsedSchema, ParsedSpectraExportCadence, ParsedSpectraExportConfig, ParsedTraitSchema,
+    ParsedTtlPolicy,
 };
 
 use super::ParsedTraitDef;
@@ -36,6 +38,7 @@ pub fn lower_parsed_schema(parsed: &ParsedSchema) -> Schema {
                     model_path: f.model_path.clone(),
                     reverse_field: None,
                     edge_table: None,
+                    edge_policy: None,
                     target_trait: None,
                 }
             })
@@ -59,7 +62,9 @@ pub fn lower_parsed_schema(parsed: &ParsedSchema) -> Schema {
         iters: parsed.iters.clone(),
         composite_key: parsed.composite_key.clone(),
         traits: parsed.traits.clone(),
+        retired_fields: parsed.retired_fields.clone(),
         ttl: parsed.ttl.as_ref().map(lower_ttl),
+        partition_export: parsed.spectra_export.as_ref().map(lower_export_block),
         ownership: parsed.ownership.as_ref().map(lower_ownership),
         meta: SchemaMeta {
             retention: parsed.retention.clone(),
@@ -87,6 +92,21 @@ fn lower_ttl(ttl: &ParsedTtlPolicy) -> SchemaTtlPolicy {
     SchemaTtlPolicy {
         seconds: ttl.seconds,
         mode: ttl.mode.clone(),
+    }
+}
+
+fn lower_export_block(export: &ParsedSpectraExportConfig) -> PartitionExportConfig {
+    PartitionExportConfig {
+        cadence: match export.cadence {
+            ParsedSpectraExportCadence::Hourly => PartitionExportCadence::Hourly,
+            ParsedSpectraExportCadence::ThreeHours => PartitionExportCadence::ThreeHours,
+            ParsedSpectraExportCadence::SixHours => PartitionExportCadence::SixHours,
+            ParsedSpectraExportCadence::TwelveHours => PartitionExportCadence::TwelveHours,
+            ParsedSpectraExportCadence::Daily => PartitionExportCadence::Daily,
+            ParsedSpectraExportCadence::Weekly => PartitionExportCadence::Weekly,
+        },
+        job_name: export.job_name.clone(),
+        target_table: export.target_table.clone(),
     }
 }
 
@@ -185,6 +205,7 @@ fn lower_connections(connections: &[ParsedConnection], from_table: &str) -> Vec<
             model_path: c.model.clone(),
             reverse_field: c.reverse_field.clone(),
             edge_table: c.edge_table.clone(),
+            edge_policy: c.edge_policy.clone(),
             target_trait: c.target_trait.clone(),
         })
         .collect()

@@ -15,6 +15,21 @@ pub trait BatchCreatable: Serialize + DeserializeOwned + Send + 'static {
 
     fn set_id(&mut self, id: RecordId);
 
+    /// Checks a row before the host inserts it.
+    ///
+    /// The host's batch runtime must call this on every row it serializes. Generated
+    /// models override it to refuse a row that leaves out a required field whose
+    /// `read` policy can hide it, with the same `<table>.<field> is required`
+    /// validation error `Model::create` returns.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::Validation`](crate::error::Error::Validation) when a required field is
+    /// missing or null.
+    fn validate_batch_row(_row: &serde_json::Value) -> Result<()> {
+        Ok(())
+    }
+
     async fn ensure_ownership_after_batch_create(
         _created_row: serde_json::Value,
         _valence: &Valence,

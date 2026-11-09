@@ -836,7 +836,7 @@ fn malformed_escape_excludes_every_row() {
     }
     // A pattern that ends on a bare escape matches nothing.
     let sql = "SELECT * FROM t WHERE s LIKE $param_0 ESCAPE '\\'";
-    assert!(like_ids(sql, "a\\", &["a", "a\\"]).is_empty());
+    assert_eq!(like_ids(sql, "a\\", &["a", "a\\"]), Vec::<String>::new());
 }
 
 #[test]

@@ -12,7 +12,7 @@ use crate::compiled_query::CompiledQuery;
 /// The clause is matched term by term with `OR` looser than `AND`: a row is kept when every
 /// top-level `AND` conjunct matches, and each conjunct matches when any of its `OR` terms does
 /// (two record predicates joined by `AND`, for example). A term the filter cannot read
-/// (`IS NULL`, `!=`, `IN`, an unknown `$key`, unbalanced quotes) excludes the row.
+/// (`!=`, `IN`, an unknown `$key`, unbalanced quotes) excludes the row.
 ///
 /// Matching is string-level on the compiled SQL.
 pub fn apply_equality_where(
@@ -38,19 +38,58 @@ pub fn apply_equality_where(
         .collect()
 }
 
-/// Match a SQL `LIKE` pattern with `%` wildcards (`%term%`, `term%`, `%term`, exact).
-fn sql_like_matches(value: &str, pattern: &str) -> bool {
-    let starts = pattern.starts_with('%');
-    let ends = pattern.ends_with('%');
-    match (starts, ends) {
-        (true, true) => {
-            let inner = &pattern[1..pattern.len().saturating_sub(1)];
-            value.contains(inner)
-        }
-        (false, true) => value.starts_with(&pattern[..pattern.len().saturating_sub(1)]),
-        (true, false) => value.ends_with(&pattern[1..]),
-        (false, false) => value == pattern,
+/// Match a SQL `LIKE` pattern: `%` is any run of characters, `_` is one character, and
+/// `escape` (when set) makes the next `%`, `_` or escape character literal. ASCII letters
+/// compare case-insensitively, as in SQLite. A pattern that ends on a bare escape matches
+/// nothing.
+fn sql_like_matches(value: &str, pattern: &str, escape: Option<char>) -> bool {
+    enum Tok {
+        Any,
+        One,
+        Lit(char),
     }
+    let mut toks = Vec::new();
+    let mut chars = pattern.chars();
+    while let Some(c) = chars.next() {
+        toks.push(match c {
+            _ if Some(c) == escape => match chars.next() {
+                Some(next) => Tok::Lit(next.to_ascii_lowercase()),
+                None => return false,
+            },
+            '%' => Tok::Any,
+            '_' => Tok::One,
+            _ => Tok::Lit(c.to_ascii_lowercase()),
+        });
+    }
+    let value: Vec<char> = value.chars().map(|c| c.to_ascii_lowercase()).collect();
+    let (mut v, mut t) = (0usize, 0usize);
+    // Last `%` seen and the value index it is currently absorbing up to.
+    let mut backtrack: Option<(usize, usize)> = None;
+    while v < value.len() {
+        match toks.get(t) {
+            Some(Tok::Any) => {
+                backtrack = Some((t, v));
+                t += 1;
+            }
+            Some(Tok::One) => {
+                v += 1;
+                t += 1;
+            }
+            Some(Tok::Lit(c)) if *c == value[v] => {
+                v += 1;
+                t += 1;
+            }
+            _ => match backtrack {
+                Some((bt, bv)) => {
+                    backtrack = Some((bt, bv + 1));
+                    t = bt + 1;
+                    v = bv + 1;
+                }
+                None => return false,
+            },
+        }
+    }
+    toks[t..].iter().all(|tok| matches!(tok, Tok::Any))
 }
 
 fn row_field_cmp(

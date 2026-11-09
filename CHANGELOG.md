@@ -16,6 +16,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- The in-memory row filter (mem, redis, mongodb, indradb and hybrid backends) now reads
+  `LIKE` / `NOT LIKE ... ESCAPE '<c>'` and `IS [NOT] NULL`. Contains, StartsWith and EndsWith
+  queries and `where_<field>_is_none()` returned no rows there. `LIKE` honours the escape for
+  `%`, `_` and itself and ignores ASCII case, as SQLite does.
 - The in-memory row filter's `ORDER BY` (used by the mem, redis, mongodb, indradb and hybrid
   backends) now sorts on every key with its own ASC/DESC, compares numbers numerically
   instead of skipping them, and reads `START n` as an offset.

@@ -2,10 +2,14 @@
 
 use std::sync::Arc;
 
+use valence_core::actor::Actor;
 use valence_core::backend::DatabaseBackend;
 use valence_core::compiled_query::CompiledQuery;
+use valence_core::data_use::DataUsePurpose;
+use valence_core::query::{NullPredicate, QueryCore, StringPredicate};
 use valence_core::record_id::RecordId;
 use valence_core::Result;
+use valence_core::Valence;
 
 const CONTRACT_TABLE: &str = "valence_backend_contract";
 
@@ -20,6 +24,7 @@ pub async fn run_backend_contract(backend: Arc<dyn DatabaseBackend>) -> Result<(
     define_unique_index_idempotent(backend.as_ref()).await?;
     duplicate_unique_index_rejected(backend.as_ref()).await?;
     ensure_schemaless_table_lazy(backend.as_ref()).await?;
+    string_and_null_filters(backend).await?;
     Ok(())
 }
 
@@ -216,5 +221,109 @@ async fn ensure_schemaless_table_lazy(backend: &dyn DatabaseBackend) -> Result<(
     let _ = backend
         .create_record("lazy_contract_table", serde_json::json!({"id": "lazy1"}))
         .await?;
+    Ok(())
+}
+
+const FILTER_TABLE: &str = "valence_backend_contract_filters";
+
+/// `Contains` / `StartsWith` / `EndsWith` (with and without `%`, `_` and `\` in the needle) and
+/// record `IS NONE` / `IS SOME` must pick the same rows on every backend, so a mem-backed
+/// test sees what sqlite would.
+async fn string_and_null_filters(backend: Arc<dyn DatabaseBackend>) -> Result<()> {
+    backend.ensure_schemaless_table(FILTER_TABLE).await?;
+    let rows = [
+        ("f1", "core", Some("owner:o1")),
+        ("f2", "Hardcore", None),
+        ("f3", "100%", Some("owner:o2")),
+        ("f4", "100x", None),
+        ("f5", "a_b", None),
+        ("f6", "axb", None),
+        ("f7", "a\\b", None),
+    ];
+    for (id, name, owner) in rows {
+        let mut doc = serde_json::json!({"id": id, "name": name});
+        if let Some(o) = owner {
+            let (table, rid) = o.split_once(':').expect("table:id");
+            doc["owner"] = serde_json::json!({"table": table, "id": rid});
+        }
+        backend.create_record(FILTER_TABLE, doc).await?;
+    }
+    let valence = Valence::builder()
+        .add_backend("default", backend)
+        .with_actor(Actor::User {
+            user_id: "alice".into(),
+        })
+        .build()?;
+
+    let ids = |q: QueryCore| {
+        let valence = valence.clone();
+        async move {
+            let purpose = DataUsePurpose::new(
+                r"**Test:** Filters fixture rows by string and null predicates so the backend contract can check every adapter returns the same rows. CI and developers running the suite only.",
+                file!(),
+                line!(),
+            );
+            let found: Vec<serde_json::Value> = q.execute(&valence, purpose).await?;
+            let mut ids: Vec<String> = found
+                .iter()
+                .filter_map(|r| r["id"].as_str().or_else(|| r["id"]["id"].as_str()))
+                .map(str::to_string)
+                .collect();
+            ids.sort();
+            Ok::<_, valence_core::Error>(ids)
+        }
+    };
+    let string = |pred| QueryCore::new(FILTER_TABLE.to_string()).where_string("name".into(), pred);
+    let expect = |got: Vec<String>, want: &[&str], what: &str| {
+        assert_eq!(got, want, "{what}");
+    };
+
+    expect(
+        ids(string(StringPredicate::Contains("core".into()))).await?,
+        &["f1", "f2"],
+        "contains",
+    );
+    expect(
+        ids(string(StringPredicate::StartsWith("core".into()))).await?,
+        &["f1"],
+        "starts_with",
+    );
+    expect(
+        ids(string(StringPredicate::EndsWith("core".into()))).await?,
+        &["f1", "f2"],
+        "ends_with",
+    );
+    expect(
+        ids(string(StringPredicate::Contains("%".into()))).await?,
+        &["f3"],
+        "contains %",
+    );
+    expect(
+        ids(string(StringPredicate::StartsWith("100%".into()))).await?,
+        &["f3"],
+        "starts_with 100%",
+    );
+    expect(
+        ids(string(StringPredicate::Contains("a_b".into()))).await?,
+        &["f5"],
+        "contains _",
+    );
+    expect(
+        ids(string(StringPredicate::EndsWith("\\b".into()))).await?,
+        &["f7"],
+        "ends_with backslash",
+    );
+
+    let owner = |pred| QueryCore::new(FILTER_TABLE.to_string()).where_null("owner".into(), pred);
+    expect(
+        ids(owner(NullPredicate::IsNone)).await?,
+        &["f2", "f4", "f5", "f6", "f7"],
+        "owner is none",
+    );
+    expect(
+        ids(owner(NullPredicate::IsSome)).await?,
+        &["f1", "f3"],
+        "owner is some",
+    );
     Ok(())
 }

@@ -24,7 +24,6 @@ pub async fn run_backend_contract(backend: Arc<dyn DatabaseBackend>) -> Result<(
     define_unique_index_idempotent(backend.as_ref()).await?;
     duplicate_unique_index_rejected(backend.as_ref()).await?;
     ensure_schemaless_table_lazy(backend.as_ref()).await?;
-    string_and_null_filters(backend).await?;
     Ok(())
 }
 
@@ -228,8 +227,9 @@ const FILTER_TABLE: &str = "valence_backend_contract_filters";
 
 /// `Contains` / `StartsWith` / `EndsWith` (with and without `%`, `_` and `\` in the needle) and
 /// record `IS NONE` / `IS SOME` must pick the same rows on every backend, so a mem-backed
-/// test sees what sqlite would.
-async fn string_and_null_filters(backend: Arc<dyn DatabaseBackend>) -> Result<()> {
+/// test sees what sqlite would. Needs a registered query compiler, so it stays out of
+/// [`run_backend_contract`], which stub backends also run.
+pub async fn run_row_filter_parity(backend: Arc<dyn DatabaseBackend>) -> Result<()> {
     backend.ensure_schemaless_table(FILTER_TABLE).await?;
     let rows = [
         ("f1", "core", Some("owner:o1")),

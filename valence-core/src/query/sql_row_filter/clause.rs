@@ -4,7 +4,8 @@
 //! must match as "every group matches", not as one flat `OR`.
 
 use super::{
-    extract_field_ref, row_field_cmp, row_field_equals, row_string_field, sql_like_matches,
+    extract_field_ref, nested_field, row_field_cmp, row_field_equals, row_string_field,
+    sql_like_matches,
 };
 
 type Params = [(String, serde_json::Value)];
@@ -63,7 +64,7 @@ fn strip_wrapping_parens(s: &str) -> Option<&str> {
 
 /// Whether `row` satisfies `clause`. `OR` binds looser than `AND`, as in SQL.
 ///
-/// Fails closed: a term this matcher cannot read (unknown operator, `IS NULL`, a `$key`
+/// Fails closed: a term this matcher cannot read (unknown operator, an `ESCAPE` that is not one character, a `$key`
 /// missing from `params`, a right-hand side that is not a `$key`, quoted literal or number,
 /// unbalanced parens or quotes) does not match, so it excludes the row instead of being
 /// skipped.
@@ -86,21 +87,38 @@ pub(super) fn clause_matches(row: &serde_json::Value, clause: &str, params: &Par
     }
 }
 
-/// One `field {=,>,>=,<,<=} rhs` or `field LIKE rhs` term, where `rhs` is a `$key`, a
-/// `'quoted'` string literal or a number.
+/// One `field {=,>,>=,<,<=} rhs`, `field [NOT] LIKE rhs [ESCAPE '<c>']` or
+/// `field IS [NOT] {NULL,NONE}` term, where `rhs` is a `$key`, a `'quoted'` string literal or a
+/// number.
 fn term_matches(row: &serde_json::Value, term: &str, params: &Params) -> bool {
+    if let Some(matched) = null_term_matches(row, term) {
+        return matched;
+    }
+    let (term, escape) = match split_escape(term) {
+        Some(split) => split,
+        None => return false,
+    };
     let Some((before, value)) = split_rhs(term, params) else {
         return false;
     };
     let value = &value;
 
     let upper = before.to_ascii_uppercase();
-    if upper.ends_with(" LIKE") {
-        let field = extract_field_ref(&before[..before.len() - " LIKE".len()]);
-        return !field.is_empty()
-            && value.as_str().is_some_and(|pattern| {
-                row_string_field(row, &field).is_some_and(|s| sql_like_matches(s, pattern))
-            });
+    for (suffix, negated) in [(" NOT LIKE", true), (" LIKE", false)] {
+        if !upper.ends_with(suffix) {
+            continue;
+        }
+        let field = extract_field_ref(&before[..before.len() - suffix.len()]);
+        if field.is_empty() {
+            return false;
+        }
+        let (Some(pattern), Some(s)) = (value.as_str(), row_string_field(row, &field)) else {
+            return false;
+        };
+        return sql_like_matches(s, pattern, escape) != negated;
+    }
+    if escape.is_some() {
+        return false;
     }
 
     // Longer operators first so `>=` is not read as `>`; `!=` and `<>` are rejected.
@@ -122,6 +140,43 @@ fn term_matches(row: &serde_json::Value, term: &str, params: &Params) -> bool {
         };
     }
     false
+}
+
+/// `Some(matched)` for `field IS [NOT] NULL` / `NONE`, `None` for any other term. A field is
+/// null when its key is absent or holds JSON `null`.
+fn null_term_matches(row: &serde_json::Value, term: &str) -> Option<bool> {
+    let upper = term.trim_end().to_ascii_uppercase();
+    for (suffix, negated) in [
+        (" IS NOT NULL", true),
+        (" IS NOT NONE", true),
+        (" IS NULL", false),
+        (" IS NONE", false),
+    ] {
+        if upper.ends_with(suffix) {
+            let field = extract_field_ref(&term.trim_end()[..upper.len() - suffix.len()]);
+            if field.is_empty() {
+                return Some(false);
+            }
+            let is_null = nested_field(row, &field).is_none_or(serde_json::Value::is_null);
+            return Some(is_null != negated);
+        }
+    }
+    None
+}
+
+/// Strip a trailing `ESCAPE '<c>'` from `term`. `Some((term, None))` without one; `None` when
+/// the escape literal is not a single character.
+fn split_escape(term: &str) -> Option<(&str, Option<char>)> {
+    let term = term.trim_end();
+    let upper = term.to_ascii_uppercase();
+    let Some(at) = upper.rfind(" ESCAPE ") else {
+        return Some((term, None));
+    };
+    let literal = term[at + " ESCAPE ".len()..].trim();
+    let inner = literal.strip_prefix('\'')?.strip_suffix('\'')?;
+    let mut chars = inner.chars();
+    let c = chars.next()?;
+    chars.next().is_none().then_some((&term[..at], Some(c)))
 }
 
 /// Split a term into the text before its right-hand side and the value that side stands for.

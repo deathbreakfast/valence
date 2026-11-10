@@ -14,6 +14,7 @@ ignore = [
     { id = "RUSTSEC-2026-0441", reason = "pin-utils unmaintained (upstream archived 2026-10-01); transitive via surrealdb -> wasmtimer (surreal backend); no safe upgrade, re-check when bumping surrealdb" },
     { id = "RUSTSEC-2026-0453", reason = "affinitypool spawn_local use-after-free in surrealdb 3.2 KV backends (surreal backend); fix is surrealdb 3.3, which adds quick-xml 0.39 with its own unfixed RUSTSEC-2026-0194/0195, so stay on 3.2 and re-check when bumping surrealdb" },
     { id = "RUSTSEC-2026-0454", reason = "reblessive unsound Send/Sync; transitive via surrealdb-core (surreal backend); fixed only in surrealdb 4.0, re-check when bumping surrealdb" },
+    { id = "RUSTSEC-2026-0459", reason = "libsqlite3-sys 0.30 via sqlx-sqlite; temporary until the fleet sqlx bump moves it to >=0.39" },
 ]
 
 [licenses]

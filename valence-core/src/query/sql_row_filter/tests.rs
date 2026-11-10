@@ -580,12 +580,9 @@ mod clause_matching {
     #[test]
     fn and_only_clause_with_unsupported_operator_excludes_every_row() {
         for unsupported in [
-            "a IS NULL",
-            "a IS NOT NULL",
             "a != $p1",
             "a <> $p1",
             "a IN ($p1, $p2)",
-            "a NOT LIKE $p1",
             "n BETWEEN $p1 AND $p2",
             "a = $missing",
             "a = 'unterminated",
@@ -778,4 +775,102 @@ fn legacy_seconds_row_sorts_before_millisecond_predicate() {
     let rows = vec![serde_json::json!({"id": "legacy", "at": 1_700_000_000_i64})];
     let out = apply_equality_where(rows, &compiled);
     assert_eq!(out, Vec::<serde_json::Value>::new());
+}
+
+fn like_ids(sql: &str, pattern: &str, values: &[&str]) -> Vec<String> {
+    let rows = values
+        .iter()
+        .enumerate()
+        .map(|(i, v)| serde_json::json!({"id": format!("r{i}"), "s": v}))
+        .collect();
+    let compiled = CompiledQuery::new(
+        sql.into(),
+        vec![("param_0".into(), serde_json::json!(pattern))],
+    );
+    apply_equality_where(rows, &compiled)
+        .iter()
+        .map(|r| r["id"].as_str().unwrap().to_string())
+        .collect()
+}
+
+#[test]
+fn like_escape_contains_starts_ends_with_plain_text() {
+    let values = ["core", "Hardcore!", "corex", "x"];
+    let sql = "SELECT * FROM t WHERE s LIKE $param_0 ESCAPE '\\'";
+    assert_eq!(like_ids(sql, "%core%", &values), ["r0", "r1", "r2"]);
+    assert_eq!(like_ids(sql, "core%", &values), ["r0", "r2"]);
+    assert_eq!(like_ids(sql, "%core", &values), ["r0"]);
+}
+
+#[test]
+fn like_escape_makes_wildcards_and_escape_literal() {
+    let sql = "SELECT * FROM t WHERE s LIKE $param_0 ESCAPE '\\'";
+    let values = ["100%", "100x", "a_b", "axb", "a\\b", "ab"];
+    assert_eq!(like_ids(sql, "%100\\%%", &values), ["r0"]);
+    assert_eq!(like_ids(sql, "%a\\_b%", &values), ["r2"]);
+    assert_eq!(like_ids(sql, "%a\\\\b%", &values), ["r4"]);
+    // Unescaped, `_` and `%` stay wildcards.
+    assert_eq!(like_ids(sql, "a_b", &values), ["r2", "r3", "r4"]);
+}
+
+#[test]
+fn like_is_ascii_case_insensitive_like_sqlite() {
+    let sql = "SELECT * FROM t WHERE s LIKE $param_0 ESCAPE '\\'";
+    assert_eq!(like_ids(sql, "%CORE%", &["Core", "other"]), ["r0"]);
+}
+
+#[test]
+fn not_like_and_custom_escape_char() {
+    let sql = "SELECT * FROM t WHERE s NOT LIKE $param_0 ESCAPE '!'";
+    assert_eq!(like_ids(sql, "%!%%", &["10%", "10"]), ["r1"]);
+}
+
+#[test]
+fn malformed_escape_excludes_every_row() {
+    for sql in [
+        "SELECT * FROM t WHERE s LIKE $param_0 ESCAPE ''",
+        "SELECT * FROM t WHERE s LIKE $param_0 ESCAPE '\\\\x'",
+        "SELECT * FROM t WHERE s = $param_0 ESCAPE '\\'",
+    ] {
+        assert!(like_ids(sql, "%a%", &["a"]).is_empty(), "{sql}");
+    }
+    // A pattern that ends on a bare escape matches nothing.
+    let sql = "SELECT * FROM t WHERE s LIKE $param_0 ESCAPE '\\'";
+    assert_eq!(like_ids(sql, "a\\", &["a", "a\\"]), Vec::<String>::new());
+}
+
+#[test]
+fn is_null_matches_absent_and_json_null_fields() {
+    let rows = || {
+        vec![
+            serde_json::json!({"id": "absent", "body": {}}),
+            serde_json::json!({"id": "null", "body": {"subject": null}}),
+            serde_json::json!({"id": "set", "body": {"subject": "t:1"}}),
+        ]
+    };
+    let ids = |sql: &str| -> Vec<String> {
+        apply_equality_where(rows(), &CompiledQuery::new(sql.into(), vec![]))
+            .iter()
+            .map(|r| r["id"].as_str().unwrap().to_string())
+            .collect()
+    };
+    let col = "json_extract(body, '$.subject')";
+    assert_eq!(
+        ids(&format!("SELECT * FROM t WHERE {col} IS NULL")),
+        ["absent", "null"]
+    );
+    assert_eq!(
+        ids(&format!("SELECT * FROM t WHERE {col} IS NOT NULL")),
+        ["set"]
+    );
+    assert_eq!(
+        ids(&format!(
+            "SELECT * FROM t WHERE ({col} IS NONE OR {col} IS NULL)"
+        )),
+        ["absent", "null"]
+    );
+    assert_eq!(
+        ids("SELECT * FROM t WHERE subject IS NULL AND id = 'null'"),
+        ["null"]
+    );
 }

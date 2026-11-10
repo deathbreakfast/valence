@@ -3,5 +3,7 @@
 # available upstream. The rest are transitive via the optional surreal backend
 # (surrealmx/rust_decimal -> surrealdb-core); no safe upgrade path yet.
 # Re-check the surreal-backend ones when bumping surrealdb.
+# RUSTSEC-2026-0459: libsqlite3-sys 0.30 via sqlx-sqlite; temporary until the fleet sqlx bump
+# moves it to >=0.39.
 ignore = ["RUSTSEC-2023-0071", "RUSTSEC-2023-0089", "RUSTSEC-2026-0235", "RUSTSEC-2026-0387",
-    "RUSTSEC-2026-0453", "RUSTSEC-2026-0454"]
+    "RUSTSEC-2026-0453", "RUSTSEC-2026-0454", "RUSTSEC-2026-0459"]

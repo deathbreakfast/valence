@@ -19,6 +19,10 @@ use super::helpers::{
 };
 use super::OwnershipService;
 
+/// Most ids in one pending-deletion lookup query: well under SQLite's expression depth
+/// limit of 1000 and every backend's bind-parameter limit.
+const PENDING_LOOKUP_CHUNK: usize = 256;
+
 impl OwnershipService {
     /// Resolve the backend that stores `valence_data_ownership` rows for `valence_model`.
     /// # Errors
@@ -39,6 +43,9 @@ impl OwnershipService {
     }
 
     /// Batched lookup; `None` when the ownership backend's engine has no compiled form.
+    ///
+    /// The SQL form has one `OR` term per id, and SQLite refuses expressions nested
+    /// deeper than 1000, so ids go in chunks of [`PENDING_LOOKUP_CHUNK`].
     async fn pending_deletion_ids_via_in_query(
         valence_model: &str,
         bare_record_ids: &[String],
@@ -47,28 +54,28 @@ impl OwnershipService {
         let sys = system_valence(v);
         let backend = Self::ownership_backend(valence_model, &sys)?;
         super::ensure_lookup_index_once(&backend).await;
-        let Some(compiled) = crate::compiled_query_factory::pending_deletion_record_ids(
-            backend.engine_id(),
-            valence_model,
-            bare_record_ids,
-        )?
-        else {
-            return Ok(None);
-        };
-        let rows = backend
-            .execute_compiled_query(&compiled)
-            .await
-            .map_err(|e| Error::database(e.to_string()))?;
-        Ok(Some(
-            rows.into_iter()
-                .filter_map(|row| {
-                    // SurrealQL `SELECT VALUE` yields the string; SQL yields `{ record_id }`.
-                    row.as_str()
-                        .or_else(|| row.get("record_id").and_then(Value::as_str))
-                        .map(normalize_pending_deletion_query_value)
-                })
-                .collect(),
-        ))
+        let mut pending = HashSet::new();
+        for chunk in bare_record_ids.chunks(PENDING_LOOKUP_CHUNK) {
+            let Some(compiled) = crate::compiled_query_factory::pending_deletion_record_ids(
+                backend.engine_id(),
+                valence_model,
+                chunk,
+            )?
+            else {
+                return Ok(None);
+            };
+            let rows = backend
+                .execute_compiled_query(&compiled)
+                .await
+                .map_err(|e| Error::database(e.to_string()))?;
+            pending.extend(rows.into_iter().filter_map(|row| {
+                // SurrealQL `SELECT VALUE` yields the string; SQL yields `{ record_id }`.
+                row.as_str()
+                    .or_else(|| row.get("record_id").and_then(Value::as_str))
+                    .map(normalize_pending_deletion_query_value)
+            }));
+        }
+        Ok(Some(pending))
     }
 
     /// Load ownership JSON for a row, if present.

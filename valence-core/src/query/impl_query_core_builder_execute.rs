@@ -55,6 +55,11 @@ impl QueryCore {
     /// through backend windows until `limit` readable rows are found, the table ends, or
     /// [`super::MAX_QUERY_HIDDEN_SCAN`] unreadable rows past the window have been scanned.
     ///
+    /// Paging by `offset` re-reads every row before the window on each call, because
+    /// `offset` counts readable rows. To read a long table once, page with
+    /// [`super::QueryStats::resume`] and [`Self::resume_at`] instead, and stop when
+    /// `resume` is `None`.
+    ///
     /// `fetched` counts rows the caller may not read. Do not show it to users: it
     /// can reveal that hidden rows exist.
     ///
@@ -97,12 +102,11 @@ impl QueryCore {
         T: DeserializeOwned + Serialize,
     {
         let _ = purpose;
-        let (rows, fetched) = self.execute_inner(valence).await?;
-        Ok((rows, super::QueryStats { fetched }))
+        self.execute_inner(valence).await
     }
 
-    /// Shared body of `execute` and `execute_with_stats`: rows plus backend row count.
-    async fn execute_inner<T>(mut self, valence: &Valence) -> Result<(Vec<T>, usize)>
+    /// Shared body of `execute` and `execute_with_stats`: rows plus scan stats.
+    async fn execute_inner<T>(mut self, valence: &Valence) -> Result<(Vec<T>, super::QueryStats)>
     where
         T: DeserializeOwned + Serialize,
     {
@@ -123,15 +127,17 @@ impl QueryCore {
             // Cap each branch fetch; final window applied after merge.
             branch_core.limit = Some(super::MAX_QUERY_LIMIT);
             branch_core.offset = None;
+            // A trait union merges several tables, so it has no single raw position.
+            branch_core.resume_at = None;
 
             let mut merged_json = Vec::new();
             let mut fetched = 0usize;
             for tbl in tables {
                 let mut branch = branch_core.clone();
                 branch.table = tbl;
-                let (rows, branch_fetched): (Vec<T>, usize) =
+                let (rows, branch_stats): (Vec<T>, super::QueryStats) =
                     Self::execute_on_table(branch, valence).await?;
-                fetched += branch_fetched;
+                fetched += branch_stats.fetched;
                 for row in rows {
                     merged_json.push(
                         serde_json::to_value(&row)
@@ -154,7 +160,13 @@ impl QueryCore {
                         .map_err(Error::from)?,
                 );
             }
-            return Ok((results, fetched));
+            return Ok((
+                results,
+                super::QueryStats {
+                    fetched,
+                    resume: None,
+                },
+            ));
         }
 
         Self::execute_on_table(self, valence).await
@@ -166,7 +178,7 @@ impl QueryCore {
         skip(self, valence),
         fields(table = %self.table)
     )]
-    async fn execute_on_table<T>(self, valence: &Valence) -> Result<(Vec<T>, usize)>
+    async fn execute_on_table<T>(self, valence: &Valence) -> Result<(Vec<T>, super::QueryStats)>
     where
         T: DeserializeOwned + Serialize,
     {
@@ -211,7 +223,17 @@ impl QueryCore {
 
         let mut results: Vec<T> = Vec::new();
         let mut to_skip = skip;
-        let mut raw_offset = if paged { 0 } else { skip };
+        // A resumed scan starts at the raw row where the last one stopped, so paging
+        // stays linear instead of re-reading from row 0 for every `offset`.
+        let start = if paged {
+            self.resume_at.unwrap_or(0) as usize
+        } else {
+            skip
+        };
+        let mut raw_offset = start;
+        // Raw position just past the last row this page consumed (skipped or returned).
+        let mut consumed = start;
+        let mut table_ended = false;
         let mut rows_db = 0usize;
         let mut dropped = RowsDropped::default();
         loop {
@@ -235,13 +257,14 @@ impl QueryCore {
                 .instrument(backend_span)
                 .await?;
             let fetched = json_rows.len();
+            let window_start = raw_offset;
             rows_db += fetched;
             raw_offset += fetched;
 
             let mut typed = Vec::with_capacity(fetched);
-            for row in json_rows {
+            for (i, row) in json_rows.into_iter().enumerate() {
                 match serde_json::from_value(row) {
-                    Ok(v) => typed.push(v),
+                    Ok(v) => typed.push((window_start + i, v)),
                     Err(e) => {
                         let err = Error::from(e);
                         record_deserialize_error(&table, &err);
@@ -252,20 +275,33 @@ impl QueryCore {
 
             let visible = self.filter_window(typed, valence, &mut dropped).await?;
             if !paged {
-                results = visible;
+                results = visible.into_iter().map(|(_, row)| row).collect();
                 break;
             }
-            for row in visible {
+            // Rows the filters dropped are consumed too: a resumed scan never needs them.
+            consumed = raw_offset;
+            for (pos, row) in visible {
+                if results.len() >= want {
+                    // Page full: resume at the first readable row it didn't take.
+                    consumed = pos;
+                    break;
+                }
                 if to_skip > 0 {
                     to_skip -= 1;
-                } else if results.len() < want {
+                } else {
                     results.push(row);
                 }
             }
-            if results.len() >= want || fetched < chunk || rows_db >= scan_budget {
+            if fetched < chunk {
+                // The backend has nothing past this window; rows left in it still resume.
+                table_ended = consumed == raw_offset;
+                break;
+            }
+            if results.len() >= want || rows_db >= scan_budget {
                 break;
             }
         }
+        let resume = (paged && !table_ended).then(|| u32::try_from(consumed).unwrap_or(u32::MAX));
 
         for (stage, count) in [
             ("connection_privacy", dropped.connection),
@@ -293,17 +329,24 @@ impl QueryCore {
             wall_ms,
         );
 
-        Ok((results, rows_db))
+        Ok((
+            results,
+            super::QueryStats {
+                fetched: rows_db,
+                resume,
+            },
+        ))
     }
 
     /// Run one backend window through connection, hop, pending-deletion and entity privacy,
-    /// adding the rows each stage dropped to `dropped`.
+    /// adding the rows each stage dropped to `dropped`. Each row keeps its position in
+    /// the backend window, so a page that fills mid-window knows where to resume.
     async fn filter_window<T>(
         &self,
-        rows: Vec<T>,
+        rows: Vec<(usize, T)>,
         valence: &Valence,
         dropped: &mut RowsDropped,
-    ) -> Result<Vec<T>>
+    ) -> Result<Vec<(usize, T)>>
     where
         T: DeserializeOwned + Serialize,
     {
@@ -374,9 +417,9 @@ impl QueryCore {
 
     async fn post_filter_connection_privacy<T>(
         &self,
-        results: Vec<T>,
+        results: Vec<(usize, T)>,
         valence: &Valence,
-    ) -> Result<Vec<T>>
+    ) -> Result<Vec<(usize, T)>>
     where
         T: Serialize,
     {
@@ -405,7 +448,7 @@ impl QueryCore {
         use crate::schema::SchemaRegistry;
 
         let mut filtered = Vec::with_capacity(results.len());
-        for row in results {
+        for (pos, row) in results {
             let mut exclude = false;
             let row_json =
                 serde_json::to_value(&row).map_err(|e| Error::Internal(e.to_string()))?;
@@ -433,13 +476,17 @@ impl QueryCore {
                 }
             }
             if !exclude {
-                filtered.push(row);
+                filtered.push((pos, row));
             }
         }
         Ok(filtered)
     }
 
-    async fn post_filter_hop_privacy<T>(&self, results: Vec<T>, valence: &Valence) -> Result<Vec<T>>
+    async fn post_filter_hop_privacy<T>(
+        &self,
+        results: Vec<(usize, T)>,
+        valence: &Valence,
+    ) -> Result<Vec<(usize, T)>>
     where
         T: Serialize + DeserializeOwned,
     {
@@ -455,9 +502,9 @@ impl QueryCore {
     /// schemas for any table that holds sensitive data.
     async fn post_filter_entity_privacy<T>(
         &self,
-        results: Vec<T>,
+        results: Vec<(usize, T)>,
         valence: &Valence,
-    ) -> Result<Vec<T>>
+    ) -> Result<Vec<(usize, T)>>
     where
         T: Serialize + DeserializeOwned,
     {
@@ -474,11 +521,11 @@ impl QueryCore {
     /// table. Ownership lookup errors fail closed, like the `get` gate.
     async fn post_filter_pending_deletion<T>(
         &self,
-        results: Vec<T>,
+        results: Vec<(usize, T)>,
         valence: &Valence,
-    ) -> Result<Vec<T>>
+    ) -> Result<Vec<(usize, T)>>
     where
-        T: Serialize + DeserializeOwned,
+        T: Serialize,
     {
         use crate::ownership::{normalize_record_id_for_ownership, OwnershipService};
         use std::collections::{HashMap, HashSet};
@@ -489,7 +536,7 @@ impl QueryCore {
         let default_table = backend_schema_table(self.table.as_str()).to_string();
         let mut keys: Vec<Option<(String, String)>> = Vec::with_capacity(results.len());
         let mut by_table: HashMap<String, Vec<String>> = HashMap::new();
-        for row in &results {
+        for (_, row) in &results {
             let row_json = serde_json::to_value(row).map_err(|e| Error::Internal(e.to_string()))?;
             let key = match row_json.get("id") {
                 // Same normalization as the `get` gate: `table:` is stripped only for a known table.
@@ -540,9 +587,9 @@ impl QueryCore {
 
     async fn filter_rows_by_entity_read<T>(
         &self,
-        results: Vec<T>,
+        results: Vec<(usize, T)>,
         valence: &Valence,
-    ) -> Result<Vec<T>>
+    ) -> Result<Vec<(usize, T)>>
     where
         T: Serialize + DeserializeOwned,
     {
@@ -555,7 +602,7 @@ impl QueryCore {
         };
 
         let mut kept = Vec::with_capacity(results.len());
-        for row in results {
+        for (pos, row) in results {
             let row_json =
                 serde_json::to_value(&row).map_err(|e| Error::Internal(e.to_string()))?;
             if PrivacyEvaluator::check_entity_read(schema, &row_json, valence)
@@ -565,10 +612,10 @@ impl QueryCore {
                 let (filtered, _) =
                     PrivacyEvaluator::filter_entity_fields(schema, &row_json, valence.actor())?;
                 let filtered_json = serde_json::Value::Object(filtered.into_iter().collect());
-                kept.push(
-                    serde_json::from_value(filtered_json)
-                        .map_err(Error::from)?,
-                );
+                kept.push((
+                    pos,
+                    serde_json::from_value(filtered_json).map_err(Error::from)?,
+                ));
             }
         }
         Ok(kept)

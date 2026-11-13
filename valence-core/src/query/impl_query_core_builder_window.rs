@@ -27,6 +27,20 @@ impl QueryCore {
         self
     }
 
+    /// Start the backend scan at raw row `position`, taken from the previous page's
+    /// [`QueryStats::resume`] under the same filters and order.
+    ///
+    /// `offset` counts rows the caller can read, so paging by offset re-reads every row
+    /// before the window on each call. Resuming starts where the last page stopped, so a
+    /// page re-reads at most the rest of one backend window. Rows created
+    /// between pages can shift raw positions by a few rows, as with offset paging, so a
+    /// caller that must not show a row twice should dedupe by id.
+    #[must_use]
+    pub const fn resume_at(mut self, position: u32) -> Self {
+        self.resume_at = Some(position);
+        self
+    }
+
     /// Set search fields for full-text search
     #[must_use]
     pub fn set_search_fields(mut self, fields: Vec<String>) -> Self {

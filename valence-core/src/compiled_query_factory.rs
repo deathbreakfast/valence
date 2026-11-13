@@ -328,6 +328,8 @@ pub fn count_ownership_rows_for_schema(
 /// Ownership `record_id`s among `record_ids` whose status is `pending_deletion`.
 ///
 /// Returns `None` for engines without a compiler here; callers fall back to point lookups.
+/// The SQL form has one nested `OR` term per id, so callers keep `record_ids` short:
+/// SQLite refuses expressions deeper than 1000.
 ///
 /// # Errors
 ///

@@ -80,6 +80,11 @@ pub struct QueryStats {
     /// Do not show it to users: it can reveal that hidden rows exist. For
     /// trait-union queries it is the sum over tables, an upper bound.
     pub fetched: usize,
+    /// Where the next page starts: pass it to [`QueryCore::resume_at`] with no
+    /// `offset` and the scan picks up after the last row this page consumed,
+    /// without re-reading the rows before it. `None` when the table ended, and
+    /// always `None` for grouped and trait-union queries, which can't resume.
+    pub resume: Option<u32>,
 }
 
 /// Core query builder that compiles per registered engine.
@@ -92,6 +97,8 @@ pub struct QueryCore {
     pub order_by: Vec<OrderBy>,
     pub limit: Option<u32>,
     pub offset: Option<u32>,
+    /// Raw backend row to start the scan at, from [`QueryStats::resume`].
+    pub resume_at: Option<u32>,
     pub search_fields: Vec<String>,
     pub search_term: Option<String>,
     /// Previous hop in the chain. None for root queries, Some for hopped queries.

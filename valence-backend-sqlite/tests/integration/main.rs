@@ -4,6 +4,7 @@
 //! crate's integration tests link once instead of once per file.
 
 mod backend_contract;
+mod large_scan;
 mod memory_connection_recycle;
 mod query_stats;
 mod scan_enumeration;

@@ -61,8 +61,7 @@ impl QueryCore {
         use crate::schema::SchemaRegistry;
 
         let table_str = table.into();
-        let schema = SchemaRegistry::global()
-            .get_schema(&table_str)
+        let schema = SchemaRegistry::lookup(&table_str)
             .ok_or_else(|| Error::NotFound(format!("Schema not found: {table_str}")))?;
         let Some(mut raw_data) =
             Self::get_stored_record_json(&table_str, id.as_ref(), valence, purpose).await?

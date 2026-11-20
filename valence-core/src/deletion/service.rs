@@ -55,7 +55,7 @@ impl DeletionService {
     /// Returns an error when the requested operation cannot be completed.
     pub async fn get_run_json(run_id: &str, v: &Valence) -> Result<Option<Value>> {
         let sys = system_valence(v);
-        QueryCore::get_record_json(
+        QueryCore::get_stored_record_json(
             "valence_deletion_run",
             run_id,
             &sys,

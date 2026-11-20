@@ -217,14 +217,14 @@ pub async fn run_delete_now_privacy_deny(valence: &Valence) -> Result<(), String
     if !err.to_string().contains("dncat_priv_c") {
         return Err(format!("expected privacy denial naming child, got {err}"));
     }
-    if QueryCore::get_record_json("dncat_priv_p", &pid, valence, DataUsePurpose::new(r"**Test:** Reloads fixture rows by id so the Valence suite can assert presence, absence, or field state after deletion and privacy scenarios. CI and developers running the suite only.", file!(), line!()))
+    if QueryCore::get_stored_record_json("dncat_priv_p", &pid, valence, DataUsePurpose::new(r"**Test:** Reloads fixture rows by id so the Valence suite can assert presence, absence, or field state after deletion and privacy scenarios. CI and developers running the suite only.", file!(), line!()))
         .await
         .map_err(|e| e.to_string())?
         .is_none()
     {
         return Err("parent must remain after privacy deny".into());
     }
-    if QueryCore::get_record_json("dncat_priv_c", &cid, valence, DataUsePurpose::new(r"**Test:** Reloads fixture rows by id so the Valence suite can assert presence, absence, or field state after deletion and privacy scenarios. CI and developers running the suite only.", file!(), line!()))
+    if QueryCore::get_stored_record_json("dncat_priv_c", &cid, valence, DataUsePurpose::new(r"**Test:** Reloads fixture rows by id so the Valence suite can assert presence, absence, or field state after deletion and privacy scenarios. CI and developers running the suite only.", file!(), line!()))
         .await
         .map_err(|e| e.to_string())?
         .is_none()
@@ -338,14 +338,14 @@ pub async fn run_delete_now_cross_engine_partial_retry(
             .map_err(|e| e.to_string())?;
     }
 
-    if QueryCore::get_record_json("od_xe_ca_child", &cid, &valence, DataUsePurpose::new(r"**Test:** Reloads fixture rows by id so the Valence suite can assert presence, absence, or field state after deletion and privacy scenarios. CI and developers running the suite only.", file!(), line!()))
+    if QueryCore::get_stored_record_json("od_xe_ca_child", &cid, &valence, DataUsePurpose::new(r"**Test:** Reloads fixture rows by id so the Valence suite can assert presence, absence, or field state after deletion and privacy scenarios. CI and developers running the suite only.", file!(), line!()))
         .await
         .map_err(|e| e.to_string())?
         .is_some()
     {
         return Err("child should be gone after partial apply".into());
     }
-    if QueryCore::get_record_json("od_xe_ca_parent", &pid, &valence, DataUsePurpose::new(r"**Test:** Reloads fixture rows by id so the Valence suite can assert presence, absence, or field state after deletion and privacy scenarios. CI and developers running the suite only.", file!(), line!()))
+    if QueryCore::get_stored_record_json("od_xe_ca_parent", &pid, &valence, DataUsePurpose::new(r"**Test:** Reloads fixture rows by id so the Valence suite can assert presence, absence, or field state after deletion and privacy scenarios. CI and developers running the suite only.", file!(), line!()))
         .await
         .map_err(|e| e.to_string())?
         .is_none()
@@ -356,7 +356,7 @@ pub async fn run_delete_now_cross_engine_partial_retry(
     delete_entity_now("od_xe_ca_parent", &pid, &valence)
         .await
         .map_err(|e| e.to_string())?;
-    if QueryCore::get_record_json("od_xe_ca_parent", &pid, &valence, DataUsePurpose::new(r"**Test:** Reloads fixture rows by id so the Valence suite can assert presence, absence, or field state after deletion and privacy scenarios. CI and developers running the suite only.", file!(), line!()))
+    if QueryCore::get_stored_record_json("od_xe_ca_parent", &pid, &valence, DataUsePurpose::new(r"**Test:** Reloads fixture rows by id so the Valence suite can assert presence, absence, or field state after deletion and privacy scenarios. CI and developers running the suite only.", file!(), line!()))
         .await
         .map_err(|e| e.to_string())?
         .is_some()

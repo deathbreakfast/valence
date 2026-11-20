@@ -39,15 +39,62 @@ impl QueryCore {
         }
     }
 
-    /// Get a record by ID and return it as `serde_json::Value`.
+    /// Get a record by ID as `serde_json::Value`, as the calling actor may see it.
     ///
     /// Uses the table's resolved [`crate::backend::DatabaseBackend`] (same routing as CRUD).
     ///
-    /// **Privacy:** raw storage read with no policy evaluation.
+    /// **Privacy:** evaluates the table's entity Read policy for `valence`'s actor. A row
+    /// the actor can't read returns `Ok(None)`, the same as a missing row, and fields
+    /// whose own read policy hides them are left out of the returned object. Every other
+    /// key keeps its stored shape, including `id`.
     /// # Errors
     ///
-    /// Returns an error when the requested operation cannot be completed.
+    /// [`Error::NotFound`] when `table` has no registered schema, and any storage or
+    /// policy evaluation error.
     pub async fn get_record_json(
+        table: impl Into<String>,
+        id: impl AsRef<str>,
+        valence: &Valence,
+        purpose: crate::data_use::DataUsePurpose,
+    ) -> Result<Option<serde_json::Value>> {
+        use crate::privacy::PrivacyEvaluator;
+        use crate::schema::SchemaRegistry;
+
+        let table_str = table.into();
+        let schema = SchemaRegistry::global()
+            .get_schema(&table_str)
+            .ok_or_else(|| Error::NotFound(format!("Schema not found: {table_str}")))?;
+        let Some(mut raw_data) =
+            Self::get_stored_record_json(&table_str, id.as_ref(), valence, purpose).await?
+        else {
+            return Ok(None);
+        };
+        match PrivacyEvaluator::check_entity_read(schema, &raw_data, valence).await {
+            Ok(()) => {}
+            Err(Error::Privacy(_)) => return Ok(None),
+            Err(e) => return Err(e),
+        }
+        let (_, hidden_fields) =
+            PrivacyEvaluator::filter_entity_fields(schema, &raw_data, valence.actor())?;
+        if let Some(obj) = raw_data.as_object_mut() {
+            for field in &hidden_fields {
+                obj.remove(field);
+            }
+        }
+        Ok(Some(raw_data))
+    }
+
+    /// Get a stored record by ID with no privacy evaluation.
+    ///
+    /// Framework use only: generated CRUD, deletion and policy evaluation load the
+    /// stored row with this and then authorize it themselves (Update, Delete, or the
+    /// parent's policy for `defer_to_edge`). Callers showing data to an actor use
+    /// [`Self::get_record_json`], [`Self::get_entity`] or [`crate::Model::get`].
+    /// # Errors
+    ///
+    /// Returns an error when the backend can't be resolved or the read fails.
+    #[doc(hidden)]
+    pub async fn get_stored_record_json(
         table: impl Into<String>,
         id: impl AsRef<str>,
         valence: &Valence,
@@ -132,7 +179,7 @@ impl QueryCore {
             .ok_or_else(|| Error::NotFound(format!("Schema not found: {table_str}")))?;
 
         // Step 2: Load full record (single trip; no privacy-free existence probe)
-        let raw_data = Self::get_record_json(&table_str, id_str, valence, purpose).await?;
+        let raw_data = Self::get_stored_record_json(&table_str, id_str, valence, purpose).await?;
         let Some(raw_data) = raw_data else {
             return Ok(None);
         };

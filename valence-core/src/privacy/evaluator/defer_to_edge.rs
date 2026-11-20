@@ -8,7 +8,6 @@
 
 use std::collections::HashSet;
 
-use crate::actor::Actor;
 use crate::connection::extract_id_from_select_value;
 use crate::data_use::DataUsePurpose;
 use crate::error::{Error, Result};
@@ -196,14 +195,13 @@ impl PrivacyEvaluator {
             ))
         })?;
 
-        // Fetch parent as System so missing ACL on storage load does not elevate the viewer.
-        let sys = v.with_actor(Actor::System {
-            operation: "defer_to_edge_parent_fetch".into(),
-        });
-        let Some(parent_raw) = QueryCore::get_record_json(
+        // Load the stored parent under the viewer's own handle (never System). The
+        // recursion below evaluates the parent's policy as the viewer, with the cycle
+        // and depth guards in `ctx`.
+        let Some(parent_raw) = QueryCore::get_stored_record_json(
             parent.table(),
             parent.id(),
-            &sys,
+            v,
             DataUsePurpose::new(
                 r"When a satellite row **defers read privacy to its parent**, we **load that parent row** so Valence can evaluate the parent's access policy as the viewer. Privacy evaluation uses this load only.",
                 file!(),

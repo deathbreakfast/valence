@@ -6,7 +6,10 @@
     clippy::unwrap_used,
     clippy::expect_used,
     clippy::print_stdout,
-    clippy::print_stderr
+    clippy::print_stderr,
+    // Generated `*Mutable` builders track an optional field as `Option<Option<T>>`
+    // (unset vs. set-to-None); `Account.password_hash` is the first optional field here.
+    clippy::option_option
 )]
 valence::include_generated_models!();
 

@@ -41,7 +41,7 @@ pub async fn apply_deletion_node(node: &DeletionNode, valence: &Valence) -> Resu
 }
 
 async fn apply_cascade_delete(table: &str, record_id: &str, valence: &Valence) -> Result<()> {
-    let Some(existing) = QueryCore::get_record_json(
+    let Some(existing) = QueryCore::get_stored_record_json(
         table,
         record_id,
         valence,
@@ -74,7 +74,7 @@ async fn apply_set_null(
     field: &str,
     valence: &Valence,
 ) -> Result<()> {
-    let Some(_existing) = QueryCore::get_record_json(
+    let Some(_existing) = QueryCore::get_stored_record_json(
         table,
         record_id,
         valence,

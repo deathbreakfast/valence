@@ -87,7 +87,7 @@ pub async fn prepare_deletion(
     let bare_id = normalize_record_id_for_deletion(table, id);
     assert_safe_bare_thing_id(&bare_id)?;
 
-    let Some(existing) = QueryCore::get_record_json(
+    let Some(existing) = QueryCore::get_stored_record_json(
         table,
         &bare_id,
         valence,

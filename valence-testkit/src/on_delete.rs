@@ -232,7 +232,7 @@ pub async fn run_on_delete_cascade_same_backend(valence: &Valence) -> Result<(),
         .await
         .map_err(|e| e.to_string())?;
 
-    if QueryCore::get_record_json("od_cascade_child", &cid, valence, DataUsePurpose::new(r"**Test:** Reloads fixture rows by id so the Valence suite can assert presence, absence, or field state after deletion and privacy scenarios. CI and developers running the suite only.", file!(), line!()))
+    if QueryCore::get_stored_record_json("od_cascade_child", &cid, valence, DataUsePurpose::new(r"**Test:** Reloads fixture rows by id so the Valence suite can assert presence, absence, or field state after deletion and privacy scenarios. CI and developers running the suite only.", file!(), line!()))
         .await
         .map_err(|e| e.to_string())?
         .is_some()
@@ -268,7 +268,7 @@ pub async fn run_on_delete_set_null(valence: &Valence) -> Result<(), String> {
         .await
         .map_err(|e| e.to_string())?;
 
-    let child = QueryCore::get_record_json("od_setnull_child", &cid, valence, DataUsePurpose::new(r"**Test:** Reloads fixture rows by id so the Valence suite can assert presence, absence, or field state after deletion and privacy scenarios. CI and developers running the suite only.", file!(), line!()))
+    let child = QueryCore::get_stored_record_json("od_setnull_child", &cid, valence, DataUsePurpose::new(r"**Test:** Reloads fixture rows by id so the Valence suite can assert presence, absence, or field state after deletion and privacy scenarios. CI and developers running the suite only.", file!(), line!()))
         .await
         .map_err(|e| e.to_string())?
         .ok_or("set-null child should remain")?;
@@ -323,7 +323,7 @@ pub async fn run_on_delete_remove_edge(valence: &Valence) -> Result<(), String> 
     if !targets.is_empty() {
         return Err("edges should be cleared".into());
     }
-    if QueryCore::get_record_json("od_edge_peer", &tid, valence, DataUsePurpose::new(r"**Test:** Reloads fixture rows by id so the Valence suite can assert presence, absence, or field state after deletion and privacy scenarios. CI and developers running the suite only.", file!(), line!()))
+    if QueryCore::get_stored_record_json("od_edge_peer", &tid, valence, DataUsePurpose::new(r"**Test:** Reloads fixture rows by id so the Valence suite can assert presence, absence, or field state after deletion and privacy scenarios. CI and developers running the suite only.", file!(), line!()))
         .await
         .map_err(|e| e.to_string())?
         .is_none()
@@ -364,14 +364,14 @@ pub async fn run_on_delete_restrict_blocks(valence: &Valence) -> Result<(), Stri
         return Err(format!("expected Restrict in error, got {err}"));
     }
 
-    if QueryCore::get_record_json("od_restrict_parent", &pid, valence, DataUsePurpose::new(r"**Test:** Reloads fixture rows by id so the Valence suite can assert presence, absence, or field state after deletion and privacy scenarios. CI and developers running the suite only.", file!(), line!()))
+    if QueryCore::get_stored_record_json("od_restrict_parent", &pid, valence, DataUsePurpose::new(r"**Test:** Reloads fixture rows by id so the Valence suite can assert presence, absence, or field state after deletion and privacy scenarios. CI and developers running the suite only.", file!(), line!()))
         .await
         .map_err(|e| e.to_string())?
         .is_none()
     {
         return Err("parent must remain when Restrict blocks".into());
     }
-    if QueryCore::get_record_json("od_restrict_child", &cid, valence, DataUsePurpose::new(r"**Test:** Reloads fixture rows by id so the Valence suite can assert presence, absence, or field state after deletion and privacy scenarios. CI and developers running the suite only.", file!(), line!()))
+    if QueryCore::get_stored_record_json("od_restrict_child", &cid, valence, DataUsePurpose::new(r"**Test:** Reloads fixture rows by id so the Valence suite can assert presence, absence, or field state after deletion and privacy scenarios. CI and developers running the suite only.", file!(), line!()))
         .await
         .map_err(|e| e.to_string())?
         .is_none()
@@ -501,7 +501,7 @@ pub async fn run_on_delete_cascade_cross_engine(
         .await
         .map_err(|e| e.to_string())?;
 
-    if QueryCore::get_record_json("od_xe_ca_child", &cid, &valence, DataUsePurpose::new(r"**Test:** Reloads fixture rows by id so the Valence suite can assert presence, absence, or field state after deletion and privacy scenarios. CI and developers running the suite only.", file!(), line!()))
+    if QueryCore::get_stored_record_json("od_xe_ca_child", &cid, &valence, DataUsePurpose::new(r"**Test:** Reloads fixture rows by id so the Valence suite can assert presence, absence, or field state after deletion and privacy scenarios. CI and developers running the suite only.", file!(), line!()))
         .await
         .map_err(|e| e.to_string())?
         .is_some()
@@ -555,7 +555,7 @@ pub async fn run_on_delete_set_null_cross_engine(
         .await
         .map_err(|e| e.to_string())?;
 
-    let child = QueryCore::get_record_json("od_xe_sn_child", &cid, &valence, DataUsePurpose::new(r"**Test:** Reloads fixture rows by id so the Valence suite can assert presence, absence, or field state after deletion and privacy scenarios. CI and developers running the suite only.", file!(), line!()))
+    let child = QueryCore::get_stored_record_json("od_xe_sn_child", &cid, &valence, DataUsePurpose::new(r"**Test:** Reloads fixture rows by id so the Valence suite can assert presence, absence, or field state after deletion and privacy scenarios. CI and developers running the suite only.", file!(), line!()))
         .await
         .map_err(|e| e.to_string())?
         .ok_or("set-null child should remain on secondary")?;
@@ -854,7 +854,7 @@ mod tests {
             .iter()
             .any(|n| matches!(n.action, DeletionAction::CascadeDelete)));
         apply_ordered_dag(&dag, &v).await.expect("apply");
-        assert!(QueryCore::get_record_json("od_cascade_child", "dag_c", &v, DataUsePurpose::new(r"**Test:** Reloads fixture rows by id so the Valence suite can assert presence, absence, or field state after deletion and privacy scenarios. CI and developers running the suite only.", file!(), line!()))
+        assert!(QueryCore::get_stored_record_json("od_cascade_child", "dag_c", &v, DataUsePurpose::new(r"**Test:** Reloads fixture rows by id so the Valence suite can assert presence, absence, or field state after deletion and privacy scenarios. CI and developers running the suite only.", file!(), line!()))
             .await
             .unwrap()
             .is_none());

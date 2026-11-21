@@ -6,8 +6,9 @@ yanked = "warn"
 # cargo-audit's advisory-db additionally flags atomic-polyfill (RUSTSEC-2023-0089)
 # and rkyv (RUSTSEC-2026-0235), both transitive via the same surreal backend stack
 # with no safe upgrade yet -- see .cargo/audit.toml. RUSTSEC-2026-0453/0454
-# are surrealdb 3.2 advisories on the same stack. RUSTSEC-2026-0542/0543
-# (humantime, chrono unmaintained) come in through surrealdb-core -> object_store.
+# are surrealdb 3.2 advisories on the same stack. RUSTSEC-2026-0542 (humantime
+# unmaintained) comes in through surrealdb-core -> object_store; RUSTSEC-2026-0543
+# (chrono unmaintained) hits a direct workspace dependency.
 ignore = [
     { id = "RUSTSEC-2023-0071", reason = "rsa Marvin Attack timing sidechannel; no fixed upgrade available upstream" },
     { id = "RUSTSEC-2025-0141", reason = "bincode unmaintained; transitive via surrealmx -> surrealdb-core (surreal backend)" },
@@ -17,7 +18,7 @@ ignore = [
     { id = "RUSTSEC-2026-0454", reason = "reblessive unsound Send/Sync; transitive via surrealdb-core (surreal backend); fixed only in surrealdb 4.0, re-check when bumping surrealdb" },
     { id = "RUSTSEC-2026-0459", reason = "libsqlite3-sys 0.30 via sqlx-sqlite; temporary until the fleet sqlx bump moves it to >=0.39" },
     { id = "RUSTSEC-2026-0542", reason = "humantime unmaintained; transitive via surrealdb-core -> object_store (surreal backend); no safe upgrade, re-check when bumping surrealdb" },
-    { id = "RUSTSEC-2026-0543", reason = "chrono unmaintained; transitive via surrealdb-core -> object_store (surreal backend); no safe upgrade, re-check when bumping surrealdb" },
+    { id = "RUSTSEC-2026-0543", reason = "chrono unmaintained; direct workspace dependency (valence-core, mongodb and surreal backends, testkit) with no maintained replacement release yet; re-check when the advisory gets a fix or the workspace moves off chrono" },
 ]
 
 [licenses]

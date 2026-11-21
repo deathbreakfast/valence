@@ -17,6 +17,15 @@ ignore = [
     { id = "RUSTSEC-2026-0459", reason = "libsqlite3-sys 0.30 via sqlx-sqlite; temporary until the fleet sqlx bump moves it to >=0.39" },
     { id = "RUSTSEC-2026-0543", reason = "chrono unmaintained, no fixed release; temporary until the fleet moves to jiff (security:RUSTSEC-2026-0543)" },
     { id = "RUSTSEC-2026-0542", reason = "humantime unmaintained, no fixed release; temporary until a replacement lands (security:RUSTSEC-2026-0542)" },
+    { id = "RUSTSEC-2026-0574", reason = "heapless < 0.9.4 via rstar (geo/surrealdb), no compatible fixed release; temporary until rstar moves to heapless 0.9.4 (security:RUSTSEC-2026-0574)" },
+    { id = "RUSTSEC-2026-0575", reason = "heapless < 0.9.4 via rstar (geo/surrealdb), no compatible fixed release; temporary until rstar moves to heapless 0.9.4 (security:RUSTSEC-2026-0574)" },
+    { id = "RUSTSEC-2026-0576", reason = "heapless < 0.9.4 via rstar (geo/surrealdb), no compatible fixed release; temporary until rstar moves to heapless 0.9.4 (security:RUSTSEC-2026-0574)" },
+    { id = "RUSTSEC-2026-0577", reason = "heapless < 0.9.4 via rstar (geo/surrealdb), no compatible fixed release; temporary until rstar moves to heapless 0.9.4 (security:RUSTSEC-2026-0574)" },
+    { id = "RUSTSEC-2026-0578", reason = "heapless < 0.9.4 via rstar (geo/surrealdb), no compatible fixed release; temporary until rstar moves to heapless 0.9.4 (security:RUSTSEC-2026-0574)" },
+    { id = "RUSTSEC-2026-0579", reason = "heapless < 0.9.4 via rstar (geo/surrealdb), no compatible fixed release; temporary until rstar moves to heapless 0.9.4 (security:RUSTSEC-2026-0574)" },
+    { id = "RUSTSEC-2026-0580", reason = "heapless < 0.9.4 via rstar (geo/surrealdb), no compatible fixed release; temporary until rstar moves to heapless 0.9.4 (security:RUSTSEC-2026-0574)" },
+    { id = "RUSTSEC-2026-0581", reason = "heapless < 0.9.4 via rstar (geo/surrealdb), no compatible fixed release; temporary until rstar moves to heapless 0.9.4 (security:RUSTSEC-2026-0574)" },
+    { id = "RUSTSEC-2026-0582", reason = "heapless < 0.9.4 via rstar (geo/surrealdb), no compatible fixed release; temporary until rstar moves to heapless 0.9.4 (security:RUSTSEC-2026-0574)" },
 ]
 
 [licenses]

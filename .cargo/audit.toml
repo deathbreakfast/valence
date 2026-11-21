@@ -5,6 +5,10 @@
 # Re-check the surreal-backend ones when bumping surrealdb.
 # RUSTSEC-2026-0459: libsqlite3-sys 0.30 via sqlx-sqlite; temporary until the fleet sqlx bump
 # moves it to >=0.39.
+# RUSTSEC-2026-0574..0582: heapless < 0.9.4 via rstar (geo/surrealdb); no compatible fixed
+# release, temporary until rstar moves to heapless 0.9.4 (security:RUSTSEC-2026-0574).
 ignore = ["RUSTSEC-2023-0071", "RUSTSEC-2023-0089", "RUSTSEC-2026-0235", "RUSTSEC-2026-0387",
     "RUSTSEC-2026-0453", "RUSTSEC-2026-0454", "RUSTSEC-2026-0459",
-    "RUSTSEC-2026-0543", "RUSTSEC-2026-0542"]
+    "RUSTSEC-2026-0543", "RUSTSEC-2026-0542",
+    "RUSTSEC-2026-0574", "RUSTSEC-2026-0575", "RUSTSEC-2026-0576", "RUSTSEC-2026-0577",
+    "RUSTSEC-2026-0578", "RUSTSEC-2026-0579", "RUSTSEC-2026-0580", "RUSTSEC-2026-0581", "RUSTSEC-2026-0582"]

@@ -132,6 +132,29 @@ pub fn first_unset_field<'a>(record: &serde_json::Value, fields: &[&'a str]) -> 
         .find(|f| record.get(*f).is_none_or(serde_json::Value::is_null))
 }
 
+/// Removes each of `hidden` that `record` leaves out or sets to `null`, and returns
+/// whether it removed any.
+///
+/// `hidden` lists the fields the writing viewer can't read on the stored row. A
+/// model loaded by that viewer holds `None` for them, so writing the record as-is
+/// would erase the stored values. Generated updates call this and merge instead of
+/// replacing when it returns `true`. A hidden field the record does set is kept,
+/// because the caller is writing it on purpose.
+pub fn drop_unset_hidden_fields(record: &mut serde_json::Value, hidden: &[String]) -> bool {
+    let Some(obj) = record.as_object_mut() else {
+        return false;
+    };
+    let mut dropped = false;
+    for field in hidden {
+        if obj.get(field).is_some_and(|v| !v.is_null()) {
+            continue;
+        }
+        obj.remove(field);
+        dropped = true;
+    }
+    dropped
+}
+
 /// Edge/relationship definition retained for older schema shapes.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SchemaEdge {

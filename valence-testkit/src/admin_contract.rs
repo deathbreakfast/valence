@@ -112,7 +112,7 @@ pub async fn run_admin_contract(backend: Arc<dyn DatabaseBackend>) -> Result<()>
     // makes queue_delete_entity a no-op; reset it so the delete dispatch fires.
     OwnershipService::ensure_active_ownership("smoke", "s1", OwnerRef::system(), &v).await?;
 
-    let row = QueryCore::get_record_json("smoke", "s1", &v, DataUsePurpose::new(r"**Test:** Reloads fixture rows by id so the Valence suite can assert presence, absence, or field state after deletion and privacy scenarios. CI and developers running the suite only.", file!(), line!()))
+    let row = QueryCore::get_stored_record_json("smoke", "s1", &v, DataUsePurpose::new(r"**Test:** Reloads fixture rows by id so the Valence suite can assert presence, absence, or field state after deletion and privacy scenarios. CI and developers running the suite only.", file!(), line!()))
         .await?
         .expect("seeded row");
     assert!(

@@ -28,7 +28,7 @@ pub(super) fn model_delete_method_tokens(cx: &CrudEmitCtx<'_>) -> TokenStream {
                     <Self as valence::Model>::table_name(),
                     id,
                 );
-                let before_json = valence::QueryCore::get_record_json(
+                let before_json = valence::QueryCore::get_stored_record_json(
                     <Self as valence::Model>::table_name(),
                     &bare,
                     valence,

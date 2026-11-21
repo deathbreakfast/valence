@@ -464,15 +464,15 @@ async fn delete_now_cascades_children_and_removes_root() {
         .await
         .expect("cascade delete_now");
 
-    assert!(QueryCore::get_record_json("dn_root", "p1", &v, DataUsePurpose::new(r"**Test:** Reloads fixture rows by id so the Valence suite can assert presence, absence, or field state after deletion and privacy scenarios. CI and developers running the suite only.", file!(), line!()))
+    assert!(QueryCore::get_stored_record_json("dn_root", "p1", &v, DataUsePurpose::new(r"**Test:** Reloads fixture rows by id so the Valence suite can assert presence, absence, or field state after deletion and privacy scenarios. CI and developers running the suite only.", file!(), line!()))
         .await
         .unwrap()
         .is_none());
-    assert!(QueryCore::get_record_json("dn_child", "c1", &v, DataUsePurpose::new(r"**Test:** Reloads fixture rows by id so the Valence suite can assert presence, absence, or field state after deletion and privacy scenarios. CI and developers running the suite only.", file!(), line!()))
+    assert!(QueryCore::get_stored_record_json("dn_child", "c1", &v, DataUsePurpose::new(r"**Test:** Reloads fixture rows by id so the Valence suite can assert presence, absence, or field state after deletion and privacy scenarios. CI and developers running the suite only.", file!(), line!()))
         .await
         .unwrap()
         .is_none());
-    let referrer = QueryCore::get_record_json("dn_ref", "r1", &v, DataUsePurpose::new(r"**Test:** Reloads fixture rows by id so the Valence suite can assert presence, absence, or field state after deletion and privacy scenarios. CI and developers running the suite only.", file!(), line!()))
+    let referrer = QueryCore::get_stored_record_json("dn_ref", "r1", &v, DataUsePurpose::new(r"**Test:** Reloads fixture rows by id so the Valence suite can assert presence, absence, or field state after deletion and privacy scenarios. CI and developers running the suite only.", file!(), line!()))
         .await
         .unwrap()
         .expect("SetNull row remains");
@@ -485,7 +485,7 @@ async fn delete_now_cascades_children_and_removes_root() {
             .unwrap(),
         Vec::<valence_core::RecordId>::new()
     );
-    assert!(QueryCore::get_record_json("dn_peer", "t1", &v, DataUsePurpose::new(r"**Test:** Reloads fixture rows by id so the Valence suite can assert presence, absence, or field state after deletion and privacy scenarios. CI and developers running the suite only.", file!(), line!()))
+    assert!(QueryCore::get_stored_record_json("dn_peer", "t1", &v, DataUsePurpose::new(r"**Test:** Reloads fixture rows by id so the Valence suite can assert presence, absence, or field state after deletion and privacy scenarios. CI and developers running the suite only.", file!(), line!()))
         .await
         .unwrap()
         .is_some());
@@ -517,11 +517,11 @@ async fn delete_now_child_privacy_denial_changes_nothing() {
         "got {err:?}"
     );
 
-    assert!(QueryCore::get_record_json("dn_priv_p", "p1", &v, DataUsePurpose::new(r"**Test:** Reloads fixture rows by id so the Valence suite can assert presence, absence, or field state after deletion and privacy scenarios. CI and developers running the suite only.", file!(), line!()))
+    assert!(QueryCore::get_stored_record_json("dn_priv_p", "p1", &v, DataUsePurpose::new(r"**Test:** Reloads fixture rows by id so the Valence suite can assert presence, absence, or field state after deletion and privacy scenarios. CI and developers running the suite only.", file!(), line!()))
         .await
         .unwrap()
         .is_some());
-    assert!(QueryCore::get_record_json("dn_priv_c", "c1", &v, DataUsePurpose::new(r"**Test:** Reloads fixture rows by id so the Valence suite can assert presence, absence, or field state after deletion and privacy scenarios. CI and developers running the suite only.", file!(), line!()))
+    assert!(QueryCore::get_stored_record_json("dn_priv_c", "c1", &v, DataUsePurpose::new(r"**Test:** Reloads fixture rows by id so the Valence suite can assert presence, absence, or field state after deletion and privacy scenarios. CI and developers running the suite only.", file!(), line!()))
         .await
         .unwrap()
         .is_some());
@@ -541,7 +541,7 @@ async fn delete_now_does_not_require_read_when_delete_allows() {
     delete_entity_now("dn_secret", "s1", &v)
         .await
         .expect("Delete-allow + Read-deny");
-    assert!(QueryCore::get_record_json("dn_secret", "s1", &v, DataUsePurpose::new(r"**Test:** Reloads fixture rows by id so the Valence suite can assert presence, absence, or field state after deletion and privacy scenarios. CI and developers running the suite only.", file!(), line!()))
+    assert!(QueryCore::get_stored_record_json("dn_secret", "s1", &v, DataUsePurpose::new(r"**Test:** Reloads fixture rows by id so the Valence suite can assert presence, absence, or field state after deletion and privacy scenarios. CI and developers running the suite only.", file!(), line!()))
         .await
         .unwrap()
         .is_none());
@@ -573,11 +573,11 @@ async fn delete_now_restrict_violation_changes_nothing() {
         "got {err:?}"
     );
 
-    assert!(QueryCore::get_record_json("dn_restrict_p", "p1", &v, DataUsePurpose::new(r"**Test:** Reloads fixture rows by id so the Valence suite can assert presence, absence, or field state after deletion and privacy scenarios. CI and developers running the suite only.", file!(), line!()))
+    assert!(QueryCore::get_stored_record_json("dn_restrict_p", "p1", &v, DataUsePurpose::new(r"**Test:** Reloads fixture rows by id so the Valence suite can assert presence, absence, or field state after deletion and privacy scenarios. CI and developers running the suite only.", file!(), line!()))
         .await
         .unwrap()
         .is_some());
-    assert!(QueryCore::get_record_json("dn_restrict_c", "c1", &v, DataUsePurpose::new(r"**Test:** Reloads fixture rows by id so the Valence suite can assert presence, absence, or field state after deletion and privacy scenarios. CI and developers running the suite only.", file!(), line!()))
+    assert!(QueryCore::get_stored_record_json("dn_restrict_c", "c1", &v, DataUsePurpose::new(r"**Test:** Reloads fixture rows by id so the Valence suite can assert presence, absence, or field state after deletion and privacy scenarios. CI and developers running the suite only.", file!(), line!()))
         .await
         .unwrap()
         .is_some());
@@ -711,7 +711,7 @@ async fn delete_now_accepts_bare_and_matching_qualified_ids() {
     delete_entity_now("dn_id", "dn_id:42", &v)
         .await
         .expect("qualified id");
-    assert!(QueryCore::get_record_json("dn_id", "42", &v, DataUsePurpose::new(r"**Test:** Reloads fixture rows by id so the Valence suite can assert presence, absence, or field state after deletion and privacy scenarios. CI and developers running the suite only.", file!(), line!()))
+    assert!(QueryCore::get_stored_record_json("dn_id", "42", &v, DataUsePurpose::new(r"**Test:** Reloads fixture rows by id so the Valence suite can assert presence, absence, or field state after deletion and privacy scenarios. CI and developers running the suite only.", file!(), line!()))
         .await
         .unwrap()
         .is_none());
@@ -723,7 +723,7 @@ async fn delete_now_accepts_bare_and_matching_qualified_ids() {
     delete_entity_now("dn_id", "bare", &v)
         .await
         .expect("bare id");
-    assert!(QueryCore::get_record_json("dn_id", "bare", &v, DataUsePurpose::new(r"**Test:** Reloads fixture rows by id so the Valence suite can assert presence, absence, or field state after deletion and privacy scenarios. CI and developers running the suite only.", file!(), line!()))
+    assert!(QueryCore::get_stored_record_json("dn_id", "bare", &v, DataUsePurpose::new(r"**Test:** Reloads fixture rows by id so the Valence suite can assert presence, absence, or field state after deletion and privacy scenarios. CI and developers running the suite only.", file!(), line!()))
         .await
         .unwrap()
         .is_none());
@@ -750,7 +750,7 @@ async fn delete_now_preserves_colon_bearing_literal_primary_key() {
     delete_entity_now("dn_pgp", literal, &v)
         .await
         .expect("colon-bearing PK");
-    assert!(QueryCore::get_record_json("dn_pgp", literal, &v, DataUsePurpose::new(r"**Test:** Reloads fixture rows by id so the Valence suite can assert presence, absence, or field state after deletion and privacy scenarios. CI and developers running the suite only.", file!(), line!()))
+    assert!(QueryCore::get_stored_record_json("dn_pgp", literal, &v, DataUsePurpose::new(r"**Test:** Reloads fixture rows by id so the Valence suite can assert presence, absence, or field state after deletion and privacy scenarios. CI and developers running the suite only.", file!(), line!()))
         .await
         .unwrap()
         .is_none());
@@ -777,7 +777,7 @@ async fn delete_now_rejects_pending_queued_root() {
         .await
         .expect_err("pending root refused");
     assert!(matches!(err, Error::PendingDeletion(_)), "got {err:?}");
-    assert!(QueryCore::get_record_json("dn_pending", "q1", &v, DataUsePurpose::new(r"**Test:** Reloads fixture rows by id so the Valence suite can assert presence, absence, or field state after deletion and privacy scenarios. CI and developers running the suite only.", file!(), line!()))
+    assert!(QueryCore::get_stored_record_json("dn_pending", "q1", &v, DataUsePurpose::new(r"**Test:** Reloads fixture rows by id so the Valence suite can assert presence, absence, or field state after deletion and privacy scenarios. CI and developers running the suite only.", file!(), line!()))
         .await
         .unwrap()
         .is_some());
@@ -977,11 +977,11 @@ async fn delete_now_partial_failure_then_idempotent_retry() {
         "root SE must not run when root delete fails"
     );
 
-    assert!(QueryCore::get_record_json("dn_fault_c", "fc1", &v, DataUsePurpose::new(r"**Test:** Reloads fixture rows by id so the Valence suite can assert presence, absence, or field state after deletion and privacy scenarios. CI and developers running the suite only.", file!(), line!()))
+    assert!(QueryCore::get_stored_record_json("dn_fault_c", "fc1", &v, DataUsePurpose::new(r"**Test:** Reloads fixture rows by id so the Valence suite can assert presence, absence, or field state after deletion and privacy scenarios. CI and developers running the suite only.", file!(), line!()))
         .await
         .unwrap()
         .is_none());
-    assert!(QueryCore::get_record_json("dn_fault_p", "fp1", &v, DataUsePurpose::new(r"**Test:** Reloads fixture rows by id so the Valence suite can assert presence, absence, or field state after deletion and privacy scenarios. CI and developers running the suite only.", file!(), line!()))
+    assert!(QueryCore::get_stored_record_json("dn_fault_p", "fp1", &v, DataUsePurpose::new(r"**Test:** Reloads fixture rows by id so the Valence suite can assert presence, absence, or field state after deletion and privacy scenarios. CI and developers running the suite only.", file!(), line!()))
         .await
         .unwrap()
         .is_some());
@@ -992,7 +992,7 @@ async fn delete_now_partial_failure_then_idempotent_retry() {
     delete_entity_now("dn_fault_p", "fp1", &v)
         .await
         .expect("idempotent retry completes");
-    assert!(QueryCore::get_record_json("dn_fault_p", "fp1", &v, DataUsePurpose::new(r"**Test:** Reloads fixture rows by id so the Valence suite can assert presence, absence, or field state after deletion and privacy scenarios. CI and developers running the suite only.", file!(), line!()))
+    assert!(QueryCore::get_stored_record_json("dn_fault_p", "fp1", &v, DataUsePurpose::new(r"**Test:** Reloads fixture rows by id so the Valence suite can assert presence, absence, or field state after deletion and privacy scenarios. CI and developers running the suite only.", file!(), line!()))
         .await
         .unwrap()
         .is_none());
@@ -1039,7 +1039,7 @@ async fn queued_delete_without_dispatcher_leaves_row_visible() {
         .expect_err("no dispatcher registered");
     assert!(matches!(err, Error::Internal(_)), "got {err:?}");
     assert!(
-        QueryCore::get_record_json("dn_pending_q", "nodisp", &v, DataUsePurpose::new(r"**Test:** Reloads a fixture row to check that a failed queued delete left it readable. CI and developers running the suite only.", file!(), line!()))
+        QueryCore::get_stored_record_json("dn_pending_q", "nodisp", &v, DataUsePurpose::new(r"**Test:** Reloads a fixture row to check that a failed queued delete left it readable. CI and developers running the suite only.", file!(), line!()))
             .await
             .unwrap()
             .is_some(),

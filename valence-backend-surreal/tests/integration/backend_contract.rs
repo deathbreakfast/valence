@@ -7,7 +7,7 @@
 use std::sync::Arc;
 
 use valence_backend_surreal::{connect_embedded_at_path, EmbeddedEngine, SurrealEmbeddedBackend};
-use valence_testkit::run_backend_contract;
+use valence_testkit::{run_backend_contract, run_row_filter_parity};
 
 #[tokio::test]
 async fn surreal_mem_passes_port_contract() {
@@ -18,4 +18,15 @@ async fn surreal_mem_passes_port_contract() {
     run_backend_contract(backend)
         .await
         .expect("backend contract");
+}
+
+#[tokio::test]
+async fn surreal_mem_filters_match_sqlite() {
+    let db = connect_embedded_at_path(EmbeddedEngine::Mem, "mem", "test", "test")
+        .await
+        .expect("connect");
+    let backend = Arc::new(SurrealEmbeddedBackend::new(db));
+    run_row_filter_parity(backend)
+        .await
+        .expect("row filter parity");
 }

@@ -7,7 +7,7 @@
 use std::sync::Arc;
 
 use valence_backend_postgres::PostgresBackend;
-use valence_testkit::run_backend_contract;
+use valence_testkit::{run_backend_contract, run_row_filter_parity};
 
 #[tokio::test]
 async fn postgres_backend_contract() {
@@ -20,4 +20,19 @@ async fn postgres_backend_contract() {
     };
     let backend = Arc::new(backend) as Arc<dyn valence_core::DatabaseBackend>;
     run_backend_contract(backend).await.expect("contract");
+}
+
+#[tokio::test]
+async fn postgres_backend_filters_match_sqlite() {
+    let backend = match PostgresBackend::builder().from_env_defaults().build().await {
+        Ok(b) => b,
+        Err(e) => {
+            eprintln!("postgres builder resolve/connect failed: {e} — skipping");
+            return;
+        }
+    };
+    let backend = Arc::new(backend) as Arc<dyn valence_core::DatabaseBackend>;
+    run_row_filter_parity(backend)
+        .await
+        .expect("row filter parity");
 }

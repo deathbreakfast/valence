@@ -225,10 +225,13 @@ async fn ensure_schemaless_table_lazy(backend: &dyn DatabaseBackend) -> Result<(
 
 const FILTER_TABLE: &str = "valence_backend_contract_filters";
 
-/// Mem and sqlite must pick the same rows for string and null filters.
+/// Every backend that runs this (mem, sqlite, surreal, postgres) must pick the same rows for
+/// string and null filters.
 ///
 /// Covers `Contains` / `StartsWith` / `EndsWith` (with and without `%`, `_` and `\` in the
 /// needle) and record `IS NONE` / `IS SOME`, so a mem-backed test sees what sqlite would.
+/// Rows that never wrote the record field, rows that wrote it as null and rows that set it
+/// must split into `IS NONE` (absent and null) and `IS SOME` (set) with nothing in both.
 /// Needs a registered query compiler, so it stays out of [`run_backend_contract`], which stub
 /// backends also run.
 pub async fn run_row_filter_parity(backend: Arc<dyn DatabaseBackend>) -> Result<()> {
@@ -242,6 +245,7 @@ pub async fn run_row_filter_parity(backend: Arc<dyn DatabaseBackend>) -> Result<
         ("f6", "axb", None),
         ("f7", "a\\b", None),
     ];
+    // `f8` writes `owner` as an explicit null; `f2` and friends never write it.
     for (id, name, owner) in rows {
         let mut doc = serde_json::json!({"id": id, "name": name});
         if let Some(o) = owner {
@@ -250,6 +254,12 @@ pub async fn run_row_filter_parity(backend: Arc<dyn DatabaseBackend>) -> Result<
         }
         backend.create_record(FILTER_TABLE, doc).await?;
     }
+    backend
+        .create_record(
+            FILTER_TABLE,
+            serde_json::json!({"id": "f8", "name": "nulled", "owner": null}),
+        )
+        .await?;
     let valence = Valence::builder()
         .add_backend("default", backend)
         .with_actor(Actor::User {
@@ -269,7 +279,7 @@ pub async fn run_row_filter_parity(backend: Arc<dyn DatabaseBackend>) -> Result<
             let mut ids: Vec<String> = found
                 .iter()
                 .filter_map(|r| r["id"].as_str().or_else(|| r["id"]["id"].as_str()))
-                .map(str::to_string)
+                .map(|id| id.rsplit(':').next().unwrap_or(id).to_string())
                 .collect();
             ids.sort();
             Ok::<_, valence_core::Error>(ids)
@@ -317,15 +327,17 @@ pub async fn run_row_filter_parity(backend: Arc<dyn DatabaseBackend>) -> Result<
     );
 
     let owner = |pred| QueryCore::new(FILTER_TABLE.to_string()).where_null("owner".into(), pred);
+    let none = ids(owner(NullPredicate::IsNone)).await?;
     expect(
-        ids(owner(NullPredicate::IsNone)).await?,
-        &["f2", "f4", "f5", "f6", "f7"],
-        "owner is none",
+        none.clone(),
+        &["f2", "f4", "f5", "f6", "f7", "f8"],
+        "owner is none (absent or null)",
     );
-    expect(
-        ids(owner(NullPredicate::IsSome)).await?,
-        &["f1", "f3"],
-        "owner is some",
+    let some = ids(owner(NullPredicate::IsSome)).await?;
+    expect(some.clone(), &["f1", "f3"], "owner is some");
+    assert!(
+        none.iter().all(|id| !some.contains(id)) && none.len() + some.len() == rows.len() + 1,
+        "is_none and is_some must partition the rows"
     );
     Ok(())
 }

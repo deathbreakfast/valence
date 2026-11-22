@@ -242,6 +242,7 @@ pub async fn run_row_filter_parity(backend: Arc<dyn DatabaseBackend>) -> Result<
         ("f6", "axb", None),
         ("f7", "a\\b", None),
     ];
+    // `f8` writes `owner` as an explicit null; `f2` and friends never write it.
     for (id, name, owner) in rows {
         let mut doc = serde_json::json!({"id": id, "name": name});
         if let Some(o) = owner {
@@ -250,6 +251,12 @@ pub async fn run_row_filter_parity(backend: Arc<dyn DatabaseBackend>) -> Result<
         }
         backend.create_record(FILTER_TABLE, doc).await?;
     }
+    backend
+        .create_record(
+            FILTER_TABLE,
+            serde_json::json!({"id": "f8", "name": "nulled", "owner": null}),
+        )
+        .await?;
     let valence = Valence::builder()
         .add_backend("default", backend)
         .with_actor(Actor::User {
@@ -269,7 +276,7 @@ pub async fn run_row_filter_parity(backend: Arc<dyn DatabaseBackend>) -> Result<
             let mut ids: Vec<String> = found
                 .iter()
                 .filter_map(|r| r["id"].as_str().or_else(|| r["id"]["id"].as_str()))
-                .map(str::to_string)
+                .map(|id| id.rsplit(':').next().unwrap_or(id).to_string())
                 .collect();
             ids.sort();
             Ok::<_, valence_core::Error>(ids)
@@ -319,13 +326,21 @@ pub async fn run_row_filter_parity(backend: Arc<dyn DatabaseBackend>) -> Result<
     let owner = |pred| QueryCore::new(FILTER_TABLE.to_string()).where_null("owner".into(), pred);
     expect(
         ids(owner(NullPredicate::IsNone)).await?,
-        &["f2", "f4", "f5", "f6", "f7"],
-        "owner is none",
+        &["f2", "f4", "f5", "f6", "f7", "f8"],
+        "owner is none (absent or null)",
     );
     expect(
         ids(owner(NullPredicate::IsSome)).await?,
         &["f1", "f3"],
         "owner is some",
+    );
+    let (none, some) = (
+        ids(owner(NullPredicate::IsNone)).await?,
+        ids(owner(NullPredicate::IsSome)).await?,
+    );
+    assert!(
+        none.iter().all(|id| !some.contains(id)) && none.len() + some.len() == 8,
+        "is_none and is_some must partition the rows"
     );
     Ok(())
 }

@@ -74,36 +74,70 @@ pub(super) fn model_upsert_method_tokens(cx: &CrudEmitCtx<'_>) -> TokenStream {
             valence: &valence::Valence,
             purpose: valence::DataUsePurpose,
         ) -> valence::Result<Self> {
-            let before_snapshot = Self::get(id, valence, purpose).await?;
-            if let Some(ref existing) = before_snapshot {
-                existing.check_update_privacy(valence).await?;
-                data.check_update_privacy(valence).await?;
-            } else {
-                data.check_create_privacy(valence).await?;
-            }
-            let record = serde_json::to_value(&data)
+            // Decide create vs update from the row actually in storage. `Model::get`
+            // hides rows the caller can't read, and treating such a row as absent
+            // would let create policies (checked on the caller's own payload)
+            // authorize overwriting someone else's row.
+            let __stored = valence::QueryCore::get_stored_record_json(
+                <Self as valence::Model>::table_name(),
+                id,
+                valence,
+                valence::use_!(r"When a model **upserts a row**, we **load the stored row first** so Valence knows whether this is a create or an update and checks the right policy against what is actually saved. The same request path performing the upsert uses this load."),
+            )
+            .await?;
+            let mut record = serde_json::to_value(&data)
                 .map_err(valence::Error::from)?;
-            if let Some(ref existing) = before_snapshot {
-                let existing_value = serde_json::to_value(existing)
-                    .map_err(valence::Error::from)?;
+            let merge_existing = if let Some(__stored) = &__stored {
+                // A row the caller can't read is refused outright, never created over.
+                valence::PrivacyEvaluator::check_entity_access(
+                    Self::__schema_metadata()?,
+                    valence::PrivacyOperation::Read,
+                    __stored,
+                    valence,
+                )
+                .await?;
+                valence::PrivacyEvaluator::check_entity_access(
+                    Self::__schema_metadata()?,
+                    valence::PrivacyOperation::Update,
+                    __stored,
+                    valence,
+                )
+                .await?;
+                data.check_update_privacy(valence).await?;
+                // Compare against the stored row with this viewer's unreadable fields
+                // left out, so a field it couldn't read never looks cleared.
+                let (__visible, __hidden) = valence::PrivacyEvaluator::filter_entity_fields(
+                    Self::__schema_metadata()?,
+                    __stored,
+                    valence.actor(),
+                )?;
+                let __visible = serde_json::Value::Object(__visible.into_iter().collect());
                 valence::PrivacyEvaluator::check_field_update_access(
                     Self::__schema_metadata()?,
-                    Some(&existing_value),
+                    Some(&__visible),
                     &record,
                     valence.actor(),
                 )?;
-            }
-            if before_snapshot.is_none() {
+                valence::drop_unset_hidden_fields(&mut record, &__hidden)
+                    || Self::__lacks_read_hidable(&record)
+            } else {
+                data.check_create_privacy(valence).await?;
                 Self::__reject_unset_read_hidable(&record)?;
-            }
-            let merge_existing = before_snapshot.is_some() && Self::__lacks_read_hidable(&record);
+                false
+            };
+            let before_snapshot = if __stored.is_some() {
+                Self::get(id, valence, purpose).await?
+            } else {
+                None
+            };
+            let exists = __stored.is_some();
             Self::__assert_unique_constraints_for_record(&record, Some(id), valence).await?;
 
             let id = id.to_string();
             let upserted: Self = valence::retry_on_database_tx_conflict("Model::upsert", || {
                 let id = id.clone();
                 let record = record.clone();
-                let creating = before_snapshot.is_none();
+                let creating = !exists;
                 async move {
                     let backend = valence.backend_for_table(<Self as valence::Model>::table_name())?;
                     let mut record = record;
@@ -129,12 +163,12 @@ pub(super) fn model_upsert_method_tokens(cx: &CrudEmitCtx<'_>) -> TokenStream {
             })
             .await?;
 
-            if before_snapshot.is_none() {
+            if !exists {
                 #own_create
             }
 
             {
-                let kind = if before_snapshot.is_some() {
+                let kind = if exists {
                     valence::MutationKind::Update
                 } else {
                     valence::MutationKind::Create

@@ -37,6 +37,7 @@ pub fn is_declared_data_use_method(method: &str) -> bool {
         | "distinct_values"
         | "get_id_only"
         | "get_record_json"
+        | "get_stored_record_json"
         | "latest_ids"
         | "get_entity"
         | "get_mutable"

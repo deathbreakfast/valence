@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- `Model::upsert` no longer treats a row the caller can't read as absent. It loads the stored
+  row first: if the caller fails its Read policy the upsert returns `Error::Privacy` and never
+  takes the create path, and otherwise Update policies run against the stored row as well as
+  the new payload. Before, a peer whose create policy passed on their own payload could
+  overwrite another user's row by naming its id.
+- `defer_to_edge` evaluation no longer switches to `Actor::System` to load the parent row. It
+  loads the parent under the viewer's own handle and evaluates the parent's policy as the
+  viewer, as before.
+
+### Changed
+
+- `QueryCore::get_record_json` now applies the table's Read policy for the calling actor. A
+  row the actor can't read returns `Ok(None)`, fields hidden by their own read policy are left
+  out, and a table with no registered schema returns `Error::NotFound`. Framework code that
+  authorizes the row itself uses the new `#[doc(hidden)]` `QueryCore::get_stored_record_json`.
+
 ### Documented
 
 - The owner rules (`OWNER_BY_ID`, `OWNER_BY_USER_FIELD`, `check_owner_by_field`) never
@@ -15,6 +33,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `AUTHENTICATED` would also open the records to every signed-in user.
 
 ### Fixed
+
+- A bare `Model::update` (or an existing-row `upsert`) by a caller who can't read an optional
+  field no longer nulls it. Fields hidden from the caller on the stored row and left unset in
+  the payload are dropped from the write, which then merges; a hidden field the payload does
+  set is still written. Only required read-hidable fields were protected before.
 
 - The in-memory row filter (mem, redis, mongodb, indradb and hybrid backends) now reads
   `LIKE` / `NOT LIKE ... ESCAPE '<c>'` and `IS [NOT] NULL`. Contains, StartsWith and EndsWith

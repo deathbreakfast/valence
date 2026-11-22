@@ -458,7 +458,7 @@ impl QueryCore {
                     break;
                 };
                 let Some(raw_data) =
-                    Self::get_record_json(to_table.as_str(), target_id.as_str(), valence, crate::data_use::DataUsePurpose::framework_nested()).await?
+                    Self::get_stored_record_json(to_table.as_str(), target_id.as_str(), valence, crate::data_use::DataUsePurpose::framework_nested()).await?
                 else {
                     exclude = true;
                     break;

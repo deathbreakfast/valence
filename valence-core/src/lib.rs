@@ -206,8 +206,9 @@ pub use schema::{
     SchemaMetadataStruct, SchemaRegistry,
 };
 pub use schema_api::{
-    first_unset_field, ForeignKeyRef, Schema, SchemaConnection, SchemaEdge, SchemaField,
-    SchemaMeta, SchemaPolicies, SchemaPolicyRule, SchemaPolicyRules, SchemaPrivacy,
+    drop_unset_hidden_fields, first_unset_field, ForeignKeyRef, Schema, SchemaConnection,
+    SchemaEdge, SchemaField, SchemaMeta, SchemaPolicies, SchemaPolicyRule, SchemaPolicyRules,
+    SchemaPrivacy,
 };
 pub use schema_types::{FieldType, JsonAsSerdeError, Role, Validator};
 pub use side_effect::{FieldChange, Mutation, MutationKind, SideEffect};

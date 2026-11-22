@@ -56,6 +56,9 @@ pub trait Model: Sized + Send + Sync {
 
     /// Replace an existing row by id.
     ///
+    /// Fields the caller can't read on the stored row and leaves unset keep their stored
+    /// values (the write merges instead of replacing the row).
+    ///
     /// Pass `use_!(...)` so this update appears in the transparency catalog.
     async fn update(
         id: &str,
@@ -104,8 +107,12 @@ pub trait Model: Sized + Send + Sync {
 
     /// Create or replace a row by explicit id.
     ///
-    /// Privacy: when the row is absent, **create** policies apply; when it exists, **update**
-    /// policies apply to both the existing row and the proposed payload (after an authorized read).
+    /// Privacy: whether the row exists is decided from storage, not from what the caller can
+    /// read. When the row is absent, **create** policies apply. When it exists, the caller
+    /// must pass the **read** policy on the stored row (otherwise [`crate::Error::Privacy`],
+    /// and the create path never runs), then **update** policies apply to the stored row and
+    /// to the proposed payload. Fields the caller can't read and leaves unset keep their
+    /// stored values.
     ///
     /// Pass `use_!(...)` so this upsert appears in the transparency catalog.
     async fn upsert(

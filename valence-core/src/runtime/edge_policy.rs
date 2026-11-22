@@ -26,7 +26,7 @@ async fn load_row(
 ) -> Result<(&'static SchemaMetadata, serde_json::Value)> {
     let schema = SchemaRegistry::lookup(rid.table())
         .ok_or_else(|| Error::NotFound(format!("unknown table {}", rid.table())))?;
-    let row = QueryCore::get_record_json(rid.table(), rid.id(), valence, purpose)
+    let row = QueryCore::get_stored_record_json(rid.table(), rid.id(), valence, purpose)
         .await?
         .ok_or_else(|| Error::NotFound(format!("{}:{} not found", rid.table(), rid.id())))?;
     Ok((schema, row))

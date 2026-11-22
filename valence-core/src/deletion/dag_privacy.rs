@@ -35,7 +35,7 @@ pub async fn check_dag_delete_privacy_with_registry(
         ) {
             continue;
         }
-        let Some(existing) = QueryCore::get_record_json(
+        let Some(existing) = QueryCore::get_stored_record_json(
             node.table.as_str(),
             node.record_id.as_str(),
             valence,

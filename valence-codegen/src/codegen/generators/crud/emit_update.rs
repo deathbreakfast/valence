@@ -8,20 +8,23 @@ pub(super) fn model_update_with_before_body_tokens(
 ) -> TokenStream {
     quote! {
         data.check_update_privacy(valence).await?;
-        let record = serde_json::to_value(&data)
+        let mut record = serde_json::to_value(&data)
             .map_err(valence::Error::from)?;
         Self::__assert_unique_constraints_for_record(&record, Some(id), valence).await?;
 
         // Authorize against the row actually in storage, read raw. `Model::get` hides
         // rows the caller can't read, and a caller-supplied `before` can't be trusted,
         // so neither may decide whether the stored row allows this update.
-        let __stored = valence::QueryCore::get_record_json(
+        let __stored = valence::QueryCore::get_stored_record_json(
             <Self as valence::Model>::table_name(),
             id,
             valence,
             valence::use_!(r"When a model **updates a row**, we **load the stored row first** so Update privacy is checked against what is actually saved. The same request path performing the update uses this load."),
         )
         .await?;
+        // Fields this viewer can't read on the stored row. A bare update leaves them
+        // `None`, so they must not be written over the stored values.
+        let mut __hidden: Vec<String> = Vec::new();
         if let Some(__stored) = &__stored {
             valence::PrivacyEvaluator::check_entity_access(
                 Self::__schema_metadata()?,
@@ -33,11 +36,12 @@ pub(super) fn model_update_with_before_body_tokens(
             // `record` lacks fields this viewer can't read, so compare against the
             // stored row with the same fields left out; otherwise an unread field
             // would look cleared and trip its update policy.
-            let (__visible, _) = valence::PrivacyEvaluator::filter_entity_fields(
+            let (__visible, __hidden_fields) = valence::PrivacyEvaluator::filter_entity_fields(
                 Self::__schema_metadata()?,
                 __stored,
                 valence.actor(),
             )?;
+            __hidden = __hidden_fields;
             let __visible = serde_json::Value::Object(__visible.into_iter().collect());
             valence::PrivacyEvaluator::check_field_update_access(
                 Self::__schema_metadata()?,
@@ -83,6 +87,11 @@ pub(super) fn model_update_with_before_body_tokens(
                 }
             };
 
+        // Only the full-replace arm writes `record` whole; a sparse patch already
+        // leaves out every field the caller didn't change.
+        let merge_hidden = sparse_patch.is_none()
+            && (valence::drop_unset_hidden_fields(&mut record, &__hidden)
+                || Self::__lacks_read_hidable(&record));
         let id = id.to_string();
 
         let updated: Self = match sparse_patch {
@@ -117,7 +126,7 @@ pub(super) fn model_update_with_before_body_tokens(
                         let backend = valence.backend_for_table(<Self as valence::Model>::table_name())?;
                         // A field this viewer couldn't read is absent from `record`;
                         // merge so the stored value survives.
-                        let row = if Self::__lacks_read_hidable(&record) {
+                        let row = if merge_hidden {
                             backend
                                 .merge_record(<Self as valence::Model>::table_name(), id.as_str(), record)
                                 .await?

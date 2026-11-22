@@ -2,7 +2,8 @@
 //!
 //! Entry type: [`QueryCore`]. [`QueryCore::execute`] post-filters rows by entity read privacy
 //! and applies field-level [`PrivacyEvaluator::filter_entity_fields`](crate::privacy::PrivacyEvaluator::filter_entity_fields).
-//! [`QueryCore::get_record_json`] is a raw storage fetch (no privacy).
+//! [`QueryCore::get_record_json`] loads one row by id under the same entity and field
+//! read privacy.
 //!
 //! Query `limit` / `offset` are clamped to [`MAX_QUERY_LIMIT`] / [`MAX_QUERY_OFFSET`].
 

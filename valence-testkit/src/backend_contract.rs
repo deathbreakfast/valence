@@ -225,10 +225,13 @@ async fn ensure_schemaless_table_lazy(backend: &dyn DatabaseBackend) -> Result<(
 
 const FILTER_TABLE: &str = "valence_backend_contract_filters";
 
-/// Mem and sqlite must pick the same rows for string and null filters.
+/// Every backend that runs this (mem, sqlite, surreal, postgres) must pick the same rows for
+/// string and null filters.
 ///
 /// Covers `Contains` / `StartsWith` / `EndsWith` (with and without `%`, `_` and `\` in the
 /// needle) and record `IS NONE` / `IS SOME`, so a mem-backed test sees what sqlite would.
+/// Rows that never wrote the record field, rows that wrote it as null and rows that set it
+/// must split into `IS NONE` (absent and null) and `IS SOME` (set) with nothing in both.
 /// Needs a registered query compiler, so it stays out of [`run_backend_contract`], which stub
 /// backends also run.
 pub async fn run_row_filter_parity(backend: Arc<dyn DatabaseBackend>) -> Result<()> {
@@ -324,22 +327,16 @@ pub async fn run_row_filter_parity(backend: Arc<dyn DatabaseBackend>) -> Result<
     );
 
     let owner = |pred| QueryCore::new(FILTER_TABLE.to_string()).where_null("owner".into(), pred);
+    let none = ids(owner(NullPredicate::IsNone)).await?;
     expect(
-        ids(owner(NullPredicate::IsNone)).await?,
+        none.clone(),
         &["f2", "f4", "f5", "f6", "f7", "f8"],
         "owner is none (absent or null)",
     );
-    expect(
-        ids(owner(NullPredicate::IsSome)).await?,
-        &["f1", "f3"],
-        "owner is some",
-    );
-    let (none, some) = (
-        ids(owner(NullPredicate::IsNone)).await?,
-        ids(owner(NullPredicate::IsSome)).await?,
-    );
+    let some = ids(owner(NullPredicate::IsSome)).await?;
+    expect(some.clone(), &["f1", "f3"], "owner is some");
     assert!(
-        none.iter().all(|id| !some.contains(id)) && none.len() + some.len() == 8,
+        none.iter().all(|id| !some.contains(id)) && none.len() + some.len() == rows.len() + 1,
         "is_none and is_some must partition the rows"
     );
     Ok(())

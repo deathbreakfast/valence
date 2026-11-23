@@ -65,11 +65,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   rows all-or-nothing under the session actor. Each row passes the same privacy,
   required-field and unique checks as `Model::create` / `Model::update` when it's queued, and
   ownership and side effects run after the batch commits. It needs a backend with
-  `apply_batch` (mem today).
+  `apply_batch` (mem, SQLite and Postgres).
 - Compare-and-set updates: generated `update_if(id, data, field, expected, ..)` writes only
   while the stored `field` still equals `expected` and returns the new `Error::Conflict`
   otherwise. It sits on the new `DatabaseBackend::compare_and_merge_record`, implemented for
   mem, SQLite (one `UPDATE ... WHERE`) and hybrid; other backends return `Error::Internal`.
+- `QueryCore::sum_values(field, group_by, ...)` sums an integer or currency field over every
+  row the actor can read, optionally grouped by another field. It pages through the query in
+  1,000-row windows, so the total isn't capped at one window, and each row passes the same
+  read privacy as `execute`. Generated query builders get `sum_<field>()` and
+  `sum_<field>_by(group_field)` for integer and currency fields. Mixed currencies in one
+  group, non-numeric values and `i64` overflow return `Error::Validation`.
+- SQLite and Postgres implement `apply_batch` in one native transaction and report
+  `supports_transactions`. The typed-table write helpers in `valence-backend-sql` take a
+  connection (`&mut SqliteConnection` / `&mut PgConnection`) instead of a pool, so every
+  op in a batch runs on the transaction. Layout DDL a batch needs rolls back with it.
 - `ValenceBuilder::extension` and `Valence::extension` give each `Valence` a typed slot for
   host ports that privacy evaluators consult. A host can keep something like a bot gate on
   the handle instead of in a process-global, and two runtimes in one process no longer share

@@ -9,15 +9,15 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use valence_backend_sql::{
-    apply_ttl_policy_sqlite, compare_and_merge_record_sqlite, create_record_sqlite,
-    define_index_sqlite, define_unique_index_sqlite, delete_record_sqlite, ensure_table_sqlite,
-    ensure_typed_table_sqlite, execute_select_sqlite, get_edge_sources_sqlite,
+    apply_batch_sqlite, apply_ttl_policy_sqlite, compare_and_merge_record_sqlite,
+    create_record_sqlite, define_index_sqlite, define_unique_index_sqlite, delete_record_sqlite,
+    ensure_table_sqlite, ensure_typed_table_sqlite, execute_select_sqlite, get_edge_sources_sqlite,
     get_edge_targets_sqlite, get_record_sqlite, inspect_typed_layout_sqlite, merge_record_sqlite,
     read_schema_version_sqlite, relate_edge_sqlite, scan_edges_sqlite, scan_table_typed_sqlite,
     sql_capabilities, sync_typed_table_sqlite, ttl_deferred, unrelate_edge_sqlite,
     update_record_sqlite, write_schema_version_sqlite, WriteEnsureCache,
 };
-use valence_core::backend::{DatabaseBackend, EdgeRow};
+use valence_core::backend::{DatabaseBackend, EdgeRow, WriteOp};
 use valence_core::compiled_query::CompiledQuery;
 use valence_core::error::{Error, Result};
 use valence_core::record_id::RecordId;
@@ -168,6 +168,14 @@ impl SqliteBackend {
     pub fn pool(&self) -> &SqlitePool {
         &self.pool
     }
+
+    /// Check out one pool connection for a single backend op.
+    async fn conn(&self) -> Result<sqlx::pool::PoolConnection<sqlx::Sqlite>> {
+        self.pool
+            .acquire()
+            .await
+            .map_err(|e| Error::database(e.to_string()))
+    }
 }
 
 #[async_trait::async_trait]
@@ -188,21 +196,21 @@ impl DatabaseBackend for SqliteBackend {
     }
 
     async fn ensure_schemaless_table(&self, table: &str) -> Result<()> {
-        ensure_table_sqlite(&self.pool, table).await
+        ensure_table_sqlite(&mut *self.conn().await?, table).await
     }
 
     async fn inspect_typed_layout(
         &self,
         table: &str,
     ) -> Result<Option<valence_core::storage_layout::StorageLayout>> {
-        inspect_typed_layout_sqlite(&self.pool, table).await
+        inspect_typed_layout_sqlite(&mut *self.conn().await?, table).await
     }
 
     async fn ensure_typed_table(
         &self,
         layout: &valence_core::storage_layout::StorageLayout,
     ) -> Result<()> {
-        ensure_typed_table_sqlite(&self.pool, layout).await
+        ensure_typed_table_sqlite(&mut *self.conn().await?, layout).await
     }
 
     async fn sync_typed_table(
@@ -221,7 +229,7 @@ impl DatabaseBackend for SqliteBackend {
     }
 
     async fn get_record(&self, table: &str, id: &str) -> Result<Option<serde_json::Value>> {
-        get_record_sqlite(&self.pool, table, id).await
+        get_record_sqlite(&mut *self.conn().await?, table, id).await
     }
 
     async fn create_record(
@@ -229,7 +237,13 @@ impl DatabaseBackend for SqliteBackend {
         table: &str,
         content: serde_json::Value,
     ) -> Result<serde_json::Value> {
-        create_record_sqlite(&self.pool, table, content, &self.layout_ensured).await
+        create_record_sqlite(
+            &mut *self.conn().await?,
+            table,
+            content,
+            &self.layout_ensured,
+        )
+        .await
     }
 
     async fn update_record(
@@ -238,7 +252,14 @@ impl DatabaseBackend for SqliteBackend {
         id: &str,
         content: serde_json::Value,
     ) -> Result<serde_json::Value> {
-        update_record_sqlite(&self.pool, table, id, content, &self.layout_ensured).await
+        update_record_sqlite(
+            &mut *self.conn().await?,
+            table,
+            id,
+            content,
+            &self.layout_ensured,
+        )
+        .await
     }
 
     async fn merge_record(
@@ -247,7 +268,14 @@ impl DatabaseBackend for SqliteBackend {
         id: &str,
         patch: serde_json::Value,
     ) -> Result<serde_json::Value> {
-        merge_record_sqlite(&self.pool, table, id, patch, &self.layout_ensured).await
+        merge_record_sqlite(
+            &mut *self.conn().await?,
+            table,
+            id,
+            patch,
+            &self.layout_ensured,
+        )
+        .await
     }
 
     async fn compare_and_merge_record(
@@ -259,7 +287,7 @@ impl DatabaseBackend for SqliteBackend {
         patch: serde_json::Value,
     ) -> Result<serde_json::Value> {
         compare_and_merge_record_sqlite(
-            &self.pool,
+            &mut *self.conn().await?,
             table,
             id,
             field,
@@ -288,7 +316,7 @@ impl DatabaseBackend for SqliteBackend {
     }
 
     async fn delete_record(&self, table: &str, id: &str) -> Result<()> {
-        delete_record_sqlite(&self.pool, table, id).await
+        delete_record_sqlite(&mut *self.conn().await?, table, id).await
     }
 
     async fn relate_edge(&self, from: &RecordId, edge_table: &str, to: &RecordId) -> Result<()> {
@@ -339,5 +367,9 @@ impl DatabaseBackend for SqliteBackend {
 
     async fn apply_ttl_policy(&self, table: &str, policy: &SchemaTtlPolicy) -> Result<()> {
         apply_ttl_policy_sqlite(&self.pool, table, policy, &self.layout_ensured).await
+    }
+
+    async fn apply_batch(&self, ops: Vec<WriteOp>) -> Result<Vec<serde_json::Value>> {
+        apply_batch_sqlite(&self.pool, ops, &self.layout_ensured).await
     }
 }

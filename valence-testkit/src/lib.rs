@@ -30,6 +30,7 @@
 
 mod admin_contract;
 mod backend_contract;
+mod batch_contract;
 mod bootstrap;
 mod catalog;
 mod delete_now;
@@ -52,6 +53,7 @@ mod transfer_contract;
 pub use admin_contract::run_admin_contract_surreal_mem;
 pub use admin_contract::{run_admin_contract, run_admin_contract_for, run_admin_contract_mem};
 pub use backend_contract::{run_backend_contract, run_row_filter_parity};
+pub use batch_contract::run_apply_batch_contract;
 pub use bootstrap::{BootstrapMode, BootstrapSession, WireBackendOptions};
 pub use catalog::{
     catalog_for_storage, e2e_storage_backends, embedded_catalog, run_catalog_entry, CatalogEntry,

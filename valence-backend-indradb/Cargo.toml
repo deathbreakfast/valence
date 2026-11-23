@@ -13,6 +13,7 @@ categories = ["database"]
 
 [lib]
 name = "valence_backend_indradb"
+test = false
 
 [dependencies]
 async-trait = { workspace = true }

@@ -9,33 +9,37 @@ impl QueryCore {
     }
     /// Get a record by ID, returning a minimal result with just the ID
     ///
-    /// Loads via [`DatabaseBackend::get_record`](crate::DatabaseBackend::get_record)
-    /// using `table:id` wire form.
-    ///
-    /// **Privacy:** this helper does **not** evaluate entity read policies. Prefer
-    /// [`Self::get_entity`] or generated [`crate::Model::get`](crate::Model::get) for
-    /// caller-visible reads; those map privacy denial to `Ok(None)`.
+    /// **Privacy:** evaluates the table's entity Read policy for `valence`'s actor, the
+    /// same as [`Self::get_record_json`]. A row the actor can't read returns `Ok(None)`,
+    /// the same as a missing row, so callers can't use this to probe for ids.
     /// # Errors
     ///
-    /// Returns an error when the requested operation cannot be completed.
+    /// [`Error::NotFound`] when `table` has no registered schema, and any storage or
+    /// policy evaluation error.
     pub async fn get_id_only(
         table: impl Into<String>,
         id: impl AsRef<str>,
         valence: &Valence,
         purpose: crate::data_use::DataUsePurpose,
     ) -> Result<Option<IdOnlyRecord>> {
-        let _ = purpose;
+        use crate::privacy::PrivacyEvaluator;
+        use crate::schema::SchemaRegistry;
+
         let table_str = table.into();
         let id_str = id.as_ref();
-
-        let backend = valence.backend_for_table(&table_str)?;
-        let record = backend.get_record(&table_str, id_str).await?;
-
-        match record {
-            Some(_) => Ok(Some(IdOnlyRecord {
+        let schema = SchemaRegistry::lookup(&table_str)
+            .ok_or_else(|| Error::NotFound(format!("Schema not found: {table_str}")))?;
+        let Some(raw_data) =
+            Self::get_stored_record_json(&table_str, id_str, valence, purpose).await?
+        else {
+            return Ok(None);
+        };
+        match PrivacyEvaluator::check_entity_read(schema, &raw_data, valence).await {
+            Ok(()) => Ok(Some(IdOnlyRecord {
                 id: id_str.to_string(),
             })),
-            None => Ok(None),
+            Err(Error::Privacy(_)) => Ok(None),
+            Err(e) => Err(e),
         }
     }
 

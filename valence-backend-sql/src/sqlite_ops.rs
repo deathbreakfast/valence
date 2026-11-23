@@ -44,9 +44,9 @@ pub fn storage_id(content: &Value) -> Option<String> {
 }
 
 pub fn bind_json_value<'q>(
-    query: sqlx::query::Query<'q, sqlx::Sqlite, sqlx::sqlite::SqliteArguments<'q>>,
+    query: sqlx::query::Query<'q, sqlx::Sqlite, sqlx::sqlite::SqliteArguments>,
     value: &Value,
-) -> sqlx::query::Query<'q, sqlx::Sqlite, sqlx::sqlite::SqliteArguments<'q>> {
+) -> sqlx::query::Query<'q, sqlx::Sqlite, sqlx::sqlite::SqliteArguments> {
     match value {
         Value::Null => query.bind(None::<String>),
         Value::Bool(b) => query.bind(*b),
@@ -70,7 +70,7 @@ pub async fn execute_select_sqlite(
     default_table: &str,
 ) -> Result<Vec<Value>> {
     let (sql, params) = prepare_compiled(compiled)?;
-    let mut q = sqlx::query(&sql);
+    let mut q = sqlx::query(sqlx::AssertSqlSafe(sql.as_str()));
     for p in &params {
         q = bind_json_value(q, p);
     }
@@ -126,16 +126,18 @@ pub async fn execute_select_sqlite(
 }
 
 pub async fn ensure_edges_sqlite(pool: &sqlx::SqlitePool) -> Result<()> {
-    sqlx::query(&crate::document::ensure_edges_table_ddl())
-        .execute(pool)
-        .await
-        .map_err(|e| Error::database(e.to_string()))?;
+    sqlx::query(sqlx::AssertSqlSafe(
+        crate::document::ensure_edges_table_ddl(),
+    ))
+    .execute(pool)
+    .await
+    .map_err(|e| Error::database(e.to_string()))?;
     Ok(())
 }
 
 pub async fn ensure_table_sqlite(pool: &sqlx::SqlitePool, table: &str) -> Result<()> {
     assert_safe_table(table)?;
-    sqlx::query(&ensure_table(table))
+    sqlx::query(sqlx::AssertSqlSafe(ensure_table(table)))
         .execute(pool)
         .await
         .map_err(|e| Error::database(e.to_string()))?;
@@ -237,7 +239,7 @@ pub async fn delete_record_sqlite(pool: &sqlx::SqlitePool, table: &str, id: &str
         quote_sql_ident(table),
         quote_sql_ident("id")
     );
-    sqlx::query(&q)
+    sqlx::query(sqlx::AssertSqlSafe(q))
         .bind(id)
         .execute(pool)
         .await
@@ -478,7 +480,7 @@ pub async fn define_index_sqlite(
     } else {
         ensure_layout_for_write_sqlite(pool, &adhoc_index_layout(table, fields), ensured).await?;
     }
-    sqlx::query(&q)
+    sqlx::query(sqlx::AssertSqlSafe(q))
         .execute(pool)
         .await
         .map_err(|e| Error::database(e.to_string()))?;
@@ -534,7 +536,7 @@ pub async fn apply_ttl_policy_sqlite(
     valence_core::safe_ident::assert_safe_ident(field)?;
     let idx = format!("valence_ttl_expire_at_{table}");
     let q = format!("CREATE INDEX IF NOT EXISTS {idx} ON {table} ({field})");
-    sqlx::query(&q)
+    sqlx::query(sqlx::AssertSqlSafe(q))
         .execute(pool)
         .await
         .map_err(|e| Error::database(e.to_string()))?;

@@ -127,13 +127,15 @@ fn read_table_meta() -> &'static SchemaMetadata {
 valence_core::inventory::submit! { SchemaMetadataInit(read_table_meta) }
 
 async fn column_names(backend: &SqliteBackend, table: &str) -> Vec<String> {
-    sqlx::query(&format!("PRAGMA table_info(\"{table}\")"))
-        .fetch_all(backend.pool())
-        .await
-        .expect("pragma")
-        .iter()
-        .map(|r| r.get::<String, _>("name"))
-        .collect()
+    sqlx::query(sqlx::AssertSqlSafe(format!(
+        "PRAGMA table_info(\"{table}\")"
+    )))
+    .fetch_all(backend.pool())
+    .await
+    .expect("pragma")
+    .iter()
+    .map(|r| r.get::<String, _>("name"))
+    .collect()
 }
 
 #[tokio::test]
@@ -156,11 +158,13 @@ async fn retired_field_sync_sqlite_accepts_orphan_happy() {
         .create_record(table, serde_json::json!({"id": "r1", "a": "alpha"}))
         .await
         .expect("create");
-    let b: Option<String> = sqlx::query(&format!("SELECT b FROM \"{table}\" WHERE id = 'r1'"))
-        .fetch_one(backend.pool())
-        .await
-        .expect("select b")
-        .get("b");
+    let b: Option<String> = sqlx::query(sqlx::AssertSqlSafe(format!(
+        "SELECT b FROM \"{table}\" WHERE id = 'r1'"
+    )))
+    .fetch_one(backend.pool())
+    .await
+    .expect("select b")
+    .get("b");
     assert_eq!(b, None);
 }
 
@@ -210,9 +214,9 @@ async fn retired_field_not_in_reads_happy() {
         .await
         .expect("ensure v1");
     // A row written while `b` was still a live field.
-    sqlx::query(&format!(
+    sqlx::query(sqlx::AssertSqlSafe(format!(
         "INSERT INTO \"{table}\" (id, a, b) VALUES ('old', 'alpha', 'stale')"
-    ))
+    )))
     .execute(backend.pool())
     .await
     .expect("seed old row");

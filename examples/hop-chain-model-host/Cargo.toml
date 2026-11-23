@@ -8,6 +8,7 @@ description = "Org→Project→Task→Note chain across hop_a..hop_d engines"
 
 [lib]
 path = "src/lib.rs"
+test = false
 
 [dependencies]
 valence = { path = "../../valence", features = ["mem"], package = "uf-valence" }

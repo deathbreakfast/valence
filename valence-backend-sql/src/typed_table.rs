@@ -84,7 +84,7 @@ pub async fn ensure_typed_table_sqlite(
 ) -> Result<()> {
     assert_safe_table(&layout.table)?;
     let ddl = ensure_typed_ddl_sqlite(layout)?;
-    sqlx::query(&ddl)
+    sqlx::query(sqlx::AssertSqlSafe(ddl))
         .execute(pool)
         .await
         .map_err(|e| Error::database(e.to_string()))?;
@@ -105,7 +105,7 @@ pub async fn ensure_typed_table_postgres(
 ) -> Result<()> {
     assert_safe_table(&layout.table)?;
     let ddl = ensure_typed_ddl_postgres(layout)?;
-    sqlx::query(&ddl)
+    sqlx::query(sqlx::AssertSqlSafe(ddl))
         .execute(pool)
         .await
         .map_err(|e| Error::database(e.to_string()))?;
@@ -125,10 +125,13 @@ pub async fn inspect_typed_layout_sqlite(
     table: &str,
 ) -> Result<Option<StorageLayout>> {
     assert_safe_table(table)?;
-    let rows = sqlx::query(&format!("PRAGMA table_info({})", quote_sql_ident(table)))
-        .fetch_all(pool)
-        .await
-        .map_err(|e| Error::database(e.to_string()))?;
+    let rows = sqlx::query(sqlx::AssertSqlSafe(format!(
+        "PRAGMA table_info({})",
+        quote_sql_ident(table)
+    )))
+    .fetch_all(pool)
+    .await
+    .map_err(|e| Error::database(e.to_string()))?;
     if rows.is_empty() {
         return Ok(None);
     }
@@ -234,7 +237,7 @@ pub async fn sync_typed_table_sqlite(
         match op {
             AdditiveOp::AddField(f) => {
                 let ddl = sqlite_add_column(&layout.table, &f)?;
-                sqlx::query(&ddl)
+                sqlx::query(sqlx::AssertSqlSafe(ddl))
                     .execute(pool)
                     .await
                     .map_err(|e| Error::database(e.to_string()))?;
@@ -271,7 +274,7 @@ pub async fn sync_typed_table_postgres(pool: &sqlx::PgPool, layout: &StorageLayo
         match op {
             AdditiveOp::AddField(f) => {
                 let ddl = postgres_add_column(&layout.table, &f)?;
-                sqlx::query(&ddl)
+                sqlx::query(sqlx::AssertSqlSafe(ddl))
                     .execute(pool)
                     .await
                     .map_err(|e| Error::database(e.to_string()))?;
@@ -304,7 +307,7 @@ pub async fn sync_typed_table_postgres(pool: &sqlx::PgPool, layout: &StorageLayo
             ?tweak,
             "valence.storage.safe_tweak"
         );
-        sqlx::query(&ddl)
+        sqlx::query(sqlx::AssertSqlSafe(ddl))
             .execute(pool)
             .await
             .map_err(|e| Error::database(e.to_string()))?;
@@ -325,7 +328,7 @@ pub async fn define_unique_index_column_sqlite(
         quote_sql_ident(table),
         quote_sql_ident(field)
     );
-    sqlx::query(&q)
+    sqlx::query(sqlx::AssertSqlSafe(q))
         .execute(pool)
         .await
         .map_err(|e| Error::database(e.to_string()))?;
@@ -345,7 +348,7 @@ pub async fn define_index_column_sqlite(
         quote_sql_ident(table),
         quote_sql_ident(field)
     );
-    sqlx::query(&q)
+    sqlx::query(sqlx::AssertSqlSafe(q))
         .execute(pool)
         .await
         .map_err(|e| Error::database(e.to_string()))?;
@@ -365,7 +368,7 @@ pub async fn define_unique_index_column_postgres(
         quote_sql_ident(table),
         quote_sql_ident(field)
     );
-    sqlx::query(&q)
+    sqlx::query(sqlx::AssertSqlSafe(q))
         .execute(pool)
         .await
         .map_err(|e| Error::database(e.to_string()))?;
@@ -385,7 +388,7 @@ pub async fn define_index_column_postgres(
         quote_sql_ident(table),
         quote_sql_ident(field)
     );
-    sqlx::query(&q)
+    sqlx::query(sqlx::AssertSqlSafe(q))
         .execute(pool)
         .await
         .map_err(|e| Error::database(e.to_string()))?;
@@ -428,7 +431,7 @@ pub async fn ensure_layout_for_write_sqlite(
                     )));
                 }
                 let ddl = sqlite_add_column(&layout.table, f)?;
-                sqlx::query(&ddl)
+                sqlx::query(sqlx::AssertSqlSafe(ddl))
                     .execute(pool)
                     .await
                     .map_err(|e| Error::database(e.to_string()))?;
@@ -473,7 +476,7 @@ pub async fn ensure_layout_for_write_postgres(
                     )));
                 }
                 let ddl = postgres_add_column(&layout.table, f)?;
-                sqlx::query(&ddl)
+                sqlx::query(sqlx::AssertSqlSafe(ddl))
                     .execute(pool)
                     .await
                     .map_err(|e| Error::database(e.to_string()))?;
@@ -590,7 +593,7 @@ pub async fn create_record_typed_sqlite(
         "INSERT INTO {} ({cols}) VALUES ({ph})",
         quote_sql_ident(&layout.table)
     );
-    let mut query = sqlx::query(&q);
+    let mut query = sqlx::query(sqlx::AssertSqlSafe(q));
     let mut out_fields = Map::new();
     for f in &layout.fields {
         if f.name == "id" {
@@ -635,7 +638,7 @@ pub async fn create_record_typed_postgres(
         "INSERT INTO {} ({cols}) VALUES ({ph})",
         quote_sql_ident(&layout.table)
     );
-    let mut query = sqlx::query(&q);
+    let mut query = sqlx::query(sqlx::AssertSqlSafe(q));
     let mut out_fields = Map::new();
     for f in &layout.fields {
         if f.name == "id" {
@@ -654,10 +657,10 @@ pub async fn create_record_typed_postgres(
 }
 
 fn bind_sqlite<'q>(
-    query: sqlx::query::Query<'q, sqlx::Sqlite, sqlx::sqlite::SqliteArguments<'q>>,
+    query: sqlx::query::Query<'q, sqlx::Sqlite, sqlx::sqlite::SqliteArguments>,
     storage: FieldStorage,
     value: &Value,
-) -> Result<sqlx::query::Query<'q, sqlx::Sqlite, sqlx::sqlite::SqliteArguments<'q>>> {
+) -> Result<sqlx::query::Query<'q, sqlx::Sqlite, sqlx::sqlite::SqliteArguments>> {
     // Match [`validate_write_types`]: stringly decimals/integers coerce before bind.
     let value = coerce_for_storage(storage, value)?;
     if value.is_null() {
@@ -770,7 +773,7 @@ pub async fn get_record_typed_sqlite(
         quote_sql_ident(table),
         quote_sql_ident("id")
     );
-    let row = sqlx::query(&q)
+    let row = sqlx::query(sqlx::AssertSqlSafe(q))
         .bind(id)
         .fetch_optional(pool)
         .await
@@ -800,7 +803,7 @@ pub async fn get_record_typed_postgres(
         quote_sql_ident(table),
         quote_sql_ident("id")
     );
-    let row = sqlx::query(&q)
+    let row = sqlx::query(sqlx::AssertSqlSafe(q))
         .bind(id)
         .fetch_optional(pool)
         .await
@@ -830,7 +833,7 @@ pub async fn scan_table_typed_sqlite(
         id = quote_sql_ident("id")
     );
     let limit = i64::try_from(limit).unwrap_or(i64::MAX);
-    let rows = sqlx::query(&q)
+    let rows = sqlx::query(sqlx::AssertSqlSafe(q))
         .bind(after)
         .bind(after)
         .bind(limit)
@@ -865,7 +868,7 @@ pub async fn scan_table_typed_postgres(
         id = quote_sql_ident("id")
     );
     let limit = i64::try_from(limit).unwrap_or(i64::MAX);
-    let rows = sqlx::query(&q)
+    let rows = sqlx::query(sqlx::AssertSqlSafe(q))
         .bind(after)
         .bind(limit)
         .fetch_all(pool)
@@ -925,7 +928,7 @@ pub async fn update_record_typed_sqlite(
         quote_sql_ident(&layout.table),
         quote_sql_ident("id")
     );
-    let mut query = sqlx::query(&q);
+    let mut query = sqlx::query(sqlx::AssertSqlSafe(q));
     let mut out = Map::new();
     for f in &data {
         let val = fields.get(&f.name).cloned().unwrap_or(Value::Null);
@@ -973,7 +976,7 @@ pub async fn update_record_typed_postgres(
         quote_sql_ident(&layout.table),
         quote_sql_ident("id")
     );
-    let mut query = sqlx::query(&q);
+    let mut query = sqlx::query(sqlx::AssertSqlSafe(q));
     let mut out = Map::new();
     for f in &data {
         let val = fields.get(&f.name).cloned().unwrap_or(Value::Null);
@@ -1021,7 +1024,7 @@ pub async fn merge_record_typed_sqlite(
         quote_sql_ident(&layout.table),
         quote_sql_ident("id")
     );
-    let mut query = sqlx::query(&q);
+    let mut query = sqlx::query(sqlx::AssertSqlSafe(q));
     for f in &data {
         let val = fields.get(&f.name).cloned().unwrap_or(Value::Null);
         query = bind_sqlite(query, f.storage, &val)?;
@@ -1145,7 +1148,7 @@ pub async fn merge_record_typed_postgres(
         quote_sql_ident(&layout.table),
         quote_sql_ident("id")
     );
-    let mut query = sqlx::query(&q);
+    let mut query = sqlx::query(sqlx::AssertSqlSafe(q));
     for f in &data {
         let val = fields.get(&f.name).cloned().unwrap_or(Value::Null);
         query = bind_postgres(query, f.storage, &val)?;

@@ -62,9 +62,9 @@ pub async fn read_schema_version_sqlite(
 ) -> Result<Option<String>> {
     assert_safe_table(table)?;
     ensure_schema_meta_sqlite(pool).await?;
-    let row = sqlx::query_scalar::<_, String>(&format!(
+    let row = sqlx::query_scalar::<_, String>(sqlx::AssertSqlSafe(format!(
         "SELECT version FROM {SCHEMA_META_TABLE} WHERE table_name = ?"
-    ))
+    )))
     .bind(table)
     .fetch_optional(pool)
     .await
@@ -81,10 +81,10 @@ pub async fn write_schema_version_sqlite(
     assert_safe_table(table)?;
     validate_version_stamp(version)?;
     ensure_schema_meta_sqlite(pool).await?;
-    sqlx::query(&format!(
+    sqlx::query(sqlx::AssertSqlSafe(format!(
         "INSERT INTO {SCHEMA_META_TABLE} (table_name, version) VALUES (?, ?) \
          ON CONFLICT(table_name) DO UPDATE SET version = excluded.version"
-    ))
+    )))
     .bind(table)
     .bind(version)
     .execute(pool)
@@ -100,9 +100,9 @@ pub async fn read_schema_version_postgres(
 ) -> Result<Option<String>> {
     assert_safe_ident(table)?;
     ensure_schema_meta_postgres(pool).await?;
-    let row = sqlx::query_scalar::<_, String>(&format!(
+    let row = sqlx::query_scalar::<_, String>(sqlx::AssertSqlSafe(format!(
         "SELECT version FROM {SCHEMA_META_TABLE} WHERE table_name = $1"
-    ))
+    )))
     .bind(table)
     .fetch_optional(pool)
     .await
@@ -119,10 +119,10 @@ pub async fn write_schema_version_postgres(
     assert_safe_ident(table)?;
     validate_version_stamp(version)?;
     ensure_schema_meta_postgres(pool).await?;
-    sqlx::query(&format!(
+    sqlx::query(sqlx::AssertSqlSafe(format!(
         "INSERT INTO {SCHEMA_META_TABLE} (table_name, version) VALUES ($1, $2) \
          ON CONFLICT (table_name) DO UPDATE SET version = EXCLUDED.version"
-    ))
+    )))
     .bind(table)
     .bind(version)
     .execute(pool)

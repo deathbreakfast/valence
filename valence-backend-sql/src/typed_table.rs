@@ -1037,6 +1037,82 @@ pub async fn merge_record_typed_sqlite(
     Ok(row_from_sqlx_sqlite(&layout.table, layout, &row))
 }
 
+/// Compare-and-set partial-column write (SQLite).
+///
+/// Writes `patch` only when the stored `field` column still equals `expected` (`IS`, so `null`
+/// matches `null`), in one `UPDATE ... WHERE` statement. `expected` is bound with the column's
+/// own storage encoding so it compares against what [`merge_record_typed_sqlite`] wrote.
+///
+/// # Errors
+///
+/// [`Error::NotFound`] when the row is absent, [`Error::Conflict`] when `field` holds another
+/// value, and [`Error::Validation`] when `field` isn't a column of `layout`.
+pub async fn compare_and_merge_record_typed_sqlite(
+    pool: &sqlx::SqlitePool,
+    layout: &StorageLayout,
+    id: &str,
+    field: &str,
+    expected: &Value,
+    patch: Value,
+    ensured: &WriteEnsureCache,
+) -> Result<Value> {
+    let guard = layout
+        .fields
+        .iter()
+        .find(|f| f.name == field && f.name != "id")
+        .ok_or_else(|| {
+            Error::Validation(format!(
+                "{}.{field} is not a column, so it can't guard a compare-and-set",
+                layout.table
+            ))
+        })?;
+    ensure_layout_for_write_sqlite(pool, layout, ensured).await?;
+    let (_, fields) = split_record_fields(patch);
+    let data: Vec<&LayoutField> = layout
+        .fields
+        .iter()
+        .filter(|f| f.name != "id" && fields.contains_key(&f.name))
+        .collect();
+    let id_col = quote_sql_ident("id");
+    let sets = if data.is_empty() {
+        format!("{id_col} = {id_col}")
+    } else {
+        data.iter()
+            .map(|f| format!("{} = ?", quote_sql_ident(&f.name)))
+            .collect::<Vec<_>>()
+            .join(", ")
+    };
+    let q = format!(
+        "UPDATE {} SET {sets} WHERE {id_col} = ? AND {} IS ? RETURNING *",
+        quote_sql_ident(&layout.table),
+        quote_sql_ident(&guard.name)
+    );
+    let mut query = sqlx::query(&q);
+    for f in &data {
+        let val = fields.get(&f.name).cloned().unwrap_or(Value::Null);
+        query = bind_sqlite(query, f.storage, &val)?;
+    }
+    query = query.bind(id);
+    query = bind_sqlite(query, guard.storage, expected)?;
+    let row = query
+        .fetch_optional(pool)
+        .await
+        .map_err(|e| map_write_err_sqlite(&layout.table, e))?;
+    if let Some(row) = row {
+        return Ok(row_from_sqlx_sqlite(&layout.table, layout, &row));
+    }
+    if get_record_typed_sqlite(pool, &layout.table, id)
+        .await?
+        .is_none()
+    {
+        return Err(Error::NotFound(format!("{}:{id}", layout.table)));
+    }
+    Err(Error::Conflict(format!(
+        "{}:{id}: {field} changed since it was read",
+        layout.table
+    )))
+}
+
 /// Sparse atomic partial-column write (Postgres): see [`merge_record_typed_sqlite`].
 pub async fn merge_record_typed_postgres(
     pool: &sqlx::PgPool,
@@ -1383,5 +1459,151 @@ mod unique_violation_tests {
         );
         assert_eq!(postgres_unique_field("tag", "valence_unique_tag_"), None);
         assert_eq!(postgres_unique_field("tag", "tag_name_idx"), None);
+    }
+}
+
+#[cfg(test)]
+mod compare_and_merge_tests {
+    #![allow(clippy::expect_used, clippy::unwrap_used)]
+
+    use super::*;
+
+    fn field(name: &str, storage: FieldStorage, primary_key: bool) -> LayoutField {
+        LayoutField {
+            name: name.into(),
+            storage,
+            primary_key,
+            nullable: !primary_key,
+            unique: primary_key,
+            indexed: false,
+            default: None,
+            record_table: None,
+        }
+    }
+
+    async fn seeded() -> (sqlx::SqlitePool, StorageLayout, WriteEnsureCache) {
+        // One connection, so every query sees the same in-memory database.
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .expect("connect");
+        let layout = StorageLayout {
+            table: "cas_demo".into(),
+            fields: vec![
+                field("id", FieldStorage::String, true),
+                field("version", FieldStorage::Integer, false),
+                field("name", FieldStorage::String, false),
+                field("lock", FieldStorage::String, false),
+            ],
+            retired: Vec::new(),
+        };
+        let ensured = WriteEnsureCache::new();
+        create_record_typed_sqlite(
+            &pool,
+            &layout,
+            serde_json::json!({"id": {"table": "cas_demo", "id": "r1"}, "version": 1, "name": "a"}),
+            &ensured,
+        )
+        .await
+        .expect("seed");
+        (pool, layout, ensured)
+    }
+
+    #[tokio::test]
+    async fn writes_when_guard_matches_happy() {
+        let (pool, layout, ensured) = seeded().await;
+        let row = compare_and_merge_record_typed_sqlite(
+            &pool,
+            &layout,
+            "r1",
+            "version",
+            &serde_json::json!(1),
+            serde_json::json!({"version": 2, "name": "b"}),
+            &ensured,
+        )
+        .await
+        .expect("guard matches");
+        assert_eq!(row["version"], 2);
+        assert_eq!(row["name"], "b");
+    }
+
+    #[tokio::test]
+    async fn stale_guard_conflicts_and_writes_nothing_sad() {
+        let (pool, layout, ensured) = seeded().await;
+        let err = compare_and_merge_record_typed_sqlite(
+            &pool,
+            &layout,
+            "r1",
+            "version",
+            &serde_json::json!(0),
+            serde_json::json!({"name": "stale"}),
+            &ensured,
+        )
+        .await
+        .expect_err("version is 1");
+        assert!(matches!(err, Error::Conflict(_)), "{err:?}");
+        let row = get_record_typed_sqlite(&pool, "cas_demo", "r1")
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(row["name"], "a");
+    }
+
+    #[tokio::test]
+    async fn null_guard_matches_unset_column_and_missing_row_is_not_found() {
+        let (pool, layout, ensured) = seeded().await;
+        compare_and_merge_record_typed_sqlite(
+            &pool,
+            &layout,
+            "r1",
+            "lock",
+            &Value::Null,
+            serde_json::json!({"lock": "held"}),
+            &ensured,
+        )
+        .await
+        .expect("lock was unset");
+        let err = compare_and_merge_record_typed_sqlite(
+            &pool,
+            &layout,
+            "r1",
+            "lock",
+            &Value::Null,
+            serde_json::json!({"lock": "again"}),
+            &ensured,
+        )
+        .await
+        .expect_err("lock is held now");
+        assert!(matches!(err, Error::Conflict(_)), "{err:?}");
+        let err = compare_and_merge_record_typed_sqlite(
+            &pool,
+            &layout,
+            "nope",
+            "lock",
+            &Value::Null,
+            serde_json::json!({"lock": "held"}),
+            &ensured,
+        )
+        .await
+        .expect_err("no such row");
+        assert!(matches!(err, Error::NotFound(_)), "{err:?}");
+    }
+
+    #[tokio::test]
+    async fn unknown_guard_column_is_a_validation_error_sad() {
+        let (pool, layout, ensured) = seeded().await;
+        let err = compare_and_merge_record_typed_sqlite(
+            &pool,
+            &layout,
+            "r1",
+            "missing",
+            &Value::Null,
+            serde_json::json!({}),
+            &ensured,
+        )
+        .await
+        .expect_err("not a column");
+        assert!(matches!(err, Error::Validation(_)), "{err:?}");
     }
 }

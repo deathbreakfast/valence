@@ -358,6 +358,7 @@ fn error_kind(err: &Error) -> &'static str {
         Error::Serialization { .. } => "serialization",
         Error::PendingDeletion(_) => "pending_deletion",
         Error::Identity(_) => "identity",
+        Error::Conflict(_) => "conflict",
     }
 }
 

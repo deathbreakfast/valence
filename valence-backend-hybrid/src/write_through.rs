@@ -68,6 +68,31 @@ pub async fn merge_record(
     Ok(row)
 }
 
+/// Compare-and-set merge on the primary, then refresh the record cache.
+///
+/// # Errors
+///
+/// Returns primary errors, including [`valence_core::Error::Conflict`] when the guard field
+/// changed. Mirror failures are soft.
+#[allow(clippy::too_many_arguments)]
+pub async fn compare_and_merge_record(
+    primary: &Arc<dyn DatabaseBackend>,
+    mirror: &IndradbBackend,
+    records: &RecordCache,
+    policy: &CachePolicy,
+    table: &str,
+    id: &str,
+    field: &str,
+    expected: &Value,
+    patch: Value,
+) -> Result<Value> {
+    let row = primary
+        .compare_and_merge_record(table, id, field, expected, patch)
+        .await?;
+    soft_put_record(mirror, records, policy, table, &row).await;
+    Ok(row)
+}
+
 /// Upsert on the primary, then refresh the record cache.
 ///
 /// # Errors

@@ -37,6 +37,10 @@ pub enum Error {
 
     #[error("Identity error: {0}")]
     Identity(String),
+
+    /// A compare-and-set write found the row changed since it was read; nothing was written.
+    #[error("Conflict: {0}")]
+    Conflict(String),
 }
 
 impl From<serde_json::Error> for Error {

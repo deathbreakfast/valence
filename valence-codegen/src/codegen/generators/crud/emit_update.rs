@@ -201,3 +201,128 @@ pub(super) fn model_update_method_tokens(_field_changes_name: &proc_macro2::Iden
         }
     }
 }
+
+pub(super) fn model_update_if_inherent_tokens(
+    field_changes_name: &proc_macro2::Ident,
+) -> TokenStream {
+    quote! {
+        /// Update a row only if its stored `field` still equals `expected` (compare-and-set).
+        ///
+        /// Privacy is the same as `Model::update`: Update policies are checked against the
+        /// stored row and the proposed payload, and fields the caller can't read and leaves
+        /// unset keep their stored values. The guard `field` itself must be readable by the
+        /// caller, so a failed precondition can't reveal a hidden value.
+        ///
+        /// Set the new version (or whatever `field` holds) on `data` yourself; the write and
+        /// the check happen in one atomic step on the backend.
+        ///
+        /// # Errors
+        ///
+        /// `Error::Conflict` when `field` changed since it was read (nothing is written),
+        /// `Error::NotFound` when the row is gone, `Error::Privacy` when a policy denies the
+        /// update or hides `field`, and `Error::Internal` on a backend without
+        /// compare-and-set support.
+        pub async fn update_if(
+            id: &str,
+            data: Self,
+            field: &str,
+            expected: serde_json::Value,
+            valence: &valence::Valence,
+            purpose: valence::DataUsePurpose,
+        ) -> valence::Result<Self> {
+            let _ = purpose;
+            data.check_update_privacy(valence).await?;
+            let mut record = serde_json::to_value(&data)
+                .map_err(valence::Error::from)?;
+            Self::__assert_unique_constraints_for_record(&record, Some(id), valence).await?;
+            let __stored = valence::QueryCore::get_stored_record_json(
+                <Self as valence::Model>::table_name(),
+                id,
+                valence,
+                valence::use_!(r"When a model **updates a row only if it is unchanged**, we **load the stored row first** so Update privacy is checked against what is actually saved. The same request path performing the update uses this load."),
+            )
+            .await?
+            .ok_or_else(|| valence::Error::NotFound(format!(
+                "{}:{}",
+                <Self as valence::Model>::table_name(),
+                id
+            )))?;
+            valence::PrivacyEvaluator::check_entity_access(
+                Self::__schema_metadata()?,
+                valence::PrivacyOperation::Update,
+                &__stored,
+                valence,
+            )
+            .await?;
+            let (__visible, __hidden) = valence::PrivacyEvaluator::filter_entity_fields(
+                Self::__schema_metadata()?,
+                &__stored,
+                valence.actor(),
+            )?;
+            if __hidden.iter().any(|h| h == field) {
+                return Err(valence::Error::Privacy(format!(
+                    "{}.{} is hidden from this viewer, so it can't guard an update",
+                    <Self as valence::Model>::table_name(),
+                    field
+                )));
+            }
+            let __visible = serde_json::Value::Object(__visible.into_iter().collect());
+            valence::PrivacyEvaluator::check_field_update_access(
+                Self::__schema_metadata()?,
+                Some(&__visible),
+                &record,
+                valence.actor(),
+            )?;
+            valence::drop_unset_hidden_fields(&mut record, &__hidden);
+            let before_snapshot = <Self as valence::Model>::get(
+                id,
+                valence,
+                valence::DataUsePurpose::framework_nested(),
+            )
+            .await?;
+
+            let id = id.to_string();
+            let updated: Self = valence::retry_on_database_tx_conflict("Model::update_if", || {
+                let id = id.clone();
+                let record = record.clone();
+                let expected = expected.clone();
+                async move {
+                    let backend = valence.backend_for_table(<Self as valence::Model>::table_name())?;
+                    let row = backend
+                        .compare_and_merge_record(
+                            <Self as valence::Model>::table_name(),
+                            id.as_str(),
+                            field,
+                            &expected,
+                            record,
+                        )
+                        .await?;
+                    serde_json::from_value(row)
+                        .map_err(valence::Error::from)
+                }
+            })
+            .await?;
+
+            if let Some(__rid) = updated.id() {
+                valence::read_cache::invalidate(<Self as valence::Model>::table_name(), __rid.id());
+            }
+
+            {
+                let field_changes = #field_changes_name::compute(
+                    before_snapshot.as_ref(),
+                    Some(&updated),
+                );
+                let mutation = valence::Mutation::new(
+                    valence::MutationKind::Update,
+                    before_snapshot,
+                    Some(updated.clone()),
+                    field_changes,
+                    valence,
+                );
+                Self::dispatch_side_effects(&mutation).await;
+            }
+
+            Ok(updated)
+        }
+    }
+}

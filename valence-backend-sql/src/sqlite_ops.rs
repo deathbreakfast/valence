@@ -14,9 +14,9 @@ use crate::ensure_table;
 use crate::json_merge;
 use crate::prepare_compiled;
 use crate::typed_table::{
-    create_record_typed_sqlite, define_unique_index_column_sqlite, ensure_layout_for_write_sqlite,
-    get_record_typed_sqlite, map_select_row_sqlite, merge_record_typed_sqlite,
-    update_record_typed_sqlite, WriteEnsureCache,
+    compare_and_merge_record_typed_sqlite, create_record_typed_sqlite,
+    define_unique_index_column_sqlite, ensure_layout_for_write_sqlite, get_record_typed_sqlite,
+    map_select_row_sqlite, merge_record_typed_sqlite, update_record_typed_sqlite, WriteEnsureCache,
 };
 
 /// Dialect-specific SQL fragments.
@@ -200,6 +200,34 @@ pub async fn merge_record_sqlite(
     }
     let layout = StorageLayout::resolve_for_write(table, &patch)?;
     merge_record_typed_sqlite(pool, &layout, id, patch, ensured).await
+}
+
+/// Compare-and-set merge on a table with a registered schema.
+///
+/// # Errors
+///
+/// [`Error::Validation`] when `table` has no registered schema (its columns aren't known, so
+/// the guard can't be checked in one statement); otherwise see
+/// the typed `compare_and_merge_record_typed_sqlite` (`NotFound`, `Conflict`, `Validation`).
+pub async fn compare_and_merge_record_sqlite(
+    pool: &sqlx::SqlitePool,
+    table: &str,
+    id: &str,
+    field: &str,
+    expected: &Value,
+    patch: Value,
+    ensured: &WriteEnsureCache,
+) -> Result<Value> {
+    if valence_core::schema::SchemaRegistry::global()
+        .get_full_schema(table)
+        .is_none()
+    {
+        return Err(Error::Validation(format!(
+            "compare_and_merge_record needs a registered schema for {table}"
+        )));
+    }
+    let layout = StorageLayout::resolve_for_write(table, &patch)?;
+    compare_and_merge_record_typed_sqlite(pool, &layout, id, field, expected, patch, ensured).await
 }
 
 pub async fn delete_record_sqlite(pool: &sqlx::SqlitePool, table: &str, id: &str) -> Result<()> {

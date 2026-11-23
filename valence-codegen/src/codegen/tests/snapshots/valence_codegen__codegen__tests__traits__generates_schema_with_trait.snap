@@ -896,6 +896,286 @@ impl TestTraitA {
         TestTraitAMutable::new(self.clone(), valence)
     }
 }
+#[allow(dead_code)]
+impl TestTraitA {
+    /// Update a row only if its stored `field` still equals `expected` (compare-and-set).
+    ///
+    /// Privacy is the same as `Model::update`: Update policies are checked against the
+    /// stored row and the proposed payload, and fields the caller can't read and leaves
+    /// unset keep their stored values. The guard `field` itself must be readable by the
+    /// caller, so a failed precondition can't reveal a hidden value.
+    ///
+    /// Set the new version (or whatever `field` holds) on `data` yourself; the write and
+    /// the check happen in one atomic step on the backend.
+    ///
+    /// # Errors
+    ///
+    /// `Error::Conflict` when `field` changed since it was read (nothing is written),
+    /// `Error::NotFound` when the row is gone, `Error::Privacy` when a policy denies the
+    /// update or hides `field`, and `Error::Internal` on a backend without
+    /// compare-and-set support.
+    pub async fn update_if(
+        id: &str,
+        data: Self,
+        field: &str,
+        expected: serde_json::Value,
+        valence: &valence::Valence,
+        purpose: valence::DataUsePurpose,
+    ) -> valence::Result<Self> {
+        let _ = purpose;
+        data.check_update_privacy(valence).await?;
+        let mut record = serde_json::to_value(&data).map_err(valence::Error::from)?;
+        Self::__assert_unique_constraints_for_record(&record, Some(id), valence).await?;
+        let __stored = valence::QueryCore::get_stored_record_json(
+                <Self as valence::Model>::table_name(),
+                id,
+                valence,
+                valence::use_!(
+                    r"When a model **updates a row only if it is unchanged**, we **load the stored row first** so Update privacy is checked against what is actually saved. The same request path performing the update uses this load."
+                ),
+            )
+            .await?
+            .ok_or_else(|| valence::Error::NotFound(
+                format!("{}:{}", < Self as valence::Model > ::table_name(), id),
+            ))?;
+        valence::PrivacyEvaluator::check_entity_access(
+                Self::__schema_metadata()?,
+                valence::PrivacyOperation::Update,
+                &__stored,
+                valence,
+            )
+            .await?;
+        let (__visible, __hidden) = valence::PrivacyEvaluator::filter_entity_fields(
+            Self::__schema_metadata()?,
+            &__stored,
+            valence.actor(),
+        )?;
+        if __hidden.iter().any(|h| h == field) {
+            return Err(
+                valence::Error::Privacy(
+                    format!(
+                        "{}.{} is hidden from this viewer, so it can't guard an update",
+                        < Self as valence::Model > ::table_name(), field
+                    ),
+                ),
+            );
+        }
+        let __visible = serde_json::Value::Object(__visible.into_iter().collect());
+        valence::PrivacyEvaluator::check_field_update_access(
+            Self::__schema_metadata()?,
+            Some(&__visible),
+            &record,
+            valence.actor(),
+        )?;
+        valence::drop_unset_hidden_fields(&mut record, &__hidden);
+        let before_snapshot = <Self as valence::Model>::get(
+                id,
+                valence,
+                valence::DataUsePurpose::framework_nested(),
+            )
+            .await?;
+        let id = id.to_string();
+        let updated: Self = valence::retry_on_database_tx_conflict(
+                "Model::update_if",
+                || {
+                    let id = id.clone();
+                    let record = record.clone();
+                    let expected = expected.clone();
+                    async move {
+                        let backend = valence
+                            .backend_for_table(<Self as valence::Model>::table_name())?;
+                        let row = backend
+                            .compare_and_merge_record(
+                                <Self as valence::Model>::table_name(),
+                                id.as_str(),
+                                field,
+                                &expected,
+                                record,
+                            )
+                            .await?;
+                        serde_json::from_value(row).map_err(valence::Error::from)
+                    }
+                },
+            )
+            .await?;
+        if let Some(__rid) = updated.id() {
+            valence::read_cache::invalidate(
+                <Self as valence::Model>::table_name(),
+                __rid.id(),
+            );
+        }
+        {
+            let field_changes = TestTraitAFieldChanges::compute(
+                before_snapshot.as_ref(),
+                Some(&updated),
+            );
+            let mutation = valence::Mutation::new(
+                valence::MutationKind::Update,
+                before_snapshot,
+                Some(updated.clone()),
+                field_changes,
+                valence,
+            );
+            Self::dispatch_side_effects(&mutation).await;
+        }
+        Ok(updated)
+    }
+    /// Check a new row like `Model::create` does and queue it on `batch`.
+    ///
+    /// Create privacy, required read-hidable fields and unique constraints (against
+    /// stored rows) are checked now, under the batch's actor. Nothing is written until
+    /// `batch.commit()`; ownership and Create side effects run after that commit.
+    pub async fn batch_create<'v>(
+        data: Self,
+        batch: &mut valence::ModelBatch<'v>,
+        purpose: valence::DataUsePurpose,
+    ) -> valence::Result<()> {
+        let _ = purpose;
+        let valence = batch.valence();
+        data.check_create_privacy(valence).await?;
+        let mut record = serde_json::to_value(&data).map_err(valence::Error::from)?;
+        Self::__reject_unset_read_hidable(&record)?;
+        Self::__assert_unique_constraints_for_record(&record, None, valence).await?;
+        let backend = valence.backend_for_table(<Self as valence::Model>::table_name())?;
+        valence::prepare_create_content(
+            <Self as valence::Model>::table_name(),
+            backend.as_ref(),
+            &mut record,
+        )?;
+        batch
+            .push_checked(
+                valence::WriteOp::Create {
+                    table: <Self as valence::Model>::table_name().to_string(),
+                    content: record,
+                },
+                move |row| async move {
+                    let created: Self = serde_json::from_value(row)
+                        .map_err(valence::Error::from)?;
+                    created.__ensure_ownership_after_write(valence).await?;
+                    if let Some(__rid) = created.id() {
+                        valence::read_cache::invalidate(
+                            <Self as valence::Model>::table_name(),
+                            __rid.id(),
+                        );
+                    }
+                    let field_changes = TestTraitAFieldChanges::compute(
+                        None,
+                        Some(&created),
+                    );
+                    let mutation = valence::Mutation::new(
+                        valence::MutationKind::Create,
+                        None,
+                        Some(created.clone()),
+                        field_changes,
+                        valence,
+                    );
+                    Self::dispatch_side_effects(&mutation).await;
+                    Ok(())
+                },
+            );
+        Ok(())
+    }
+    /// Check a replacement row like `Model::update` does and queue it on `batch`.
+    ///
+    /// Update privacy is checked now against the stored row, under the batch's actor;
+    /// fields the actor can't read and leaves unset keep their stored values. A missing
+    /// row returns `Error::NotFound`. Nothing is written until `batch.commit()`; Update
+    /// side effects run after that commit.
+    pub async fn batch_update<'v>(
+        id: &str,
+        data: Self,
+        batch: &mut valence::ModelBatch<'v>,
+        purpose: valence::DataUsePurpose,
+    ) -> valence::Result<()> {
+        let _ = purpose;
+        let valence = batch.valence();
+        data.check_update_privacy(valence).await?;
+        let mut record = serde_json::to_value(&data).map_err(valence::Error::from)?;
+        Self::__assert_unique_constraints_for_record(&record, Some(id), valence).await?;
+        let __stored = valence::QueryCore::get_stored_record_json(
+                <Self as valence::Model>::table_name(),
+                id,
+                valence,
+                valence::use_!(
+                    r"When a model **queues a row update in a batch**, we **load the stored row first** so Update privacy is checked against what is actually saved. The same request path building the batch uses this load."
+                ),
+            )
+            .await?
+            .ok_or_else(|| valence::Error::NotFound(
+                format!("{}:{}", < Self as valence::Model > ::table_name(), id),
+            ))?;
+        valence::PrivacyEvaluator::check_entity_access(
+                Self::__schema_metadata()?,
+                valence::PrivacyOperation::Update,
+                &__stored,
+                valence,
+            )
+            .await?;
+        let (__visible, __hidden) = valence::PrivacyEvaluator::filter_entity_fields(
+            Self::__schema_metadata()?,
+            &__stored,
+            valence.actor(),
+        )?;
+        let __visible = serde_json::Value::Object(__visible.into_iter().collect());
+        valence::PrivacyEvaluator::check_field_update_access(
+            Self::__schema_metadata()?,
+            Some(&__visible),
+            &record,
+            valence.actor(),
+        )?;
+        let merge_hidden = valence::drop_unset_hidden_fields(&mut record, &__hidden)
+            || Self::__lacks_read_hidable(&record);
+        let before_snapshot = <Self as valence::Model>::get(
+                id,
+                valence,
+                valence::DataUsePurpose::framework_nested(),
+            )
+            .await?;
+        let table = <Self as valence::Model>::table_name().to_string();
+        let id = id.to_string();
+        let op = if merge_hidden {
+            valence::WriteOp::Merge {
+                table,
+                id,
+                patch: record,
+            }
+        } else {
+            valence::WriteOp::Update {
+                table,
+                id,
+                content: record,
+            }
+        };
+        batch
+            .push_checked(
+                op,
+                move |row| async move {
+                    let updated: Self = serde_json::from_value(row)
+                        .map_err(valence::Error::from)?;
+                    if let Some(__rid) = updated.id() {
+                        valence::read_cache::invalidate(
+                            <Self as valence::Model>::table_name(),
+                            __rid.id(),
+                        );
+                    }
+                    let field_changes = TestTraitAFieldChanges::compute(
+                        before_snapshot.as_ref(),
+                        Some(&updated),
+                    );
+                    let mutation = valence::Mutation::new(
+                        valence::MutationKind::Update,
+                        before_snapshot,
+                        Some(updated),
+                        field_changes,
+                        valence,
+                    );
+                    Self::dispatch_side_effects(&mutation).await;
+                    Ok(())
+                },
+            );
+        Ok(())
+    }
+}
 impl TestTraitA {
     /// Start a type-safe query with a declared data use.
     pub fn query(

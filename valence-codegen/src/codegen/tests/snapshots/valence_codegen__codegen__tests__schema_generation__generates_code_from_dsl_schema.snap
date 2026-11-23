@@ -1219,6 +1219,11 @@ impl<'a> TestEntityQuery<'a> {
     pub fn into_parts(self) -> (valence::QueryCore, &'a valence::Valence) {
         (self.inner, self.valence)
     }
+    /// Keep only rows whose id is one of `ids`. An empty list matches no rows.
+    pub fn where_id_in(mut self, ids: Vec<valence::RecordId>) -> Self {
+        self.inner = self.inner.where_id_in(ids);
+        self
+    }
     pub fn where_id(mut self, predicate: valence::StringPredicate) -> Self {
         self.inner = self.inner.where_string("id".to_string(), predicate);
         self

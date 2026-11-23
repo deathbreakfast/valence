@@ -217,25 +217,26 @@ impl QueryCore {
         param_counter: &mut usize,
     ) -> (String, Vec<(String, serde_json::Value)>) {
         let col = super::sql_document::sql_doc_column(field);
-        match pred {
-            RecordPredicate::Equals(rid) => {
-                let rid_key = Self::next_param_key(param_counter);
-                let bare_key = Self::next_param_key(param_counter);
-                let params = vec![
-                    (
-                        rid_key.clone(),
-                        serde_json::Value::String(format!("{}:{}", rid.table(), rid.id())),
-                    ),
-                    (
-                        bare_key.clone(),
-                        serde_json::Value::String(rid.id().to_string()),
-                    ),
-                ];
-                (
-                    format!("({col} = ${rid_key} OR {col} = ${bare_key})"),
-                    params,
-                )
-            }
+        let rids = match pred {
+            RecordPredicate::Equals(rid) => std::slice::from_ref(rid),
+            RecordPredicate::In(rids) => rids.as_slice(),
+        };
+        if rids.is_empty() {
+            return ("1 = 0".to_string(), Vec::new());
         }
+        // One flat OR group, which the document-row filter reads as "any term matches".
+        let mut terms = Vec::with_capacity(rids.len());
+        let mut params = Vec::with_capacity(rids.len() * 2);
+        for rid in rids {
+            let rid_key = Self::next_param_key(param_counter);
+            let bare_key = Self::next_param_key(param_counter);
+            terms.push(format!("{col} = ${rid_key} OR {col} = ${bare_key}"));
+            params.push((
+                rid_key,
+                serde_json::Value::String(format!("{}:{}", rid.table(), rid.id())),
+            ));
+            params.push((bare_key, serde_json::Value::String(rid.id().to_string())));
+        }
+        (format!("({})", terms.join(" OR ")), params)
     }
 }

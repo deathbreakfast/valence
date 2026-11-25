@@ -158,7 +158,9 @@ impl QueryCore {
     /// 5. Return ValenceEntity
     ///
     /// Denied reads and missing rows both return `Ok(None)` so callers cannot
-    /// distinguish existence from a privacy denial.
+    /// distinguish existence from a privacy denial. Telling them apart would let anyone who
+    /// can guess ids learn which records exist, so this stays the default. Admin tooling
+    /// that already lists record ids uses [`Self::get_entity_read`] instead.
     /// # Errors
     ///
     /// Returns an error when the requested operation cannot be completed.
@@ -206,6 +208,72 @@ impl QueryCore {
             hidden_fields,
             Arc::new((*schema).clone()),
         )))
+    }
+
+    /// Like [`Self::get_entity`], but tells a hidden record apart from a missing one.
+    ///
+    /// Returns [`EntityRead::Hidden`] with the name of the entity read policy that denied
+    /// (see [`crate::privacy::PrivacyEvaluator::entity_read_denial`] for the names) and
+    /// [`EntityRead::Missing`] when no row has `id`. On [`EntityRead::Found`], each hidden
+    /// field also names its policy in
+    /// [`ValenceEntity::hidden_field_policies`](crate::entity::ValenceEntity::hidden_field_policies).
+    ///
+    /// This reveals whether a record exists to an actor who may not read it. It is for
+    /// admin tooling that already lists record ids, and `purpose` must say that the call
+    /// reveals existence. Everything else uses [`Self::get_entity`].
+    /// # Errors
+    ///
+    /// [`Error::NotFound`] when `table` has no registered schema, and any storage or
+    /// policy evaluation error other than a denial.
+    ///
+    /// [`EntityRead::Hidden`]: crate::entity::EntityRead::Hidden
+    /// [`EntityRead::Missing`]: crate::entity::EntityRead::Missing
+    /// [`EntityRead::Found`]: crate::entity::EntityRead::Found
+    pub async fn get_entity_read(
+        table: impl Into<String>,
+        id: impl AsRef<str>,
+        valence: &Valence,
+        purpose: crate::data_use::DataUsePurpose,
+    ) -> Result<crate::entity::EntityRead> {
+        use crate::entity::{EntityRead, ValenceEntity};
+        use crate::privacy::PrivacyEvaluator;
+        use crate::schema::SchemaRegistry;
+        use std::sync::Arc;
+
+        let table_str = table.into();
+        let id_str = id.as_ref();
+        let schema = SchemaRegistry::global()
+            .get_schema(&table_str)
+            .ok_or_else(|| Error::NotFound(format!("Schema not found: {table_str}")))?;
+
+        let Some(raw_data) =
+            Self::get_stored_record_json(&table_str, id_str, valence, purpose).await?
+        else {
+            return Ok(EntityRead::Missing);
+        };
+
+        if let Some(policy) = PrivacyEvaluator::entity_read_denial(schema, &raw_data, valence).await?
+        {
+            return Ok(EntityRead::Hidden { policy });
+        }
+
+        let (filtered_data, hidden_fields, hidden_field_policies) =
+            PrivacyEvaluator::filter_entity_fields_with_policies(
+                schema,
+                &raw_data,
+                valence.actor(),
+            )?;
+
+        Ok(EntityRead::Found(
+            ValenceEntity::new(
+                table_str.clone(),
+                id_str.to_string(),
+                filtered_data,
+                hidden_fields,
+                Arc::new((*schema).clone()),
+            )
+            .with_hidden_field_policies(hidden_field_policies),
+        ))
     }
 
 

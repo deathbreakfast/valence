@@ -24,14 +24,30 @@ pub async fn queue_delete_entity(table: &str, id: &str, v: &Valence) -> Result<(
 /// # Errors
 ///
 /// Returns an error when the requested operation cannot be completed.
+pub async fn queue_delete_entity_returning_run_id(
+    table: &str,
+    id: &str,
+    v: &Valence,
+) -> Result<Option<String>> {
+    queue_delete_entity_returning_run_id_with_request(table, id, &DeletionRequestMeta::default(), v)
+        .await
+}
+
+/// Like [`queue_delete_entity_returning_run_id`], but stores `meta` (why the deletion was
+/// asked for) on the new run.
+///
+/// # Errors
+///
+/// Returns an error when the requested operation cannot be completed.
 #[allow(
     clippy::cast_possible_truncation,
     clippy::cast_sign_loss,
     reason = "deletion metrics require a usize count after clamping negative values"
 )]
-pub async fn queue_delete_entity_returning_run_id(
+pub async fn queue_delete_entity_returning_run_id_with_request(
     table: &str,
     id: &str,
+    meta: &DeletionRequestMeta,
     v: &Valence,
 ) -> Result<Option<String>> {
     match prepare_deletion(table, id, DeletionMode::Queued, v).await? {
@@ -41,8 +57,14 @@ pub async fn queue_delete_entity_returning_run_id(
             OwnershipService::mark_pending_deletion(table, &bare_id, v).await?;
 
             let actor_json = serde_json::to_value(v.actor()).unwrap_or(serde_json::Value::Null);
-            let run_id =
-                DeletionService::create_run(table, &bare_id, actor_json.clone(), v).await?;
+            let run_id = DeletionService::create_run_with_request(
+                table,
+                &bare_id,
+                actor_json.clone(),
+                meta,
+                v,
+            )
+            .await?;
             #[cfg(feature = "instrumentation")]
             {
                 let max_depth = dag.nodes.iter().map(|n| n.depth).max().unwrap_or(0) as usize;
@@ -65,4 +87,19 @@ pub async fn queue_delete_entity_returning_run_id(
             Ok(Some(run_id))
         }
     }
+}
+
+/// Days between a deletion request and the date its run must finish: the platform's promise
+/// that user-related data is removed within 30 days. Stored on each run as `due_at`.
+pub const DELETION_DUE_DAYS: i64 = 30;
+
+/// Why a deletion was asked for, stored on its `valence_deletion_run` row.
+///
+/// Both fields are free text from the operator; neither is checked here.
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct DeletionRequestMeta {
+    /// Why the record is being deleted, as the operator wrote it.
+    pub reason: Option<String>,
+    /// A support or request ticket reference, if there is one.
+    pub ticket: Option<String>,
 }

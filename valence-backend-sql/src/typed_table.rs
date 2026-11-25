@@ -1090,7 +1090,7 @@ pub async fn compare_and_merge_record_typed_sqlite(
         quote_sql_ident(&layout.table),
         quote_sql_ident(&guard.name)
     );
-    let mut query = sqlx::query(&q);
+    let mut query = sqlx::query(sqlx::AssertSqlSafe(q));
     for f in &data {
         let val = fields.get(&f.name).cloned().unwrap_or(Value::Null);
         query = bind_sqlite(query, f.storage, &val)?;

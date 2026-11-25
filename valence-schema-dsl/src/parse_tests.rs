@@ -632,3 +632,39 @@ fn test_export_block_sad_paths() {
         assert!(err.to_string().contains(needle), "{block}: {err}");
     }
 }
+
+fn personal_schema(attr: &str) -> String {
+    format!(
+        r#"
+            Person {{
+                repository: "https://github.com/unified-field-dev/valence",
+                table: "person",
+                version: "0.1.0",
+                fields: [
+                    id: {{ r#type: FieldType::String, primary_key: true, required: true }},
+                    email: {{ r#type: FieldType::String, required: true{attr} }}
+                ]
+            }}
+        "#
+    )
+}
+
+#[test]
+fn personal_field_attribute_happy() {
+    let schema = syn::parse_str::<SchemaSpec>(&personal_schema(", personal: true")).expect("parse");
+    let parsed = schema.to_schema().expect("to_schema");
+    assert!(!parsed.fields[0].personal);
+    assert!(parsed.fields[1].personal);
+}
+
+#[test]
+fn personal_field_defaults_to_false() {
+    let schema = syn::parse_str::<SchemaSpec>(&personal_schema("")).expect("parse");
+    let parsed = schema.to_schema().expect("to_schema");
+    assert!(parsed.fields.iter().all(|f| !f.personal));
+}
+
+#[test]
+fn personal_field_non_bool_sad() {
+    assert!(syn::parse_str::<SchemaSpec>(&personal_schema(", personal: \"yes\"")).is_err());
+}

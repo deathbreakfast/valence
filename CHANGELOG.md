@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `personal: true` field attribute in `valence_schema!` and `valence_trait_schema!` marks a field as
+  personal data. It lands in `SchemaField::personal`, and `Schema::personal_fields()` lists those
+  fields so the Data uses pages can show them. The legacy `gdpr_compliant` key still parses and
+  still does nothing.
+
 ### Security
 
 - `Model::upsert` no longer treats a row the caller can't read as absent. It loads the stored

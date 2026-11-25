@@ -28,20 +28,24 @@ impl AccessDecision {
     }
 }
 
-/// Name of the field read rule that denied `viewer`, given that `policy` already denied.
+/// Schema name of the field read rule that denied `viewer`, given that `policy` (parsed from
+/// `rules`, bucket by bucket in the same order) already denied.
 fn field_denial_policy(
+    rules: &SchemaPolicyRules,
     policy: &PrivacyPolicy,
     record: &serde_json::Value,
     viewer: &crate::actor::Actor,
 ) -> String {
-    policy
+    rules
         .always_block
         .iter()
-        .chain(&policy.block)
-        .find(|rule| (rule.check)(record, viewer))
-        .or_else(|| policy.allow.first())
-        .or_else(|| policy.always_allow.first())
-        .map_or_else(|| DEFAULT_DENY.to_string(), |rule| rule.name.to_string())
+        .zip(&policy.always_block)
+        .chain(rules.block.iter().zip(&policy.block))
+        .find(|(_, rule)| (rule.check)(record, viewer))
+        .map(|(named, _)| named)
+        .or_else(|| rules.allow.first())
+        .or_else(|| rules.always_allow.first())
+        .map_or_else(|| DEFAULT_DENY.to_string(), |rule| rule.name.clone())
 }
 
 impl PrivacyEvaluator {
@@ -102,7 +106,14 @@ impl PrivacyEvaluator {
                 hidden.push(field_name.to_string());
                 hidden_policies.insert(
                     field_name.to_string(),
-                    field_denial_policy(&field_policy, raw_data, viewer),
+                    field
+                        .policies
+                        .as_ref()
+                        .and_then(|p| p.read.as_ref())
+                        .map_or_else(
+                            || DEFAULT_DENY.to_string(),
+                            |rules| field_denial_policy(rules, &field_policy, raw_data, viewer),
+                        ),
                 );
             }
         }

@@ -126,7 +126,7 @@ pub use backend::{
     create_record, delete_record, get_record, merge_record, update_record, upsert_record,
     BackendCapabilities, DatabaseBackend, EdgeRow, WriteOp,
 };
-pub use batch::BatchCreatable;
+pub use batch::{BatchCreatable, ModelBatch};
 pub use compiled_query::CompiledQuery;
 pub use connection::{
     extract_id_from_record, extract_id_from_record_display, extract_id_from_select_value,

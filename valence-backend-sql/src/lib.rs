@@ -37,11 +37,12 @@ pub use schema_meta::{
     write_schema_version_sqlite,
 };
 pub use sqlite_ops::{
-    apply_ttl_policy_sqlite, assert_safe_table, create_record_sqlite, define_index_sqlite,
-    define_unique_index_sqlite, delete_record_sqlite, ensure_edges_sqlite, ensure_table_sqlite,
-    execute_select_sqlite, get_edge_sources_sqlite, get_edge_targets_sqlite, get_record_sqlite,
-    merge_record_sqlite, relate_edge_sqlite, scan_edges_sqlite, sql_capabilities, storage_id,
-    ttl_deferred, unrelate_edge_sqlite, update_record_sqlite,
+    apply_ttl_policy_sqlite, assert_safe_table, compare_and_merge_record_sqlite,
+    create_record_sqlite, define_index_sqlite, define_unique_index_sqlite, delete_record_sqlite,
+    ensure_edges_sqlite, ensure_table_sqlite, execute_select_sqlite, get_edge_sources_sqlite,
+    get_edge_targets_sqlite, get_record_sqlite, merge_record_sqlite, relate_edge_sqlite,
+    scan_edges_sqlite, sql_capabilities, storage_id, ttl_deferred, unrelate_edge_sqlite,
+    update_record_sqlite,
 };
 pub use typed_table::{
     ensure_typed_table_postgres, ensure_typed_table_sqlite, inspect_typed_layout_postgres,

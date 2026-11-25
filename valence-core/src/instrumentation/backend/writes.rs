@@ -72,6 +72,42 @@ impl InstrumentedBackend {
     /// # Errors
     ///
     /// Returns an error when the requested operation cannot be completed.
+    pub(super) async fn measured_compare_and_merge_record(
+        &self,
+        table: &str,
+        id: &str,
+        field: &str,
+        expected: &serde_json::Value,
+        patch: serde_json::Value,
+    ) -> Result<serde_json::Value> {
+        let label = self.telemetry_label();
+        metrics::record_write(table, label, WriteOp::Merge);
+        let start = Instant::now();
+        match self
+            .inner
+            .compare_and_merge_record(table, id, field, expected, patch)
+            .await
+        {
+            Ok(v) => {
+                self.record_io_timing(
+                    "compare_and_merge_record",
+                    table,
+                    WriteOp::Merge.as_str(),
+                    start.elapsed().as_secs_f64() * 1000.0,
+                    Some(id),
+                );
+                Ok(v)
+            }
+            Err(e) => {
+                self.on_err("compare_and_merge_record", &e);
+                Err(e)
+            }
+        }
+    }
+
+    /// # Errors
+    ///
+    /// Returns an error when the requested operation cannot be completed.
     pub(super) async fn measured_merge_record(
         &self,
         table: &str,

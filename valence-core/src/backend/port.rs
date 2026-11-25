@@ -278,6 +278,29 @@ pub trait DatabaseBackend: Send + Sync + std::fmt::Debug + 'static {
         ))
     }
 
+    /// Patch a record only when its stored `field` still equals `expected` (compare-and-set).
+    ///
+    /// A field missing from the stored row compares as `null`. The check and the write are one
+    /// atomic step on the engine, so two writers that read the same value can't both win.
+    ///
+    /// **Contract:** returns the patched row. Returns [`Error::NotFound`] when the row is absent
+    /// and [`Error::Conflict`] when `field` holds another value, writing nothing in either case.
+    /// Default returns `Error::Internal`; mem, SQLite and hybrid override it.
+    async fn compare_and_merge_record(
+        &self,
+        table: &str,
+        id: &str,
+        field: &str,
+        expected: &serde_json::Value,
+        patch: serde_json::Value,
+    ) -> Result<serde_json::Value> {
+        let _ = (table, id, field, expected, patch);
+        Err(Error::Internal(format!(
+            "compare_and_merge_record not supported for {}",
+            self.engine_id()
+        )))
+    }
+
     /// Create or replace a record by explicit id.
     async fn upsert_record(
         &self,

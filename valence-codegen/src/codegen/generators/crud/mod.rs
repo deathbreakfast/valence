@@ -2,6 +2,7 @@
 
 mod composite_key;
 mod emit;
+mod emit_batch;
 mod emit_create;
 mod emit_ctx;
 mod emit_delete;

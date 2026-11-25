@@ -401,6 +401,40 @@ impl DatabaseBackend for InMemoryBackend {
         Ok(merged)
     }
 
+    async fn compare_and_merge_record(
+        &self,
+        table: &str,
+        id: &str,
+        field: &str,
+        expected: &serde_json::Value,
+        patch: serde_json::Value,
+    ) -> Result<serde_json::Value> {
+        // Check and write under one write lock so a concurrent writer can't slip between.
+        let mut tables = self.tables.write().await;
+        let existing = tables
+            .get_mut(table)
+            .and_then(|rows| rows.get_mut(id))
+            .ok_or_else(|| Error::NotFound(format!("{table}:{id}")))?;
+        let current = existing.get(field).unwrap_or(&serde_json::Value::Null);
+        if current != expected {
+            return Err(Error::Conflict(format!(
+                "{table}:{id}: {field} changed since it was read"
+            )));
+        }
+        let before = self.has_indexes(table).then(|| existing.clone());
+        if let (Some(base), Some(patch_obj)) = (existing.as_object_mut(), patch.as_object()) {
+            for (k, v) in patch_obj {
+                base.insert(k.clone(), v.clone());
+            }
+        }
+        let merged = existing.clone();
+        if before.is_some() {
+            self.reindex(table, id, before.as_ref(), Some(&merged));
+        }
+        drop(tables);
+        Ok(merged)
+    }
+
     async fn upsert_record(
         &self,
         table: &str,
@@ -676,6 +710,82 @@ mod tests {
 
         backend.delete_record("user", &id).await.unwrap();
         assert!(backend.get_record("user", &id).await.unwrap().is_none());
+    }
+
+    #[tokio::test]
+    async fn compare_and_merge_writes_when_field_matches_happy() {
+        let backend = InMemoryBackend::new();
+        let created = backend
+            .create_record("rule", serde_json::json!({"version": 1, "name": "a"}))
+            .await
+            .unwrap();
+        let id = storage_id_from_content(&created).expect("record id");
+        let merged = backend
+            .compare_and_merge_record(
+                "rule",
+                &id,
+                "version",
+                &serde_json::json!(1),
+                serde_json::json!({"version": 2, "name": "b"}),
+            )
+            .await
+            .unwrap();
+        assert_eq!(merged["version"], 2);
+        assert_eq!(merged["name"], "b");
+    }
+
+    #[tokio::test]
+    async fn compare_and_merge_stale_value_conflicts_sad() {
+        let backend = InMemoryBackend::new();
+        let created = backend
+            .create_record("rule", serde_json::json!({"version": 2, "name": "a"}))
+            .await
+            .unwrap();
+        let id = storage_id_from_content(&created).expect("record id");
+        let err = backend
+            .compare_and_merge_record(
+                "rule",
+                &id,
+                "version",
+                &serde_json::json!(1),
+                serde_json::json!({"name": "stale"}),
+            )
+            .await
+            .unwrap_err();
+        assert!(matches!(err, Error::Conflict(_)), "{err:?}");
+        let row = backend.get_record("rule", &id).await.unwrap().unwrap();
+        assert_eq!(row["name"], "a");
+    }
+
+    #[tokio::test]
+    async fn compare_and_merge_missing_field_is_null_and_missing_row_not_found() {
+        let backend = InMemoryBackend::new();
+        let created = backend
+            .create_record("rule", serde_json::json!({"name": "a"}))
+            .await
+            .unwrap();
+        let id = storage_id_from_content(&created).expect("record id");
+        backend
+            .compare_and_merge_record(
+                "rule",
+                &id,
+                "lock",
+                &serde_json::Value::Null,
+                serde_json::json!({"lock": "held"}),
+            )
+            .await
+            .unwrap();
+        let err = backend
+            .compare_and_merge_record(
+                "rule",
+                "nope",
+                "lock",
+                &serde_json::Value::Null,
+                serde_json::json!({"lock": "held"}),
+            )
+            .await
+            .unwrap_err();
+        assert!(matches!(err, Error::NotFound(_)), "{err:?}");
     }
 
     fn pending_query(model: &str, ids: &[&str]) -> CompiledQuery {

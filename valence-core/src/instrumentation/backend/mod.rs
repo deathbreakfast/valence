@@ -179,6 +179,18 @@ impl DatabaseBackend for InstrumentedBackend {
         self.measured_merge_record(table, id, patch).await
     }
 
+    async fn compare_and_merge_record(
+        &self,
+        table: &str,
+        id: &str,
+        field: &str,
+        expected: &serde_json::Value,
+        patch: serde_json::Value,
+    ) -> Result<serde_json::Value> {
+        self.measured_compare_and_merge_record(table, id, field, expected, patch)
+            .await
+    }
+
     async fn upsert_record(
         &self,
         table: &str,

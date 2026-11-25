@@ -9,13 +9,13 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use valence_backend_sql::{
-    apply_ttl_policy_sqlite, create_record_sqlite, define_index_sqlite, define_unique_index_sqlite,
-    delete_record_sqlite, ensure_table_sqlite, ensure_typed_table_sqlite, execute_select_sqlite,
-    get_edge_sources_sqlite, get_edge_targets_sqlite, get_record_sqlite,
-    inspect_typed_layout_sqlite, merge_record_sqlite, read_schema_version_sqlite,
-    relate_edge_sqlite, scan_edges_sqlite, scan_table_typed_sqlite, sql_capabilities,
-    sync_typed_table_sqlite, ttl_deferred, unrelate_edge_sqlite, update_record_sqlite,
-    write_schema_version_sqlite, WriteEnsureCache,
+    apply_ttl_policy_sqlite, compare_and_merge_record_sqlite, create_record_sqlite,
+    define_index_sqlite, define_unique_index_sqlite, delete_record_sqlite, ensure_table_sqlite,
+    ensure_typed_table_sqlite, execute_select_sqlite, get_edge_sources_sqlite,
+    get_edge_targets_sqlite, get_record_sqlite, inspect_typed_layout_sqlite, merge_record_sqlite,
+    read_schema_version_sqlite, relate_edge_sqlite, scan_edges_sqlite, scan_table_typed_sqlite,
+    sql_capabilities, sync_typed_table_sqlite, ttl_deferred, unrelate_edge_sqlite,
+    update_record_sqlite, write_schema_version_sqlite, WriteEnsureCache,
 };
 use valence_core::backend::{DatabaseBackend, EdgeRow};
 use valence_core::compiled_query::CompiledQuery;
@@ -248,6 +248,26 @@ impl DatabaseBackend for SqliteBackend {
         patch: serde_json::Value,
     ) -> Result<serde_json::Value> {
         merge_record_sqlite(&self.pool, table, id, patch, &self.layout_ensured).await
+    }
+
+    async fn compare_and_merge_record(
+        &self,
+        table: &str,
+        id: &str,
+        field: &str,
+        expected: &serde_json::Value,
+        patch: serde_json::Value,
+    ) -> Result<serde_json::Value> {
+        compare_and_merge_record_sqlite(
+            &self.pool,
+            table,
+            id,
+            field,
+            expected,
+            patch,
+            &self.layout_ensured,
+        )
+        .await
     }
 
     async fn upsert_record(

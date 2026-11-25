@@ -232,6 +232,28 @@ impl DatabaseBackend for HybridBackend {
         .await
     }
 
+    async fn compare_and_merge_record(
+        &self,
+        table: &str,
+        id: &str,
+        field: &str,
+        expected: &Value,
+        patch: Value,
+    ) -> Result<Value> {
+        write_through::compare_and_merge_record(
+            &self.primary,
+            &self.mirror,
+            &self.records,
+            &self.policy,
+            table,
+            id,
+            field,
+            expected,
+            patch,
+        )
+        .await
+    }
+
     async fn upsert_record(&self, table: &str, id: &str, content: Value) -> Result<Value> {
         write_through::upsert_record(
             &self.primary,

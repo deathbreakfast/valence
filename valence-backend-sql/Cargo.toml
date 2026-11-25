@@ -24,6 +24,9 @@ tracing = { workspace = true }
 uuid = { workspace = true }
 valence-core = { workspace = true }
 
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt", "macros"] }
+
 [lints]
 workspace = true
 

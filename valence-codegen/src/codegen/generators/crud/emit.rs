@@ -3,11 +3,13 @@
 use proc_macro2::TokenStream;
 use quote::quote;
 
+use super::emit_batch::model_batch_inherent_tokens;
 use super::emit_ctx::CrudEmitCtx;
 use super::emit_model_ops::{
     emit_batch_creatable_tokens, emit_model_privacy_and_unique_impl, emit_model_trait_impl,
     emit_ownership_support_tokens,
 };
+use super::emit_update::model_update_if_inherent_tokens;
 
 pub(super) fn emit_crud_tokens(ctx: &CrudEmitCtx<'_>) -> TokenStream {
     let model = emit_model_trait_impl(ctx);
@@ -15,12 +17,21 @@ pub(super) fn emit_crud_tokens(ctx: &CrudEmitCtx<'_>) -> TokenStream {
     let ownership = emit_ownership_support_tokens(ctx);
     let batch_creatable = emit_batch_creatable_tokens(ctx);
     let mutable = emit_mutable_builder_and_composite(ctx);
+    let struct_name = &ctx.struct_name;
+    let update_if = model_update_if_inherent_tokens(&ctx.field_changes_name);
+    let model_batch = model_batch_inherent_tokens(ctx);
     quote! {
         #model
         #helpers
         #ownership
         #batch_creatable
         #mutable
+
+        #[allow(dead_code)]
+        impl #struct_name {
+            #update_if
+            #model_batch
+        }
     }
 }
 

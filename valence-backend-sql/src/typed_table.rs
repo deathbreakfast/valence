@@ -1548,7 +1548,7 @@ mod compare_and_merge_tests {
         };
         let ensured = WriteEnsureCache::new();
         create_record_typed_sqlite(
-            &mut *pool.acquire().await.unwrap(),
+            &mut pool.acquire().await.unwrap(),
             &layout,
             serde_json::json!({"id": {"table": "cas_demo", "id": "r1"}, "version": 1, "name": "a"}),
             &ensured,
@@ -1562,7 +1562,7 @@ mod compare_and_merge_tests {
     async fn writes_when_guard_matches_happy() {
         let (pool, layout, ensured) = seeded().await;
         let row = compare_and_merge_record_typed_sqlite(
-            &mut *pool.acquire().await.unwrap(),
+            &mut pool.acquire().await.unwrap(),
             &layout,
             "r1",
             "version",
@@ -1580,7 +1580,7 @@ mod compare_and_merge_tests {
     async fn stale_guard_conflicts_and_writes_nothing_sad() {
         let (pool, layout, ensured) = seeded().await;
         let err = compare_and_merge_record_typed_sqlite(
-            &mut *pool.acquire().await.unwrap(),
+            &mut pool.acquire().await.unwrap(),
             &layout,
             "r1",
             "version",
@@ -1591,7 +1591,7 @@ mod compare_and_merge_tests {
         .await
         .expect_err("version is 1");
         assert!(matches!(err, Error::Conflict(_)), "{err:?}");
-        let row = get_record_typed_sqlite(&mut *pool.acquire().await.unwrap(), "cas_demo", "r1")
+        let row = get_record_typed_sqlite(&mut pool.acquire().await.unwrap(), "cas_demo", "r1")
             .await
             .unwrap()
             .unwrap();
@@ -1602,7 +1602,7 @@ mod compare_and_merge_tests {
     async fn null_guard_matches_unset_column_and_missing_row_is_not_found() {
         let (pool, layout, ensured) = seeded().await;
         compare_and_merge_record_typed_sqlite(
-            &mut *pool.acquire().await.unwrap(),
+            &mut pool.acquire().await.unwrap(),
             &layout,
             "r1",
             "lock",
@@ -1613,7 +1613,7 @@ mod compare_and_merge_tests {
         .await
         .expect("lock was unset");
         let err = compare_and_merge_record_typed_sqlite(
-            &mut *pool.acquire().await.unwrap(),
+            &mut pool.acquire().await.unwrap(),
             &layout,
             "r1",
             "lock",
@@ -1625,7 +1625,7 @@ mod compare_and_merge_tests {
         .expect_err("lock is held now");
         assert!(matches!(err, Error::Conflict(_)), "{err:?}");
         let err = compare_and_merge_record_typed_sqlite(
-            &mut *pool.acquire().await.unwrap(),
+            &mut pool.acquire().await.unwrap(),
             &layout,
             "nope",
             "lock",
@@ -1642,7 +1642,7 @@ mod compare_and_merge_tests {
     async fn unknown_guard_column_is_a_validation_error_sad() {
         let (pool, layout, ensured) = seeded().await;
         let err = compare_and_merge_record_typed_sqlite(
-            &mut *pool.acquire().await.unwrap(),
+            &mut pool.acquire().await.unwrap(),
             &layout,
             "r1",
             "missing",

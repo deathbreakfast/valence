@@ -1352,19 +1352,19 @@ impl TestTraitASchema {
                         valence::SchemaField { name : "id".to_string(), field_type :
                         "string".to_string(), primary : true, nullable : false, indexed :
                         false, unique : false, default : None, fk : None, validations :
-                        Vec::new(), policies : None, encrypted : false, enum_variants :
-                        Vec::new(), enum_type : None, model_path : None, },
-                        valence::SchemaField { name : "a_specific".to_string(),
+                        Vec::new(), policies : None, encrypted : false, personal : false,
+                        enum_variants : Vec::new(), enum_type : None, model_path : None,
+                        }, valence::SchemaField { name : "a_specific".to_string(),
                         field_type : "integer".to_string(), primary : false, nullable :
                         false, indexed : false, unique : false, default : None, fk :
                         None, validations : Vec::new(), policies : None, encrypted :
-                        false, enum_variants : Vec::new(), enum_type : None, model_path :
-                        None, }, valence::SchemaField { name : "name".to_string(),
-                        field_type : "string".to_string(), primary : false, nullable :
-                        false, indexed : false, unique : false, default : None, fk :
-                        None, validations : Vec::new(), policies : None, encrypted :
-                        false, enum_variants : Vec::new(), enum_type : None, model_path :
-                        None, }
+                        false, personal : false, enum_variants : Vec::new(), enum_type :
+                        None, model_path : None, }, valence::SchemaField { name : "name"
+                        .to_string(), field_type : "string".to_string(), primary : false,
+                        nullable : false, indexed : false, unique : false, default :
+                        None, fk : None, validations : Vec::new(), policies : None,
+                        encrypted : false, personal : false, enum_variants : Vec::new(),
+                        enum_type : None, model_path : None, }
                     ],
                     edges: vec![],
                     connections: vec![],

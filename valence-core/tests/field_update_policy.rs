@@ -36,6 +36,7 @@ fn field(name: &str, system_only_update: bool) -> SchemaField {
             ..SchemaPolicies::default()
         }),
         encrypted: false,
+        personal: false,
         enum_variants: vec![],
         enum_type: None,
         model_path: None,

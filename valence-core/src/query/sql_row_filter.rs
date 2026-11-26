@@ -162,18 +162,27 @@ pub fn apply_order_limit_offset(
             .filter_map(|kw| rest_upper.find(kw))
             .min()
             .unwrap_or(rest.len());
-        let keys: Vec<(String, bool)> = split_top_level_commas(rest[..end].trim())
+        let keys: Vec<(String, bool, bool)> = split_top_level_commas(rest[..end].trim())
             .into_iter()
             .map(|part| {
                 let part = part.trim();
-                let desc = part.to_uppercase().ends_with(" DESC");
-                (order_by_field(part), desc)
+                let upper = part.to_uppercase();
+                let desc = upper.ends_with(" DESC");
+                // `col IS NULL` as a sort key puts rows with a value before rows without.
+                let is_null_key = upper.contains(" IS NULL");
+                (order_by_field(part), desc, is_null_key)
             })
             .collect();
         rows.sort_by(|a, b| {
             keys.iter()
-                .map(|(field, desc)| {
-                    let ord = compare_for_sort(nested_field(a, field), nested_field(b, field));
+                .map(|(field, desc, is_null_key)| {
+                    let ord = if *is_null_key {
+                        let missing =
+                            |row| nested_field(row, field).is_none_or(serde_json::Value::is_null);
+                        missing(a).cmp(&missing(b))
+                    } else {
+                        compare_for_sort(nested_field(a, field), nested_field(b, field))
+                    };
                     if *desc {
                         ord.reverse()
                     } else {

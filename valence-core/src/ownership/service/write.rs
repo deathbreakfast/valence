@@ -13,7 +13,8 @@ use super::helpers::{
 use super::OwnershipService;
 
 impl OwnershipService {
-    /// Insert or replace the active ownership row for `valence_model` / `record_id`.
+    /// Insert or replace the active ownership row for `valence_model` / `record_id`, stamping
+    /// `created_at` with the current time on every call, including a re-save of an existing row.
     /// # Errors
     ///
     /// Returns an error when the requested operation cannot be completed.

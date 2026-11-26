@@ -168,8 +168,12 @@ impl OwnershipService {
     /// One page of `record_id`s `owner_id` / `owner_type` owns in `valence_model` with the given
     /// ownership `status` (`active` or `pending_deletion`), newest first.
     ///
-    /// Orders by `created_at` then ownership row id, both descending. Rows written before
-    /// `created_at` was stamped sort last. `limit` and `offset` are clamped to
+    /// Orders by `created_at` then ownership row id, both descending. `created_at` is stamped
+    /// by every [`OwnershipService::ensure_active_ownership`] call, and that call runs again
+    /// when a record is re-saved, so this is most recently saved first, not first created.
+    /// Rows written before `created_at` existed sort last until they are rewritten. On a table
+    /// created before the column existed, the query fails with "no such column" until the next
+    /// ownership write adds it, and the SQL backends report that as an empty list. `limit` and `offset` are clamped to
     /// [`MAX_QUERY_LIMIT`](crate::query::MAX_QUERY_LIMIT) and
     /// [`MAX_QUERY_OFFSET`](crate::query::MAX_QUERY_OFFSET).
     /// # Errors

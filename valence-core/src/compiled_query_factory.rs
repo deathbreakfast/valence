@@ -328,7 +328,8 @@ pub fn count_ownership_rows_for_schema(
 /// Page of ownership `record_id`s for one schema / owner / status, newest first.
 ///
 /// Orders by `created_at` then `id`, both descending; rows written before `created_at` was
-/// stamped have no value and come last. `limit` and `offset` are clamped to
+/// stamped have no value and come last. The SQL form sorts on `created_at IS NULL` first
+/// because Postgres puts NULLs first in a descending sort. `limit` and `offset` are clamped to
 /// [`MAX_QUERY_LIMIT`](crate::query::MAX_QUERY_LIMIT) and
 /// [`MAX_QUERY_OFFSET`](crate::query::MAX_QUERY_OFFSET) and inlined as integers.
 ///
@@ -402,7 +403,8 @@ pub fn list_ownership_record_ids_for_schema(
                AND {owner_clause} \
                AND owner_type = $owner_type \
                AND status = $status \
-             ORDER BY created_at DESC, id DESC LIMIT {limit} OFFSET {offset}"
+             ORDER BY created_at IS NULL, created_at DESC, id DESC \
+             LIMIT {limit} OFFSET {offset}"
         );
         return Ok(CompiledQuery::new(q, params));
     }
@@ -569,10 +571,38 @@ mod tests {
         )
         .expect("compile");
         let q = &cq.query_string;
-        assert!(q.contains("ORDER BY created_at DESC, id DESC"), "{q}");
+        assert!(
+            q.contains("ORDER BY created_at IS NULL, created_at DESC, id DESC"),
+            "{q}"
+        );
         assert!(q.contains("LIMIT 1000 OFFSET 1000000"), "{q}");
         assert!(q.starts_with("SELECT record_id"), "{q}");
         assert_eq!(cq.params.len(), 5);
+    }
+
+    #[test]
+    fn ownership_list_sql_sorts_missing_created_at_last_on_every_sql_engine_happy() {
+        for engine in [KnownEngines::SQLITE, KnownEngines::POSTGRES] {
+            let cq = list_ownership_record_ids_for_schema(
+                engine,
+                "task",
+                &["abc".into()],
+                "user",
+                "active",
+                10,
+                0,
+            )
+            .expect("compile");
+            let q = cq
+                .query_string
+                .split_whitespace()
+                .collect::<Vec<_>>()
+                .join(" ");
+            assert!(
+                q.contains("ORDER BY created_at IS NULL, created_at DESC, id DESC LIMIT 10"),
+                "{engine}: {q}"
+            );
+        }
     }
 
     #[test]

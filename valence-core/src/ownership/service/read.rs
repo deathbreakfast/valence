@@ -176,6 +176,14 @@ impl OwnershipService {
     /// ownership write adds it, and the SQL backends report that as an empty list. `limit` and `offset` are clamped to
     /// [`MAX_QUERY_LIMIT`](crate::query::MAX_QUERY_LIMIT) and
     /// [`MAX_QUERY_OFFSET`](crate::query::MAX_QUERY_OFFSET).
+    ///
+    /// # Security
+    ///
+    /// Privileged: reads ownership rows under a system-scoped valence and applies no privacy
+    /// policy, for any `owner_id`. Callers must pass the session actor's own owner id (as the
+    /// Your data page does), never an id taken from a request, or a member could list another
+    /// member's record ids. Authorize the caller before invoking.
+    ///
     /// # Errors
     ///
     /// Returns an error when the backend has no compiled form for the query or the query fails.

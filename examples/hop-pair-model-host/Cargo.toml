@@ -8,6 +8,7 @@ description = "Project/Task schemas with abstract hop_a/hop_b engines for Cartes
 
 [lib]
 path = "src/lib.rs"
+test = false
 
 [dependencies]
 valence = { path = "../../valence", features = ["mem"], package = "uf-valence" }

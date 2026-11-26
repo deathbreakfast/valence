@@ -13,11 +13,12 @@ categories = ["database"]
 
 [lib]
 name = "valence_backend_sqlite"
+test = false
 
 [dependencies]
 async-trait = { workspace = true }
 serde_json = { workspace = true }
-sqlx = { version = "0.8", features = ["runtime-tokio", "sqlite", "json"] }
+sqlx = { version = "0.9.1", features = ["runtime-tokio", "sqlite", "json"] }
 tokio = { workspace = true }
 uuid = { workspace = true }
 valence-backend-sql = { path = "../valence-backend-sql", package = "uf-valence-backend-sql", version = "0.1.5" }

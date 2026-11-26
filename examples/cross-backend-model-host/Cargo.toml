@@ -8,6 +8,7 @@ description = "Example: Project(mem) ↔ Task(sqlite) hop + Model::query"
 
 [lib]
 path = "src/lib.rs"
+test = false
 
 [[bin]]
 name = "cross-backend-model-host"

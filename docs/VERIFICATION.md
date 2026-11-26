@@ -51,9 +51,9 @@ Skip extended jobs (`package-dry-run`, `examples`, `e2e`, `coverage`, `bench-smo
 ```bash
 # Typed storage layout + SQLite sync
 cargo test -p uf-valence-core --lib storage_layout
-cargo test -p uf-valence-backend-sqlite --test backend_contract --test typed_sync_add_field --test schema_version_sync
+cargo test -p uf-valence-backend-sqlite --test integration -- backend_contract:: typed_sync_add_field:: schema_version_sync::
 # Postgres safe tweaks + concurrent schema growth (skips without DATABASE_URL)
-cargo test -p uf-valence-backend-postgres --test safe_tweak_sync --test typed_sync_add_field
+cargo test -p uf-valence-backend-postgres --test integration -- safe_tweak_sync:: typed_sync_add_field::
 
 # Full workspace tests
 cargo test --workspace
@@ -63,7 +63,7 @@ cargo test -p uf-valence-core --lib privacy::bypass redact error::tests query::c
 cargo test -p uf-valence-core --lib privacy::evaluator::tests::test_filter_entity_fields
 
 # Deletion DAG privacy + queued delete side-effect dispatch + SetNull/RemoveEdge apply + delete_now
-cargo test -p uf-valence-core --test dag_privacy --test delete_side_effects --test deletion_set_null_apply --test delete_now
+cargo test -p uf-valence-core --test integration -- dag_privacy:: delete_side_effects:: deletion_set_null_apply:: delete_now::
 # Catalog delete-now-* (via valence-testkit / e2e matrix)
 # Bench runner: cargo test -p valence-bench -- bm_v31
 
@@ -72,8 +72,8 @@ cargo test -p uf-valence-core --test dag_privacy --test delete_side_effects --te
 
 # Matrix E2E (includes typed-field / on-delete-* catalog)
 # Soft-skip wire adapters unless VALENCE_MATRIX_STRICT=1
-cargo test -p valence-e2e --test matrix_catalog -- --test-threads=1
-cargo test -p valence-e2e --test cross_backend_hops --features cross-backend-hops -- --test-threads=1
+cargo test -p valence-e2e --test e2e -- --test-threads=1 matrix_catalog::
+cargo test -p valence-e2e --test e2e --features cross-backend-hops -- --test-threads=1 cross_backend_hops::
 
 # Strict wire matrix (Postgres / Redis / Mongo services required)
 # export VALENCE_MATRIX_STRICT=1
@@ -91,14 +91,14 @@ cargo test -p valence-bench -- --test-threads=1
 #   --duration-secs 2 --concurrency 2 --prefill 128
 
 # Hybrid port contract (mem primary)
-cargo test -p uf-valence-backend-hybrid --test backend_contract -- --test-threads=1
+cargo test -p uf-valence-backend-hybrid --test integration -- --test-threads=1 backend_contract::
 
 # Full AWS campaign tooling is maintained separately and isn't part of this repo.
 # After typed-storage upgrade: wipe still drops Postgres schema / Mongo DB / Redis.
 
 # Codegen / model runtime subset
-cargo test -p valence-e2e --test admin_runtime_catalog
-cargo test -p valence-e2e --test model_runtime_catalog
+cargo test -p valence-e2e --test e2e -- admin_runtime_catalog::
+cargo test -p valence-e2e --test e2e -- model_runtime_catalog::
 cargo test -p codegen-host -- --test-threads=1
 cargo test -p product-model-host -- --test-threads=1
 

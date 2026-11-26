@@ -138,7 +138,7 @@ async fn postgres_safe_tweak_set_nullable_and_default() {
         Some("1.1.0")
     );
 
-    let _ = sqlx::query(&format!("DROP TABLE IF EXISTS {table}"))
+    let _ = sqlx::query(sqlx::AssertSqlSafe(format!("DROP TABLE IF EXISTS {table}")))
         .execute(backend.pool())
         .await;
 }

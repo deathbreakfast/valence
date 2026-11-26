@@ -13,6 +13,7 @@ categories = ["development-tools::procedural-macro-helpers"]
 [lib]
 name = "valence_macros"
 proc-macro = true
+test = false
 
 [dependencies]
 syn = { workspace = true }

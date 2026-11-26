@@ -25,16 +25,18 @@ pub fn ensure_table_ddl_postgres(table: &str) -> String {
 }
 
 pub async fn ensure_edges_postgres(pool: &PgPool) -> Result<()> {
-    sqlx::query(&crate::document::ensure_edges_table_ddl())
-        .execute(pool)
-        .await
-        .map_err(|e| Error::database(e.to_string()))?;
+    sqlx::query(sqlx::AssertSqlSafe(
+        crate::document::ensure_edges_table_ddl(),
+    ))
+    .execute(pool)
+    .await
+    .map_err(|e| Error::database(e.to_string()))?;
     Ok(())
 }
 
 pub async fn ensure_table_postgres(pool: &PgPool, table: &str) -> Result<()> {
     assert_safe_table(table)?;
-    sqlx::query(&ensure_table_ddl_postgres(table))
+    sqlx::query(sqlx::AssertSqlSafe(ensure_table_ddl_postgres(table)))
         .execute(pool)
         .await
         .map_err(|e| Error::database(e.to_string()))?;
@@ -68,7 +70,7 @@ pub async fn execute_select_postgres(
     default_table: &str,
 ) -> Result<Vec<Value>> {
     let (sql, params) = prepare_compiled_postgres(compiled)?;
-    let mut q = sqlx::query(&sql);
+    let mut q = sqlx::query(sqlx::AssertSqlSafe(sql.as_str()));
     for p in &params {
         q = bind_pg(q, p);
     }
@@ -195,7 +197,7 @@ pub async fn delete_record_postgres(pool: &PgPool, table: &str, id: &str) -> Res
         "DELETE FROM {} WHERE id = $1",
         valence_core::safe_ident::quote_sql_ident(table)
     );
-    sqlx::query(&q)
+    sqlx::query(sqlx::AssertSqlSafe(q))
         .bind(id)
         .execute(pool)
         .await
@@ -376,7 +378,7 @@ pub async fn define_index_postgres(
         let layout = crate::sqlite_ops::adhoc_index_layout(table, fields);
         ensure_layout_for_write_postgres(pool, &layout, ensured).await?;
     }
-    sqlx::query(&q)
+    sqlx::query(sqlx::AssertSqlSafe(q))
         .execute(pool)
         .await
         .map_err(|e| Error::database(e.to_string()))?;
@@ -431,7 +433,7 @@ pub async fn apply_ttl_policy_postgres(
         "CREATE INDEX IF NOT EXISTS {idx} ON {} ({field})",
         valence_core::safe_ident::quote_sql_ident(table)
     );
-    sqlx::query(&q)
+    sqlx::query(sqlx::AssertSqlSafe(q))
         .execute(pool)
         .await
         .map_err(|e| Error::database(e.to_string()))?;

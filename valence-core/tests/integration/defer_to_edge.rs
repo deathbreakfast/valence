@@ -1208,8 +1208,8 @@ async fn defer_system_parent_fetch_does_not_elevate_viewer() {
     );
 }
 
-/// `get_record_json` evaluates Read for the calling actor (through `defer_to_edge`
-/// for the satellite), while `get_stored_record_json` stays a storage read.
+/// `get_record_json` and `get_id_only` evaluate Read for the calling actor (through
+/// `defer_to_edge` for the satellite), while `get_stored_record_json` stays a storage read.
 #[tokio::test]
 async fn get_record_json_enforces_read_for_the_caller() {
     let parent = parent_owner_schema("defer_grj_parent");
@@ -1268,6 +1268,28 @@ async fn get_record_json_enforces_read_for_the_caller() {
                 .unwrap()
                 .is_some(),
             "storage read of {table} ignores privacy"
+        );
+        assert_eq!(
+            QueryCore::get_id_only(table, id, &alice, purpose())
+                .await
+                .unwrap()
+                .map(|r| r.id),
+            Some(id.to_string()),
+            "owner sees the id in {table}"
+        );
+        assert!(
+            QueryCore::get_id_only(table, id, &bob, purpose())
+                .await
+                .unwrap()
+                .is_none(),
+            "stranger can't probe for the id in {table}"
+        );
+        assert!(
+            QueryCore::get_id_only(table, "missing", &alice, purpose())
+                .await
+                .unwrap()
+                .is_none(),
+            "missing id in {table} returns None"
         );
     }
 }

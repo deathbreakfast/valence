@@ -12,7 +12,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `personal: true` field attribute in `valence_schema!` and `valence_trait_schema!` marks a field as
   personal data. It lands in `SchemaField::personal`, and `Schema::personal_fields()` lists those
   fields so the Data uses pages can show them. The legacy `gdpr_compliant` key still parses and
-  still does nothing.
+  still does nothing. **Breaking for hand-built metadata:** `SchemaField` gained a public field, so
+  code that builds a `SchemaField` literal by hand now needs `personal: false`.
 
 ### Security
 

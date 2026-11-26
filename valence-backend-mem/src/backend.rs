@@ -62,6 +62,9 @@ pub struct InMemoryBackend {
     /// while `tables` is write-locked, so the two never disagree; never held across an
     /// `.await`.
     indexes: SyncRwLock<HashMap<String, Vec<EqIndex>>>,
+    /// `unique: true` fields per table, from [`DatabaseBackend::define_unique_index`].
+    /// Writes check them while `tables` is write-locked; never held across an `.await`.
+    unique_fields: SyncRwLock<HashMap<String, Vec<String>>>,
 }
 
 impl InMemoryBackend {
@@ -200,6 +203,40 @@ impl InMemoryBackend {
                 idx.insert(id, new);
             }
         }
+    }
+
+    /// Reject `record` (stored as `id`) when another row of `rows` already holds one of
+    /// its unique field values. Null and missing values never clash, as in SQL.
+    ///
+    /// Callers hold the `tables` write lock, so the check and the write that follows are
+    /// one step and racing duplicates can't both land.
+    fn check_unique(
+        &self,
+        rows: Option<&HashMap<String, serde_json::Value>>,
+        table: &str,
+        id: &str,
+        record: &serde_json::Value,
+    ) -> Result<()> {
+        let unique_fields = self
+            .unique_fields
+            .read()
+            .unwrap_or_else(PoisonError::into_inner);
+        let (Some(fields), Some(rows)) = (unique_fields.get(table), rows) else {
+            return Ok(());
+        };
+        for field in fields {
+            let value = match record.get(field) {
+                None | Some(serde_json::Value::Null) => continue,
+                Some(value) => value,
+            };
+            if rows
+                .iter()
+                .any(|(other, row)| other != id && row.get(field) == Some(value))
+            {
+                return Err(Error::unique_violation(table, field));
+            }
+        }
+        Ok(())
     }
 
     fn has_indexes(&self, table: &str) -> bool {
@@ -348,6 +385,7 @@ impl DatabaseBackend for InMemoryBackend {
     ) -> Result<serde_json::Value> {
         let (id, record) = self.prepare_create(table, content)?;
         let mut tables = self.tables.write().await;
+        self.check_unique(tables.get(table), table, &id, &record)?;
         let old = tables
             .entry(table.to_string())
             .or_default()
@@ -370,6 +408,7 @@ impl DatabaseBackend for InMemoryBackend {
         if !rows.contains_key(id) {
             return Err(Error::NotFound(format!("{table}:{id}")));
         }
+        self.check_unique(Some(rows), table, id, &content)?;
         let old = rows.insert(id.to_string(), content.clone());
         self.reindex(table, id, old.as_ref(), Some(&content));
         drop(tables);
@@ -384,17 +423,12 @@ impl DatabaseBackend for InMemoryBackend {
     ) -> Result<serde_json::Value> {
         let mut tables = self.tables.write().await;
         let rows = tables.entry(table.to_string()).or_default();
-        let existing = rows
-            .entry(id.to_string())
-            .or_insert_with(|| serde_json::json!({}));
-        let before = self.has_indexes(table).then(|| existing.clone());
-        if let (Some(base), Some(patch_obj)) = (existing.as_object_mut(), patch.as_object()) {
-            for (k, v) in patch_obj {
-                base.insert(k.clone(), v.clone());
-            }
-        }
-        let merged = existing.clone();
-        if before.is_some() {
+        let before = rows.get(id).cloned();
+        let mut merged = before.clone().unwrap_or_else(|| serde_json::json!({}));
+        merge_patch(&mut merged, &patch);
+        self.check_unique(Some(rows), table, id, &merged)?;
+        rows.insert(id.to_string(), merged.clone());
+        if self.has_indexes(table) {
             self.reindex(table, id, before.as_ref(), Some(&merged));
         }
         drop(tables);
@@ -411,25 +445,25 @@ impl DatabaseBackend for InMemoryBackend {
     ) -> Result<serde_json::Value> {
         // Check and write under one write lock so a concurrent writer can't slip between.
         let mut tables = self.tables.write().await;
-        let existing = tables
+        let rows = tables
             .get_mut(table)
-            .and_then(|rows| rows.get_mut(id))
             .ok_or_else(|| Error::NotFound(format!("{table}:{id}")))?;
-        let current = existing.get(field).unwrap_or(&serde_json::Value::Null);
+        let before = rows
+            .get(id)
+            .cloned()
+            .ok_or_else(|| Error::NotFound(format!("{table}:{id}")))?;
+        let current = before.get(field).unwrap_or(&serde_json::Value::Null);
         if current != expected {
             return Err(Error::Conflict(format!(
                 "{table}:{id}: {field} changed since it was read"
             )));
         }
-        let before = self.has_indexes(table).then(|| existing.clone());
-        if let (Some(base), Some(patch_obj)) = (existing.as_object_mut(), patch.as_object()) {
-            for (k, v) in patch_obj {
-                base.insert(k.clone(), v.clone());
-            }
-        }
-        let merged = existing.clone();
-        if before.is_some() {
-            self.reindex(table, id, before.as_ref(), Some(&merged));
+        let mut merged = before.clone();
+        merge_patch(&mut merged, &patch);
+        self.check_unique(Some(rows), table, id, &merged)?;
+        rows.insert(id.to_string(), merged.clone());
+        if self.has_indexes(table) {
+            self.reindex(table, id, Some(&before), Some(&merged));
         }
         drop(tables);
         Ok(merged)
@@ -446,6 +480,7 @@ impl DatabaseBackend for InMemoryBackend {
             obj.insert("id".into(), record_id_json(table, id));
         }
         let mut tables = self.tables.write().await;
+        self.check_unique(tables.get(table), table, id, &record)?;
         let old = tables
             .entry(table.to_string())
             .or_default()
@@ -490,6 +525,7 @@ impl DatabaseBackend for InMemoryBackend {
                     let (id, record) = prepared_creates.next().ok_or_else(|| {
                         Error::Internal("apply_batch: missing prepared create".into())
                     })?;
+                    self.check_unique(Some(rows), &table, &id, &record)?;
                     rows.insert(id, record.clone());
                     results.push(record);
                 }
@@ -497,19 +533,19 @@ impl DatabaseBackend for InMemoryBackend {
                     if !rows.contains_key(&id) {
                         return Err(Error::NotFound(format!("{table}:{id}")));
                     }
+                    self.check_unique(Some(rows), &table, &id, &content)?;
                     rows.insert(id, content.clone());
                     results.push(content);
                 }
                 WriteOp::Merge { id, patch, .. } => {
-                    let existing = rows.entry(id).or_insert_with(|| serde_json::json!({}));
-                    if let (Some(base), Some(patch_obj)) =
-                        (existing.as_object_mut(), patch.as_object())
-                    {
-                        for (k, v) in patch_obj {
-                            base.insert(k.clone(), v.clone());
-                        }
-                    }
-                    results.push(existing.clone());
+                    let mut merged = rows
+                        .get(&id)
+                        .cloned()
+                        .unwrap_or_else(|| serde_json::json!({}));
+                    merge_patch(&mut merged, &patch);
+                    self.check_unique(Some(rows), &table, &id, &merged)?;
+                    rows.insert(id, merged.clone());
+                    results.push(merged);
                 }
                 WriteOp::Upsert {
                     id, mut content, ..
@@ -517,6 +553,7 @@ impl DatabaseBackend for InMemoryBackend {
                     if let Some(obj) = content.as_object_mut() {
                         obj.insert("id".into(), record_id_json(&table, &id));
                     }
+                    self.check_unique(Some(rows), &table, &id, &content)?;
                     rows.insert(id, content.clone());
                     results.push(content);
                 }
@@ -598,11 +635,21 @@ impl DatabaseBackend for InMemoryBackend {
         Ok(sources)
     }
 
-    /// No DDL on mem — uniqueness is enforced by the `SELECT VALUE id` probe in codegen.
-    async fn define_unique_index(&self, _table: &str, _field: &str) -> Result<()> {
-        Err(valence_core::Error::Internal(
-            "unique indexes not supported on in-memory backend".into(),
-        ))
+    /// Record `field` as unique on `table`. Every later write to the table checks it under
+    /// the table write lock and fails with [`Error::unique_violation`] on a duplicate,
+    /// like a SQL unique index. Calling it again is a no-op; rows already stored are not
+    /// checked.
+    async fn define_unique_index(&self, table: &str, field: &str) -> Result<()> {
+        let _tables = self.tables.write().await;
+        let mut unique_fields = self
+            .unique_fields
+            .write()
+            .unwrap_or_else(PoisonError::into_inner);
+        let fields = unique_fields.entry(table.to_string()).or_default();
+        if !fields.iter().any(|f| f == field) {
+            fields.push(field.to_string());
+        }
+        Ok(())
     }
 
     /// Mem has no tables to create; this only indexes the layout's `indexed` and `unique`
@@ -662,6 +709,15 @@ fn compiled_param_str(compiled: &CompiledQuery, key: &str) -> Option<String> {
         .and_then(|(_, v)| v.as_str().map(|s| s.to_string()))
 }
 
+/// Shallow-merge the keys of `patch` into `base`; non-object values leave `base` as is.
+fn merge_patch(base: &mut serde_json::Value, patch: &serde_json::Value) {
+    if let (Some(base), Some(patch_obj)) = (base.as_object_mut(), patch.as_object()) {
+        for (k, v) in patch_obj {
+            base.insert(k.clone(), v.clone());
+        }
+    }
+}
+
 fn record_id_json(table: &str, id: &str) -> serde_json::Value {
     serde_json::json!({
         "table": table,
@@ -710,6 +766,142 @@ mod tests {
 
         backend.delete_record("user", &id).await.unwrap();
         assert!(backend.get_record("user", &id).await.unwrap().is_none());
+    }
+
+    async fn unique_backend() -> InMemoryBackend {
+        let backend = InMemoryBackend::new();
+        backend
+            .define_unique_index("member", "email")
+            .await
+            .unwrap();
+        backend
+            .define_unique_index("member", "email")
+            .await
+            .unwrap();
+        backend
+            .create_record("member", serde_json::json!({"id": "m1", "email": "a@x"}))
+            .await
+            .unwrap();
+        backend
+    }
+
+    #[tokio::test]
+    async fn unique_index_allows_distinct_null_and_own_value_happy() {
+        let backend = unique_backend().await;
+        backend
+            .create_record("member", serde_json::json!({"id": "m2", "email": "b@x"}))
+            .await
+            .unwrap();
+        backend
+            .create_record("member", serde_json::json!({"id": "m3", "email": null}))
+            .await
+            .unwrap();
+        backend
+            .create_record("member", serde_json::json!({"id": "m4"}))
+            .await
+            .unwrap();
+        backend
+            .update_record(
+                "member",
+                "m1",
+                serde_json::json!({"id": "m1", "email": "a@x", "n": 1}),
+            )
+            .await
+            .unwrap();
+        backend
+            .merge_record("member", "m1", serde_json::json!({"n": 2}))
+            .await
+            .unwrap();
+        backend
+            .upsert_record("member", "m1", serde_json::json!({"email": "a@x"}))
+            .await
+            .unwrap();
+    }
+
+    #[tokio::test]
+    async fn unique_index_rejects_duplicates_on_every_write_sad() {
+        let backend = unique_backend().await;
+        backend
+            .create_record("member", serde_json::json!({"id": "m2", "email": "b@x"}))
+            .await
+            .unwrap();
+        let dup = serde_json::json!({"id": "m2", "email": "a@x"});
+        let errors = [
+            backend
+                .create_record("member", serde_json::json!({"id": "m9", "email": "a@x"}))
+                .await,
+            backend.update_record("member", "m2", dup.clone()).await,
+            backend
+                .merge_record("member", "m2", serde_json::json!({"email": "a@x"}))
+                .await,
+            backend
+                .compare_and_merge_record(
+                    "member",
+                    "m2",
+                    "email",
+                    &serde_json::json!("b@x"),
+                    serde_json::json!({"email": "a@x"}),
+                )
+                .await,
+            backend.upsert_record("member", "m2", dup).await,
+        ];
+        for err in errors {
+            assert_eq!(
+                err.unwrap_err().as_unique_violation(),
+                Some(("member", "email"))
+            );
+        }
+        let m2 = backend.get_record("member", "m2").await.unwrap().unwrap();
+        assert_eq!(m2["email"], "b@x");
+        assert!(backend.get_record("member", "m9").await.unwrap().is_none());
+    }
+
+    #[tokio::test]
+    async fn unique_index_batch_clash_writes_nothing_sad() {
+        let backend = unique_backend().await;
+        let err = backend
+            .apply_batch(vec![
+                WriteOp::Create {
+                    table: "member".into(),
+                    content: serde_json::json!({"id": "m2", "email": "b@x"}),
+                },
+                WriteOp::Create {
+                    table: "member".into(),
+                    content: serde_json::json!({"id": "m3", "email": "b@x"}),
+                },
+            ])
+            .await
+            .unwrap_err();
+        assert_eq!(err.as_unique_violation(), Some(("member", "email")));
+        assert!(backend.get_record("member", "m2").await.unwrap().is_none());
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn unique_index_racing_creates_keep_one_row() {
+        let backend = std::sync::Arc::new(InMemoryBackend::new());
+        backend
+            .define_unique_index("member", "email")
+            .await
+            .unwrap();
+        let mut writes = tokio::task::JoinSet::new();
+        for i in 0..20 {
+            let backend = std::sync::Arc::clone(&backend);
+            writes.spawn(async move {
+                backend
+                    .create_record(
+                        "member",
+                        serde_json::json!({"id": format!("m{i}"), "email": "race@x"}),
+                    )
+                    .await
+            });
+        }
+        let mut ok = 0;
+        while let Some(write) = writes.join_next().await {
+            if write.unwrap().is_ok() {
+                ok += 1;
+            }
+        }
+        assert_eq!(ok, 1);
     }
 
     #[tokio::test]

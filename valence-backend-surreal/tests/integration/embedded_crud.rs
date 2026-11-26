@@ -91,3 +91,38 @@ async fn merge_record_patches_fields() {
     assert_eq!(merged.get("name").and_then(|v| v.as_str()), Some("before"));
     assert_eq!(merged.get("count").and_then(|v| v.as_i64()), Some(2));
 }
+
+#[tokio::test]
+async fn hyphenated_uuid_id_round_trips() {
+    let b = backend().await;
+    let uuid = "aa90d993-a8e9-4433-bdcb-db51b35ceb9d";
+
+    let row = b
+        .create_record("team", serde_json::json!({ "id": uuid, "name": "a" }))
+        .await
+        .expect("create");
+    let id = valence_backend_surreal::extract_id_from_select_value(&row["id"]).expect("extract id");
+    assert_eq!(id, uuid);
+    assert_eq!(
+        valence_core::extract_id_from_select_value(&row["id"]).unwrap(),
+        uuid
+    );
+    let got = b.get_record("team", &id).await.expect("get");
+    assert_eq!(
+        got.and_then(|r| r["name"].as_str().map(str::to_owned))
+            .as_deref(),
+        Some("a")
+    );
+
+    let other = "0b6f1e2a-3c4d-4e5f-8a9b-0c1d2e3f4a5b";
+    b.create_record("team", serde_json::json!({ "id": other }))
+        .await
+        .expect("create other");
+    let from = RecordId::new("team", uuid);
+    b.relate_edge(&from, "follows", &RecordId::new("team", other))
+        .await
+        .expect("relate");
+    let outs = b.get_edge_targets(&from, "follows").await.expect("edges");
+    assert_eq!(outs.len(), 1);
+    assert_eq!(outs[0].id(), other);
+}

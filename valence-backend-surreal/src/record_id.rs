@@ -30,6 +30,12 @@ pub fn valence_from_surreal(record: surrealdb::types::RecordId) -> RecordId {
 ///
 /// Returns [`Error::Validation`] when the id portion is empty.
 pub fn extract_id_from_surreal_record(record: &surrealdb::types::RecordId) -> Result<String> {
+    // Read plain keys directly: the wire form backtick-quotes ids that need escaping.
+    match &record.key {
+        surrealdb::types::RecordIdKey::String(s) if !s.is_empty() => return Ok(s.clone()),
+        surrealdb::types::RecordIdKey::Number(n) => return Ok(n.to_string()),
+        _ => {}
+    }
     let wire = match surrealdb::types::Value::RecordId(record.clone()).into_json_value() {
         serde_json::Value::String(s) => s,
         other => other.to_string(),
@@ -47,6 +53,11 @@ pub fn extract_id_from_record_display(s: &str) -> Result<String> {
     let id = id
         .trim_start_matches(['⟨', '‹', '«'])
         .trim_end_matches(['⟩', '›', '»']);
+    // SurrealDB 3 wraps ids that need escaping in backticks.
+    let id = id
+        .strip_prefix('`')
+        .and_then(|rest| rest.strip_suffix('`'))
+        .unwrap_or(id);
     if id.is_empty() {
         return Err(Error::Validation(format!(
             "Invalid record id string: could not extract ID from {s:?}"
@@ -90,6 +101,24 @@ mod tests {
         let rid = surreal_record_id_for("user", "abc123");
         let extracted = extract_id_from_surreal_record(&rid).unwrap();
         assert_eq!(extracted, "abc123");
+    }
+
+    #[test]
+    fn hyphenated_uuid_key_extracts_bare_happy() {
+        let uuid = "aa90d993-a8e9-4433-bdcb-db51b35ceb9d";
+        let rid = surreal_record_id_for("team", uuid);
+        assert_eq!(extract_id_from_surreal_record(&rid).unwrap(), uuid);
+        assert_eq!(valence_from_surreal(rid).id(), uuid);
+    }
+
+    #[test]
+    fn backtick_display_form_strips_happy() {
+        let uuid = "aa90d993-a8e9-4433-bdcb-db51b35ceb9d";
+        assert_eq!(
+            extract_id_from_record_display(&format!("team:`{uuid}`")).unwrap(),
+            uuid
+        );
+        assert!(extract_id_from_record_display("team:``").is_err());
     }
 
     #[test]

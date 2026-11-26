@@ -279,6 +279,26 @@ mod tests {
     }
 
     #[test]
+    fn personal_fields_lists_only_personal_in_declaration_order() {
+        let base = build_schema("people");
+        let mut schema = base.clone();
+        let template = schema.fields[0].clone();
+        let field = |name: &str, personal: bool| SchemaField {
+            name: name.to_string(),
+            personal,
+            ..template.clone()
+        };
+        schema.fields = vec![
+            field("email", true),
+            field("nickname", false),
+            field("phone", true),
+        ];
+        let names: Vec<&str> = schema.personal_fields().map(|f| f.name.as_str()).collect();
+        assert_eq!(names, vec!["email", "phone"]);
+        assert_eq!(base.personal_fields().count(), 0);
+    }
+
+    #[test]
     fn register_and_list() {
         let mut registry = SchemaRegistry::new();
         let schema = build_schema("fixture");

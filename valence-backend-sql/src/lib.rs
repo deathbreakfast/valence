@@ -2,6 +2,8 @@
 
 #![deny(missing_docs)]
 
+#[allow(clippy::missing_errors_doc)]
+mod batch;
 mod document;
 #[allow(missing_docs)]
 mod edges;
@@ -18,6 +20,7 @@ mod sqlite_ops;
 #[allow(missing_docs, clippy::missing_errors_doc)]
 mod typed_table;
 
+pub use batch::{apply_batch_postgres, apply_batch_sqlite};
 pub use document::{ensure_table, row_from_body, upsert_body_fields, EDGES_TABLE, ID_COLUMN};
 pub use edges::{ensure_edges_table, get_edge_targets, relate_edge, unrelate_edge};
 pub use merge::json_merge;

@@ -438,3 +438,40 @@ valence_schema! {
         "Expected typed hop for cross-crate target"
     );
 }
+
+#[test]
+fn generates_sum_methods_for_integer_and_currency_fields_only() {
+    let schema = r#"
+use valence::prelude::*;
+
+valence_schema! {
+    LedgerLine {
+        repository: "https://github.com/unified-field-dev/valence",
+        table: "ledger_line",
+        version: "0.1.0",
+        fields: [
+            id: { r#type: FieldType::String, primary_key: true, required: true },
+            account: { r#type: FieldType::String, required: true },
+            quantity: { r#type: FieldType::Integer, required: true },
+            amount: { r#type: FieldType::Currency, required: true },
+            ratio: { r#type: FieldType::Decimal, required: false },
+        ]
+    }
+}
+"#;
+
+    let path = write_temp_schema_file(schema, "sum_methods_schema.rs");
+    let generated = generate_from_schema_file(&path, &HashMap::<String, ParsedTraitDef>::new())
+        .expect("DSL codegen failed");
+    for method in [
+        "fn sum_quantity",
+        "fn sum_quantity_by",
+        "fn sum_amount",
+        "fn sum_amount_by",
+    ] {
+        assert!(generated.contains(method), "expected {method}");
+    }
+    for method in ["fn sum_account", "fn sum_ratio", "fn sum_id"] {
+        assert!(!generated.contains(method), "unexpected {method}");
+    }
+}

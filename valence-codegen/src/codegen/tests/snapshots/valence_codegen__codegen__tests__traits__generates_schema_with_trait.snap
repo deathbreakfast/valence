@@ -1238,6 +1238,33 @@ impl<'a> TestTraitAQuery<'a> {
     ) -> valence::Result<Vec<String>> {
         self.inner.distinct_values("id", self.valence, purpose).await
     }
+    /// Sum this field over every readable row matching the query.
+    pub async fn sum_a_specific(
+        self,
+        purpose: valence::DataUsePurpose,
+    ) -> valence::Result<valence::SumGroup> {
+        let groups = self
+            .inner
+            .sum_values("a_specific", None, self.valence, purpose)
+            .await?;
+        groups
+            .into_iter()
+            .next()
+            .ok_or_else(|| {
+                valence::Error::Internal("sum_values returned no group".into())
+            })
+    }
+    /// Sum this field over every readable row matching the query, one group per
+    /// value of `group_field`.
+    pub async fn sum_a_specific_by(
+        self,
+        group_field: &str,
+        purpose: valence::DataUsePurpose,
+    ) -> valence::Result<Vec<valence::SumGroup>> {
+        self.inner
+            .sum_values("a_specific", Some(group_field), self.valence, purpose)
+            .await
+    }
     pub async fn distinct_name(
         self,
         purpose: valence::DataUsePurpose,

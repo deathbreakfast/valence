@@ -1,4 +1,4 @@
-//! Per-field `where_*`, `order_by_*`, `distinct_*`, and nullability helpers on the query builder.
+//! Per-field `where_*`, `order_by_*`, `distinct_*`, `sum_*`, and nullability helpers on the query builder.
 
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
@@ -133,6 +133,38 @@ pub(super) fn collect_field_query_methods(
                 ) -> valence::Result<Vec<String>> {
                     self.inner
                         .distinct_values(#field_name_lit, self.valence, purpose)
+                        .await
+                }
+            });
+        }
+        if matches!(field_type_str, "integer" | "currency") {
+            let sum_method_name = format_ident!("sum_{}", field_name_str);
+            let sum_by_method_name = format_ident!("sum_{}_by", field_name_str);
+            let field_name_lit = LitStr::new(field_name_str, proc_macro2::Span::call_site());
+            distinct_methods.push(quote! {
+                /// Sum this field over every readable row matching the query.
+                pub async fn #sum_method_name(
+                    self,
+                    purpose: valence::DataUsePurpose,
+                ) -> valence::Result<valence::SumGroup> {
+                    let groups = self
+                        .inner
+                        .sum_values(#field_name_lit, None, self.valence, purpose)
+                        .await?;
+                    groups.into_iter().next().ok_or_else(|| {
+                        valence::Error::Internal("sum_values returned no group".into())
+                    })
+                }
+
+                /// Sum this field over every readable row matching the query, one group per
+                /// value of `group_field`.
+                pub async fn #sum_by_method_name(
+                    self,
+                    group_field: &str,
+                    purpose: valence::DataUsePurpose,
+                ) -> valence::Result<Vec<valence::SumGroup>> {
+                    self.inner
+                        .sum_values(#field_name_lit, Some(group_field), self.valence, purpose)
                         .await
                 }
             });

@@ -37,7 +37,7 @@ pub use predicates::{
     SortDirection, StringPredicate,
 };
 pub use sql_row_filter::{apply_equality_where, apply_order_limit_offset};
-pub use types::{HopSource, HopType, QueryCore, QueryStats, WhereClause};
+pub use types::{HopSource, HopType, QueryCore, QueryStats, SumGroup, WhereClause};
 
 #[cfg(test)]
 mod clamp_tests {

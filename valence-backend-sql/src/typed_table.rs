@@ -39,6 +39,31 @@ impl WriteEnsureCache {
         Self::default()
     }
 
+    /// Independent copy of the current entries, for work that may roll back.
+    ///
+    /// A transaction ensures layouts against the copy; [`Self::merge_from`] folds it back
+    /// in only after commit, so rolled-back DDL never marks columns as present.
+    #[must_use]
+    pub fn snapshot(&self) -> Self {
+        let guard = self.inner.lock().unwrap_or_else(|e| e.into_inner());
+        Self {
+            inner: Arc::new(Mutex::new(guard.clone())),
+        }
+    }
+
+    /// Add every entry of `other` (typically a committed [`Self::snapshot`]) to this cache.
+    pub fn merge_from(&self, other: &Self) {
+        let theirs = other
+            .inner
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone();
+        let mut guard = self.inner.lock().unwrap_or_else(|e| e.into_inner());
+        for (table, fields) in theirs {
+            guard.entry(table).or_default().extend(fields);
+        }
+    }
+
     fn covers(&self, table: &str, layout: &StorageLayout) -> bool {
         let guard = self.inner.lock().unwrap_or_else(|e| e.into_inner());
         let Some(known) = guard.get(table) else {
@@ -54,6 +79,18 @@ impl WriteEnsureCache {
             entry.insert(f.name.clone());
         }
     }
+}
+
+/// Check out one pool connection, so every statement of a multi-step op runs on it.
+///
+/// An in-memory SQLite pool has a single connection; a helper that went back to the pool
+/// while its caller held that connection (or a transaction on it) would wait forever.
+pub(crate) async fn acquire<DB: sqlx::Database>(
+    pool: &sqlx::Pool<DB>,
+) -> Result<sqlx::pool::PoolConnection<DB>> {
+    pool.acquire()
+        .await
+        .map_err(|e| Error::database(e.to_string()))
 }
 
 fn registry_table(table: &str) -> bool {
@@ -79,20 +116,20 @@ pub fn ensure_typed_ddl_postgres(layout: &StorageLayout) -> Result<String> {
 
 /// Ensure typed table exists (SQLite).
 pub async fn ensure_typed_table_sqlite(
-    pool: &sqlx::SqlitePool,
+    conn: &mut sqlx::SqliteConnection,
     layout: &StorageLayout,
 ) -> Result<()> {
     assert_safe_table(&layout.table)?;
     let ddl = ensure_typed_ddl_sqlite(layout)?;
     sqlx::query(sqlx::AssertSqlSafe(ddl))
-        .execute(pool)
+        .execute(&mut *conn)
         .await
         .map_err(|e| Error::database(e.to_string()))?;
     for f in &layout.fields {
         if f.unique && f.name != "id" {
-            define_unique_index_column_sqlite(pool, &layout.table, &f.name).await?;
+            define_unique_index_column_sqlite(&mut *conn, &layout.table, &f.name).await?;
         } else if f.indexed && f.name != "id" {
-            define_index_column_sqlite(pool, &layout.table, &f.name).await?;
+            define_index_column_sqlite(&mut *conn, &layout.table, &f.name).await?;
         }
     }
     Ok(())
@@ -100,20 +137,20 @@ pub async fn ensure_typed_table_sqlite(
 
 /// Ensure typed table exists (Postgres).
 pub async fn ensure_typed_table_postgres(
-    pool: &sqlx::PgPool,
+    conn: &mut sqlx::PgConnection,
     layout: &StorageLayout,
 ) -> Result<()> {
     assert_safe_table(&layout.table)?;
     let ddl = ensure_typed_ddl_postgres(layout)?;
     sqlx::query(sqlx::AssertSqlSafe(ddl))
-        .execute(pool)
+        .execute(&mut *conn)
         .await
         .map_err(|e| Error::database(e.to_string()))?;
     for f in &layout.fields {
         if f.unique && f.name != "id" {
-            define_unique_index_column_postgres(pool, &layout.table, &f.name).await?;
+            define_unique_index_column_postgres(&mut *conn, &layout.table, &f.name).await?;
         } else if f.indexed && f.name != "id" {
-            define_index_column_postgres(pool, &layout.table, &f.name).await?;
+            define_index_column_postgres(&mut *conn, &layout.table, &f.name).await?;
         }
     }
     Ok(())
@@ -121,7 +158,7 @@ pub async fn ensure_typed_table_postgres(
 
 /// Inspect live SQLite columns → [`valence_core::storage_layout::StorageLayout`] (storage kinds inferred coarsely).
 pub async fn inspect_typed_layout_sqlite(
-    pool: &sqlx::SqlitePool,
+    conn: &mut sqlx::SqliteConnection,
     table: &str,
 ) -> Result<Option<StorageLayout>> {
     assert_safe_table(table)?;
@@ -129,7 +166,7 @@ pub async fn inspect_typed_layout_sqlite(
         "PRAGMA table_info({})",
         quote_sql_ident(table)
     )))
-    .fetch_all(pool)
+    .fetch_all(&mut *conn)
     .await
     .map_err(|e| Error::database(e.to_string()))?;
     if rows.is_empty() {
@@ -173,7 +210,7 @@ pub async fn inspect_typed_layout_sqlite(
 
 /// Inspect live Postgres columns.
 pub async fn inspect_typed_layout_postgres(
-    pool: &sqlx::PgPool,
+    conn: &mut sqlx::PgConnection,
     table: &str,
 ) -> Result<Option<StorageLayout>> {
     assert_safe_table(table)?;
@@ -184,7 +221,7 @@ pub async fn inspect_typed_layout_postgres(
          ORDER BY ordinal_position",
     )
     .bind(table)
-    .fetch_all(pool)
+    .fetch_all(&mut *conn)
     .await
     .map_err(|e| Error::database(e.to_string()))?;
     if rows.is_empty() {
@@ -227,8 +264,10 @@ pub async fn sync_typed_table_sqlite(
     pool: &sqlx::SqlitePool,
     layout: &StorageLayout,
 ) -> Result<()> {
-    let Some(live) = inspect_typed_layout_sqlite(pool, &layout.table).await? else {
-        return ensure_typed_table_sqlite(pool, layout).await;
+    let mut conn = acquire(pool).await?;
+    let conn = &mut *conn;
+    let Some(live) = inspect_typed_layout_sqlite(&mut *conn, &layout.table).await? else {
+        return ensure_typed_table_sqlite(&mut *conn, layout).await;
     };
     // Inspect does not know unique/index flags — treat live unique/indexed as false so
     // desired unique/index still emit CREATE INDEX IF NOT EXISTS.
@@ -238,20 +277,20 @@ pub async fn sync_typed_table_sqlite(
             AdditiveOp::AddField(f) => {
                 let ddl = sqlite_add_column(&layout.table, &f)?;
                 sqlx::query(sqlx::AssertSqlSafe(ddl))
-                    .execute(pool)
+                    .execute(&mut *conn)
                     .await
                     .map_err(|e| Error::database(e.to_string()))?;
                 if f.unique {
-                    define_unique_index_column_sqlite(pool, &layout.table, &f.name).await?;
+                    define_unique_index_column_sqlite(&mut *conn, &layout.table, &f.name).await?;
                 } else if f.indexed {
-                    define_index_column_sqlite(pool, &layout.table, &f.name).await?;
+                    define_index_column_sqlite(&mut *conn, &layout.table, &f.name).await?;
                 }
             }
             AdditiveOp::AddUniqueIndex { field } => {
-                define_unique_index_column_sqlite(pool, &layout.table, &field).await?;
+                define_unique_index_column_sqlite(&mut *conn, &layout.table, &field).await?;
             }
             AdditiveOp::AddIndex { field } => {
-                define_index_column_sqlite(pool, &layout.table, &field).await?;
+                define_index_column_sqlite(&mut *conn, &layout.table, &field).await?;
             }
         }
     }
@@ -266,8 +305,10 @@ pub async fn sync_typed_table_sqlite(
 
 /// Additive sync for Postgres (includes safe nullability/default tweaks).
 pub async fn sync_typed_table_postgres(pool: &sqlx::PgPool, layout: &StorageLayout) -> Result<()> {
-    let Some(live) = inspect_typed_layout_postgres(pool, &layout.table).await? else {
-        return ensure_typed_table_postgres(pool, layout).await;
+    let mut conn = acquire(pool).await?;
+    let conn = &mut *conn;
+    let Some(live) = inspect_typed_layout_postgres(&mut *conn, &layout.table).await? else {
+        return ensure_typed_table_postgres(&mut *conn, layout).await;
     };
     let diff = layout_diff(layout, &live, KnownEngines::POSTGRES)?;
     for op in diff.ops {
@@ -275,20 +316,20 @@ pub async fn sync_typed_table_postgres(pool: &sqlx::PgPool, layout: &StorageLayo
             AdditiveOp::AddField(f) => {
                 let ddl = postgres_add_column(&layout.table, &f)?;
                 sqlx::query(sqlx::AssertSqlSafe(ddl))
-                    .execute(pool)
+                    .execute(&mut *conn)
                     .await
                     .map_err(|e| Error::database(e.to_string()))?;
                 if f.unique {
-                    define_unique_index_column_postgres(pool, &layout.table, &f.name).await?;
+                    define_unique_index_column_postgres(&mut *conn, &layout.table, &f.name).await?;
                 } else if f.indexed {
-                    define_index_column_postgres(pool, &layout.table, &f.name).await?;
+                    define_index_column_postgres(&mut *conn, &layout.table, &f.name).await?;
                 }
             }
             AdditiveOp::AddUniqueIndex { field } => {
-                define_unique_index_column_postgres(pool, &layout.table, &field).await?;
+                define_unique_index_column_postgres(&mut *conn, &layout.table, &field).await?;
             }
             AdditiveOp::AddIndex { field } => {
-                define_index_column_postgres(pool, &layout.table, &field).await?;
+                define_index_column_postgres(&mut *conn, &layout.table, &field).await?;
             }
         }
     }
@@ -308,7 +349,7 @@ pub async fn sync_typed_table_postgres(pool: &sqlx::PgPool, layout: &StorageLayo
             "valence.storage.safe_tweak"
         );
         sqlx::query(sqlx::AssertSqlSafe(ddl))
-            .execute(pool)
+            .execute(&mut *conn)
             .await
             .map_err(|e| Error::database(e.to_string()))?;
     }
@@ -316,7 +357,7 @@ pub async fn sync_typed_table_postgres(pool: &sqlx::PgPool, layout: &StorageLayo
 }
 
 pub async fn define_unique_index_column_sqlite(
-    pool: &sqlx::SqlitePool,
+    conn: &mut sqlx::SqliteConnection,
     table: &str,
     field: &str,
 ) -> Result<()> {
@@ -329,14 +370,14 @@ pub async fn define_unique_index_column_sqlite(
         quote_sql_ident(field)
     );
     sqlx::query(sqlx::AssertSqlSafe(q))
-        .execute(pool)
+        .execute(&mut *conn)
         .await
         .map_err(|e| Error::database(e.to_string()))?;
     Ok(())
 }
 
 pub async fn define_index_column_sqlite(
-    pool: &sqlx::SqlitePool,
+    conn: &mut sqlx::SqliteConnection,
     table: &str,
     field: &str,
 ) -> Result<()> {
@@ -349,14 +390,14 @@ pub async fn define_index_column_sqlite(
         quote_sql_ident(field)
     );
     sqlx::query(sqlx::AssertSqlSafe(q))
-        .execute(pool)
+        .execute(&mut *conn)
         .await
         .map_err(|e| Error::database(e.to_string()))?;
     Ok(())
 }
 
 pub async fn define_unique_index_column_postgres(
-    pool: &sqlx::PgPool,
+    conn: &mut sqlx::PgConnection,
     table: &str,
     field: &str,
 ) -> Result<()> {
@@ -369,14 +410,14 @@ pub async fn define_unique_index_column_postgres(
         quote_sql_ident(field)
     );
     sqlx::query(sqlx::AssertSqlSafe(q))
-        .execute(pool)
+        .execute(&mut *conn)
         .await
         .map_err(|e| Error::database(e.to_string()))?;
     Ok(())
 }
 
 pub async fn define_index_column_postgres(
-    pool: &sqlx::PgPool,
+    conn: &mut sqlx::PgConnection,
     table: &str,
     field: &str,
 ) -> Result<()> {
@@ -389,7 +430,7 @@ pub async fn define_index_column_postgres(
         quote_sql_ident(field)
     );
     sqlx::query(sqlx::AssertSqlSafe(q))
-        .execute(pool)
+        .execute(&mut *conn)
         .await
         .map_err(|e| Error::database(e.to_string()))?;
     Ok(())
@@ -403,7 +444,7 @@ pub async fn define_index_column_postgres(
 /// Unlike [`sync_typed_table_sqlite`], this does **not** refuse extra live columns —
 /// ad-hoc writes often send a field subset.
 pub async fn ensure_layout_for_write_sqlite(
-    pool: &sqlx::SqlitePool,
+    conn: &mut sqlx::SqliteConnection,
     layout: &StorageLayout,
     ensured: &WriteEnsureCache,
 ) -> Result<()> {
@@ -415,9 +456,9 @@ pub async fn ensure_layout_for_write_sqlite(
     if ensured.covers(&layout.table, layout) {
         return Ok(());
     }
-    match inspect_typed_layout_sqlite(pool, &layout.table).await? {
+    match inspect_typed_layout_sqlite(&mut *conn, &layout.table).await? {
         None => {
-            ensure_typed_table_sqlite(pool, layout).await?;
+            ensure_typed_table_sqlite(&mut *conn, layout).await?;
         }
         Some(live) => {
             for f in &layout.fields {
@@ -432,13 +473,13 @@ pub async fn ensure_layout_for_write_sqlite(
                 }
                 let ddl = sqlite_add_column(&layout.table, f)?;
                 sqlx::query(sqlx::AssertSqlSafe(ddl))
-                    .execute(pool)
+                    .execute(&mut *conn)
                     .await
                     .map_err(|e| Error::database(e.to_string()))?;
                 if f.unique {
-                    define_unique_index_column_sqlite(pool, &layout.table, &f.name).await?;
+                    define_unique_index_column_sqlite(&mut *conn, &layout.table, &f.name).await?;
                 } else if f.indexed {
-                    define_index_column_sqlite(pool, &layout.table, &f.name).await?;
+                    define_index_column_sqlite(&mut *conn, &layout.table, &f.name).await?;
                 }
             }
         }
@@ -448,7 +489,7 @@ pub async fn ensure_layout_for_write_sqlite(
 }
 
 pub async fn ensure_layout_for_write_postgres(
-    pool: &sqlx::PgPool,
+    conn: &mut sqlx::PgConnection,
     layout: &StorageLayout,
     ensured: &WriteEnsureCache,
 ) -> Result<()> {
@@ -460,9 +501,9 @@ pub async fn ensure_layout_for_write_postgres(
     if ensured.covers(&layout.table, layout) {
         return Ok(());
     }
-    match inspect_typed_layout_postgres(pool, &layout.table).await? {
+    match inspect_typed_layout_postgres(&mut *conn, &layout.table).await? {
         None => {
-            ensure_typed_table_postgres(pool, layout).await?;
+            ensure_typed_table_postgres(&mut *conn, layout).await?;
         }
         Some(live) => {
             for f in &layout.fields {
@@ -477,13 +518,13 @@ pub async fn ensure_layout_for_write_postgres(
                 }
                 let ddl = postgres_add_column(&layout.table, f)?;
                 sqlx::query(sqlx::AssertSqlSafe(ddl))
-                    .execute(pool)
+                    .execute(&mut *conn)
                     .await
                     .map_err(|e| Error::database(e.to_string()))?;
                 if f.unique {
-                    define_unique_index_column_postgres(pool, &layout.table, &f.name).await?;
+                    define_unique_index_column_postgres(&mut *conn, &layout.table, &f.name).await?;
                 } else if f.indexed {
-                    define_index_column_postgres(pool, &layout.table, &f.name).await?;
+                    define_index_column_postgres(&mut *conn, &layout.table, &f.name).await?;
                 }
             }
         }
@@ -567,13 +608,13 @@ fn postgres_unique_field<'c>(table: &str, constraint: &'c str) -> Option<&'c str
 
 /// Insert typed row (SQLite).
 pub async fn create_record_typed_sqlite(
-    pool: &sqlx::SqlitePool,
+    conn: &mut sqlx::SqliteConnection,
     layout: &StorageLayout,
     content: Value,
     ensured: &WriteEnsureCache,
 ) -> Result<Value> {
     validate_write_types(layout, &content)?;
-    ensure_layout_for_write_sqlite(pool, layout, ensured).await?;
+    ensure_layout_for_write_sqlite(&mut *conn, layout, ensured).await?;
     let mut content = content;
     valence_core::ttl::prepare_create_content_with_capability(
         &layout.table,
@@ -582,7 +623,7 @@ pub async fn create_record_typed_sqlite(
     )?;
     // Re-resolve layout after TTL stamp may add expire field.
     let layout = StorageLayout::resolve_for_write(&layout.table, &content)?;
-    ensure_layout_for_write_sqlite(pool, &layout, ensured).await?;
+    ensure_layout_for_write_sqlite(&mut *conn, &layout, ensured).await?;
 
     let (id_opt, fields) = split_record_fields(content);
     let id = id_opt.unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
@@ -605,7 +646,7 @@ pub async fn create_record_typed_sqlite(
         query = bind_sqlite(query, f.storage, &val)?;
     }
     query
-        .execute(pool)
+        .execute(&mut *conn)
         .await
         .map_err(|e| map_write_err_sqlite(&layout.table, e))?;
     Ok(row_from_columns(&layout.table, &id, out_fields))
@@ -613,13 +654,13 @@ pub async fn create_record_typed_sqlite(
 
 /// Insert typed row (Postgres).
 pub async fn create_record_typed_postgres(
-    pool: &sqlx::PgPool,
+    conn: &mut sqlx::PgConnection,
     layout: &StorageLayout,
     content: Value,
     ensured: &WriteEnsureCache,
 ) -> Result<Value> {
     validate_write_types(layout, &content)?;
-    ensure_layout_for_write_postgres(pool, layout, ensured).await?;
+    ensure_layout_for_write_postgres(&mut *conn, layout, ensured).await?;
     let mut content = content;
     valence_core::ttl::prepare_create_content_with_capability(
         &layout.table,
@@ -627,7 +668,7 @@ pub async fn create_record_typed_postgres(
         &mut content,
     )?;
     let layout = StorageLayout::resolve_for_write(&layout.table, &content)?;
-    ensure_layout_for_write_postgres(pool, &layout, ensured).await?;
+    ensure_layout_for_write_postgres(&mut *conn, &layout, ensured).await?;
 
     let (id_opt, fields) = split_record_fields(content);
     let id = id_opt.unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
@@ -650,7 +691,7 @@ pub async fn create_record_typed_postgres(
         query = bind_postgres(query, f.storage, &val)?;
     }
     query
-        .execute(pool)
+        .execute(&mut *conn)
         .await
         .map_err(|e| map_write_err_postgres(&layout.table, e))?;
     Ok(row_from_columns(&layout.table, &id, out_fields))
@@ -752,17 +793,17 @@ fn layout_with_registry_storage(table: &str, live: StorageLayout) -> StorageLayo
 
 /// Fetch one typed row (SQLite).
 pub async fn get_record_typed_sqlite(
-    pool: &sqlx::SqlitePool,
+    conn: &mut sqlx::SqliteConnection,
     table: &str,
     id: &str,
 ) -> Result<Option<Value>> {
     assert_safe_table(table)?;
-    let layout = match inspect_typed_layout_sqlite(pool, table).await? {
+    let layout = match inspect_typed_layout_sqlite(&mut *conn, table).await? {
         Some(l) if !l.fields.is_empty() => layout_with_registry_storage(table, l),
         _ => {
             // Table missing — try registry layout ensure then miss.
             if let Ok(layout) = StorageLayout::from_registry_table(table) {
-                ensure_typed_table_sqlite(pool, &layout).await?;
+                ensure_typed_table_sqlite(&mut *conn, &layout).await?;
             }
             return Ok(None);
         }
@@ -775,7 +816,7 @@ pub async fn get_record_typed_sqlite(
     );
     let row = sqlx::query(sqlx::AssertSqlSafe(q))
         .bind(id)
-        .fetch_optional(pool)
+        .fetch_optional(&mut *conn)
         .await
         .map_err(|e| Error::database(e.to_string()))?;
     Ok(row.map(|r| row_from_sqlx_sqlite(table, &layout, &r)))
@@ -783,16 +824,16 @@ pub async fn get_record_typed_sqlite(
 
 /// Fetch one typed row (Postgres).
 pub async fn get_record_typed_postgres(
-    pool: &sqlx::PgPool,
+    conn: &mut sqlx::PgConnection,
     table: &str,
     id: &str,
 ) -> Result<Option<Value>> {
     assert_safe_table(table)?;
-    let layout = match inspect_typed_layout_postgres(pool, table).await? {
+    let layout = match inspect_typed_layout_postgres(&mut *conn, table).await? {
         Some(l) if !l.fields.is_empty() => layout_with_registry_storage(table, l),
         _ => {
             if let Ok(layout) = StorageLayout::from_registry_table(table) {
-                ensure_typed_table_postgres(pool, &layout).await?;
+                ensure_typed_table_postgres(&mut *conn, &layout).await?;
             }
             return Ok(None);
         }
@@ -805,7 +846,7 @@ pub async fn get_record_typed_postgres(
     );
     let row = sqlx::query(sqlx::AssertSqlSafe(q))
         .bind(id)
-        .fetch_optional(pool)
+        .fetch_optional(&mut *conn)
         .await
         .map_err(|e| Error::database(e.to_string()))?;
     Ok(row.map(|r| row_from_sqlx_postgres(table, &layout, &r)))
@@ -819,7 +860,9 @@ pub async fn scan_table_typed_sqlite(
     limit: usize,
 ) -> Result<Vec<Value>> {
     assert_safe_table(table)?;
-    let Some(live) = inspect_typed_layout_sqlite(pool, table).await? else {
+    let mut conn = acquire(pool).await?;
+    let conn = &mut *conn;
+    let Some(live) = inspect_typed_layout_sqlite(&mut *conn, table).await? else {
         return Ok(Vec::new());
     };
     if live.fields.is_empty() {
@@ -837,7 +880,7 @@ pub async fn scan_table_typed_sqlite(
         .bind(after)
         .bind(after)
         .bind(limit)
-        .fetch_all(pool)
+        .fetch_all(&mut *conn)
         .await
         .map_err(|e| Error::database(e.to_string()))?;
     Ok(rows
@@ -854,7 +897,9 @@ pub async fn scan_table_typed_postgres(
     limit: usize,
 ) -> Result<Vec<Value>> {
     assert_safe_table(table)?;
-    let Some(live) = inspect_typed_layout_postgres(pool, table).await? else {
+    let mut conn = acquire(pool).await?;
+    let conn = &mut *conn;
+    let Some(live) = inspect_typed_layout_postgres(&mut *conn, table).await? else {
         return Ok(Vec::new());
     };
     if live.fields.is_empty() {
@@ -871,7 +916,7 @@ pub async fn scan_table_typed_postgres(
     let rows = sqlx::query(sqlx::AssertSqlSafe(q))
         .bind(after)
         .bind(limit)
-        .fetch_all(pool)
+        .fetch_all(&mut *conn)
         .await
         .map_err(|e| Error::database(e.to_string()))?;
     Ok(rows
@@ -898,23 +943,23 @@ fn row_from_sqlx_postgres(
 
 /// Update replaces all non-id columns from content.
 pub async fn update_record_typed_sqlite(
-    pool: &sqlx::SqlitePool,
+    conn: &mut sqlx::SqliteConnection,
     layout: &StorageLayout,
     id: &str,
     content: Value,
     ensured: &WriteEnsureCache,
 ) -> Result<Value> {
-    if get_record_typed_sqlite(pool, &layout.table, id)
+    if get_record_typed_sqlite(&mut *conn, &layout.table, id)
         .await?
         .is_none()
     {
         return Err(Error::NotFound(format!("{}:{id}", layout.table)));
     }
-    ensure_layout_for_write_sqlite(pool, layout, ensured).await?;
+    ensure_layout_for_write_sqlite(&mut *conn, layout, ensured).await?;
     let (_, fields) = split_record_fields(content);
     let data: Vec<&LayoutField> = layout.fields.iter().filter(|f| f.name != "id").collect();
     if data.is_empty() {
-        return get_record_typed_sqlite(pool, &layout.table, id)
+        return get_record_typed_sqlite(&mut *conn, &layout.table, id)
             .await?
             .ok_or_else(|| Error::NotFound(format!("{}:{id}", layout.table)));
     }
@@ -937,30 +982,30 @@ pub async fn update_record_typed_sqlite(
     }
     query = query.bind(id);
     query
-        .execute(pool)
+        .execute(&mut *conn)
         .await
         .map_err(|e| map_write_err_sqlite(&layout.table, e))?;
     Ok(row_from_columns(&layout.table, id, out))
 }
 
 pub async fn update_record_typed_postgres(
-    pool: &sqlx::PgPool,
+    conn: &mut sqlx::PgConnection,
     layout: &StorageLayout,
     id: &str,
     content: Value,
     ensured: &WriteEnsureCache,
 ) -> Result<Value> {
-    if get_record_typed_postgres(pool, &layout.table, id)
+    if get_record_typed_postgres(&mut *conn, &layout.table, id)
         .await?
         .is_none()
     {
         return Err(Error::NotFound(format!("{}:{id}", layout.table)));
     }
-    ensure_layout_for_write_postgres(pool, layout, ensured).await?;
+    ensure_layout_for_write_postgres(&mut *conn, layout, ensured).await?;
     let (_, fields) = split_record_fields(content);
     let data: Vec<&LayoutField> = layout.fields.iter().filter(|f| f.name != "id").collect();
     if data.is_empty() {
-        return get_record_typed_postgres(pool, &layout.table, id)
+        return get_record_typed_postgres(&mut *conn, &layout.table, id)
             .await?
             .ok_or_else(|| Error::NotFound(format!("{}:{id}", layout.table)));
     }
@@ -985,7 +1030,7 @@ pub async fn update_record_typed_postgres(
     }
     query = query.bind(id);
     query
-        .execute(pool)
+        .execute(&mut *conn)
         .await
         .map_err(|e| map_write_err_postgres(&layout.table, e))?;
     Ok(row_from_columns(&layout.table, id, out))
@@ -996,13 +1041,13 @@ pub async fn update_record_typed_postgres(
 /// from the same statement via `RETURNING *` — no internal fetch that a concurrent
 /// writer could race against.
 pub async fn merge_record_typed_sqlite(
-    pool: &sqlx::SqlitePool,
+    conn: &mut sqlx::SqliteConnection,
     layout: &StorageLayout,
     id: &str,
     patch: Value,
     ensured: &WriteEnsureCache,
 ) -> Result<Value> {
-    ensure_layout_for_write_sqlite(pool, layout, ensured).await?;
+    ensure_layout_for_write_sqlite(&mut *conn, layout, ensured).await?;
     let (_, fields) = split_record_fields(patch);
     let data: Vec<&LayoutField> = layout
         .fields
@@ -1010,7 +1055,7 @@ pub async fn merge_record_typed_sqlite(
         .filter(|f| f.name != "id" && fields.contains_key(&f.name))
         .collect();
     if data.is_empty() {
-        return get_record_typed_sqlite(pool, &layout.table, id)
+        return get_record_typed_sqlite(&mut *conn, &layout.table, id)
             .await?
             .ok_or_else(|| Error::NotFound(format!("{}:{id}", layout.table)));
     }
@@ -1031,7 +1076,7 @@ pub async fn merge_record_typed_sqlite(
     }
     query = query.bind(id);
     let row = query
-        .fetch_optional(pool)
+        .fetch_optional(&mut *conn)
         .await
         .map_err(|e| map_write_err_sqlite(&layout.table, e))?;
     let Some(row) = row else {
@@ -1051,7 +1096,7 @@ pub async fn merge_record_typed_sqlite(
 /// [`Error::NotFound`] when the row is absent, [`Error::Conflict`] when `field` holds another
 /// value, and [`Error::Validation`] when `field` isn't a column of `layout`.
 pub async fn compare_and_merge_record_typed_sqlite(
-    pool: &sqlx::SqlitePool,
+    conn: &mut sqlx::SqliteConnection,
     layout: &StorageLayout,
     id: &str,
     field: &str,
@@ -1069,7 +1114,7 @@ pub async fn compare_and_merge_record_typed_sqlite(
                 layout.table
             ))
         })?;
-    ensure_layout_for_write_sqlite(pool, layout, ensured).await?;
+    ensure_layout_for_write_sqlite(&mut *conn, layout, ensured).await?;
     let (_, fields) = split_record_fields(patch);
     let data: Vec<&LayoutField> = layout
         .fields
@@ -1098,13 +1143,13 @@ pub async fn compare_and_merge_record_typed_sqlite(
     query = query.bind(id);
     query = bind_sqlite(query, guard.storage, expected)?;
     let row = query
-        .fetch_optional(pool)
+        .fetch_optional(&mut *conn)
         .await
         .map_err(|e| map_write_err_sqlite(&layout.table, e))?;
     if let Some(row) = row {
         return Ok(row_from_sqlx_sqlite(&layout.table, layout, &row));
     }
-    if get_record_typed_sqlite(pool, &layout.table, id)
+    if get_record_typed_sqlite(&mut *conn, &layout.table, id)
         .await?
         .is_none()
     {
@@ -1118,13 +1163,13 @@ pub async fn compare_and_merge_record_typed_sqlite(
 
 /// Sparse atomic partial-column write (Postgres): see [`merge_record_typed_sqlite`].
 pub async fn merge_record_typed_postgres(
-    pool: &sqlx::PgPool,
+    conn: &mut sqlx::PgConnection,
     layout: &StorageLayout,
     id: &str,
     patch: Value,
     ensured: &WriteEnsureCache,
 ) -> Result<Value> {
-    ensure_layout_for_write_postgres(pool, layout, ensured).await?;
+    ensure_layout_for_write_postgres(&mut *conn, layout, ensured).await?;
     let (_, fields) = split_record_fields(patch);
     let data: Vec<&LayoutField> = layout
         .fields
@@ -1132,7 +1177,7 @@ pub async fn merge_record_typed_postgres(
         .filter(|f| f.name != "id" && fields.contains_key(&f.name))
         .collect();
     if data.is_empty() {
-        return get_record_typed_postgres(pool, &layout.table, id)
+        return get_record_typed_postgres(&mut *conn, &layout.table, id)
             .await?
             .ok_or_else(|| Error::NotFound(format!("{}:{id}", layout.table)));
     }
@@ -1155,7 +1200,7 @@ pub async fn merge_record_typed_postgres(
     }
     query = query.bind(id);
     let row = query
-        .fetch_optional(pool)
+        .fetch_optional(&mut *conn)
         .await
         .map_err(|e| map_write_err_postgres(&layout.table, e))?;
     let Some(row) = row else {
@@ -1503,7 +1548,7 @@ mod compare_and_merge_tests {
         };
         let ensured = WriteEnsureCache::new();
         create_record_typed_sqlite(
-            &pool,
+            &mut pool.acquire().await.unwrap(),
             &layout,
             serde_json::json!({"id": {"table": "cas_demo", "id": "r1"}, "version": 1, "name": "a"}),
             &ensured,
@@ -1517,7 +1562,7 @@ mod compare_and_merge_tests {
     async fn writes_when_guard_matches_happy() {
         let (pool, layout, ensured) = seeded().await;
         let row = compare_and_merge_record_typed_sqlite(
-            &pool,
+            &mut pool.acquire().await.unwrap(),
             &layout,
             "r1",
             "version",
@@ -1535,7 +1580,7 @@ mod compare_and_merge_tests {
     async fn stale_guard_conflicts_and_writes_nothing_sad() {
         let (pool, layout, ensured) = seeded().await;
         let err = compare_and_merge_record_typed_sqlite(
-            &pool,
+            &mut pool.acquire().await.unwrap(),
             &layout,
             "r1",
             "version",
@@ -1546,7 +1591,7 @@ mod compare_and_merge_tests {
         .await
         .expect_err("version is 1");
         assert!(matches!(err, Error::Conflict(_)), "{err:?}");
-        let row = get_record_typed_sqlite(&pool, "cas_demo", "r1")
+        let row = get_record_typed_sqlite(&mut pool.acquire().await.unwrap(), "cas_demo", "r1")
             .await
             .unwrap()
             .unwrap();
@@ -1557,7 +1602,7 @@ mod compare_and_merge_tests {
     async fn null_guard_matches_unset_column_and_missing_row_is_not_found() {
         let (pool, layout, ensured) = seeded().await;
         compare_and_merge_record_typed_sqlite(
-            &pool,
+            &mut pool.acquire().await.unwrap(),
             &layout,
             "r1",
             "lock",
@@ -1568,7 +1613,7 @@ mod compare_and_merge_tests {
         .await
         .expect("lock was unset");
         let err = compare_and_merge_record_typed_sqlite(
-            &pool,
+            &mut pool.acquire().await.unwrap(),
             &layout,
             "r1",
             "lock",
@@ -1580,7 +1625,7 @@ mod compare_and_merge_tests {
         .expect_err("lock is held now");
         assert!(matches!(err, Error::Conflict(_)), "{err:?}");
         let err = compare_and_merge_record_typed_sqlite(
-            &pool,
+            &mut pool.acquire().await.unwrap(),
             &layout,
             "nope",
             "lock",
@@ -1597,7 +1642,7 @@ mod compare_and_merge_tests {
     async fn unknown_guard_column_is_a_validation_error_sad() {
         let (pool, layout, ensured) = seeded().await;
         let err = compare_and_merge_record_typed_sqlite(
-            &pool,
+            &mut pool.acquire().await.unwrap(),
             &layout,
             "r1",
             "missing",

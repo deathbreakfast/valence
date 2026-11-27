@@ -6,7 +6,7 @@ use valence_core::actor::Actor;
 use valence_core::backend::DatabaseBackend;
 use valence_core::compiled_query::CompiledQuery;
 use valence_core::data_use::DataUsePurpose;
-use valence_core::query::{NullPredicate, QueryCore, StringPredicate};
+use valence_core::query::{NullPredicate, QueryCore, RecordPredicate, StringPredicate};
 use valence_core::record_id::RecordId;
 use valence_core::Result;
 use valence_core::Valence;
@@ -232,6 +232,8 @@ const FILTER_TABLE: &str = "valence_backend_contract_filters";
 /// needle) and record `IS NONE` / `IS SOME`, so a mem-backed test sees what sqlite would.
 /// Rows that never wrote the record field, rows that wrote it as null and rows that set it
 /// must split into `IS NONE` (absent and null) and `IS SOME` (set) with nothing in both.
+/// Also covers record `In` (on a field and on the primary key, including an empty id list)
+/// and a record predicate combined with a string predicate, where both must hold.
 /// Needs a registered query compiler, so it stays out of [`run_backend_contract`], which stub
 /// backends also run.
 pub async fn run_row_filter_parity(backend: Arc<dyn DatabaseBackend>) -> Result<()> {
@@ -248,6 +250,14 @@ pub async fn run_row_filter_parity(backend: Arc<dyn DatabaseBackend>) -> Result<
     // `f8` writes `owner` as an explicit null; `f2` and friends never write it.
     for (id, name, owner) in rows {
         let mut doc = serde_json::json!({"id": id, "name": name});
+        // A record link in its typed-column shape (`table:id`), for the `In` and combined cases.
+        if let Some(team) = match id {
+            "f1" | "f2" => Some("team:t1"),
+            "f3" => Some("team:t2"),
+            _ => None,
+        } {
+            doc["team"] = serde_json::json!(team);
+        }
         if let Some(o) = owner {
             let (table, rid) = o.split_once(':').expect("table:id");
             doc["owner"] = serde_json::json!({"table": table, "id": rid});
@@ -338,6 +348,69 @@ pub async fn run_row_filter_parity(backend: Arc<dyn DatabaseBackend>) -> Result<
     assert!(
         none.iter().all(|id| !some.contains(id)) && none.len() + some.len() == rows.len() + 1,
         "is_none and is_some must partition the rows"
+    );
+
+    let teams = |ids: &[&str]| {
+        let rids = ids.iter().map(|id| RecordId::new("team", *id)).collect();
+        QueryCore::new(FILTER_TABLE.to_string())
+            .where_record("team".into(), RecordPredicate::In(rids))
+    };
+    expect(
+        ids(teams(&["t1", "t2", "t9"])).await?,
+        &["f1", "f2", "f3"],
+        "team in {t1, t2, t9}",
+    );
+    expect(ids(teams(&["t2"])).await?, &["f3"], "team in {t2}");
+    expect(ids(teams(&[])).await?, &[], "team in {}");
+    let by_id = |ids: &[&str]| {
+        let rids = ids
+            .iter()
+            .map(|id| RecordId::new(FILTER_TABLE, *id))
+            .collect();
+        QueryCore::new(FILTER_TABLE.to_string()).where_id_in(rids)
+    };
+    expect(
+        ids(by_id(&["f2", "f5", "f99"])).await?,
+        &["f2", "f5"],
+        "id in {f2, f5, f99}",
+    );
+    expect(ids(by_id(&[])).await?, &[], "id in {}");
+
+    let team_and_name = |team: &str, pred| {
+        QueryCore::new(FILTER_TABLE.to_string())
+            .where_record(
+                "team".into(),
+                RecordPredicate::Equals(RecordId::new("team", team)),
+            )
+            .where_string("name".into(), pred)
+    };
+    expect(
+        ids(team_and_name("t1", StringPredicate::Equals("core".into()))).await?,
+        &["f1"],
+        "team t1 and name core",
+    );
+    expect(
+        ids(team_and_name("t2", StringPredicate::Equals("core".into()))).await?,
+        &[],
+        "team t2 and name core",
+    );
+    expect(
+        ids(team_and_name(
+            "t1",
+            StringPredicate::Contains("core".into()),
+        ))
+        .await?,
+        &["f1", "f2"],
+        "team t1 and name contains core",
+    );
+    expect(
+        ids(team_and_name(
+            "t1",
+            StringPredicate::StartsWith("Hard".into()),
+        ))
+        .await?,
+        &["f2"],
+        "team t1 and name starts with Hard",
     );
     Ok(())
 }

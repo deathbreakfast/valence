@@ -64,6 +64,12 @@ pub fn generate_query_builder(
                 (self.inner, self.valence)
             }
 
+            /// Keep only rows whose id is one of `ids`. An empty list matches no rows.
+            pub fn where_id_in(mut self, ids: Vec<valence::RecordId>) -> Self {
+                self.inner = self.inner.where_id_in(ids);
+                self
+            }
+
             #(#where_methods)*
 
             #(#connection_methods)*

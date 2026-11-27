@@ -26,6 +26,7 @@ pub(super) fn fields_tokens(fields: &[valence_schema_dsl::ParsedField]) -> Vec<T
             let unique = field.unique;
             let indexed = field.indexed;
             let encrypted = field.encrypted;
+            let personal = field.personal;
             let nullable = !field.required;
 
             let fk_code = if let Some(ref_table) = record_table(&field.field_type) {
@@ -61,6 +62,7 @@ pub(super) fn fields_tokens(fields: &[valence_schema_dsl::ParsedField]) -> Vec<T
                     validations: #validations_code,
                     policies: #policies_code,
                     encrypted: #encrypted,
+                    personal: #personal,
                     enum_variants: Vec::new(),
                     enum_type: None,
                     model_path: #model_path_code,

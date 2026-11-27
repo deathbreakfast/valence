@@ -44,7 +44,8 @@ impl Parse for PrivacyConfig {
 }
 
 pub enum PrivacyItem {
-    /// `gdpr_compliant:` literal accepted for source compatibility.
+    /// `gdpr_compliant:` literal accepted for source compatibility. It has no effect; mark
+    /// personal data with the field attribute `personal: true` instead.
     GdprCompliant,
 }
 

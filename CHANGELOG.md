@@ -68,7 +68,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Record ids that SurrealDB 3 quotes in backticks (hyphenated UUIDs, for one) now come back bare
-  from `extract_id_from_record`, `extract_id_from_record_display`, `row_json::thing_to_id_only`
+  from `extract_id_from_record_display`, `row_json::thing_to_id_only`
   (so rows read from Surreal carry the bare id) and the Surreal backend's id helpers. Before, the backticks stayed in the id and the next lookup by it found nothing.
 
 - A bare `Model::update` (or an existing-row `upsert`) by a caller who can't read an optional

@@ -60,11 +60,12 @@ pub trait IdHolder {
 ///
 /// Returns an error when the requested operation cannot be completed.
 pub fn extract_id_from_record(r: &RecordId) -> Result<String> {
-    Ok(trim_id_quotes(r.id()).to_string())
+    Ok(r.id().to_string())
 }
 
-/// Drop one pair of backticks wrapping an id. SurrealDB 3 quotes ids that need
-/// escaping (a hyphenated UUID comes back as `` `aa90…` ``).
+/// Drop one pair of backticks wrapping the id part of a SurrealDB `table:id` string.
+/// SurrealDB 3 quotes ids that need escaping (a hyphenated UUID comes back as
+/// `` `aa90…` ``).
 fn trim_id_quotes(id: &str) -> &str {
     id.strip_prefix('`')
         .and_then(|rest| rest.strip_suffix('`'))
@@ -93,7 +94,13 @@ pub fn extract_id_from_record_display(s: &str) -> Result<String> {
 /// Returns an error when the requested operation cannot be completed.
 pub fn extract_id_from_select_value(v: &serde_json::Value) -> Result<String> {
     if let Ok(rid) = serde_json::from_value::<RecordId>(v.clone()) {
-        return extract_id_from_record(&rid);
+        let id = extract_id_from_record(&rid)?;
+        // A `table:id` string is SurrealDB wire form, which may quote the id.
+        return Ok(if v.is_string() {
+            trim_id_quotes(&id).to_string()
+        } else {
+            id
+        });
     }
     match v {
         serde_json::Value::String(s) => extract_id_from_record_display(s),
@@ -128,10 +135,6 @@ mod extract_id_tests {
             uuid
         );
         assert_eq!(
-            extract_id_from_record(&RecordId::new("team", format!("`{uuid}`"))).unwrap(),
-            uuid
-        );
-        assert_eq!(
             extract_id_from_select_value(&json!(format!("team:`{uuid}`"))).unwrap(),
             uuid
         );
@@ -139,6 +142,11 @@ mod extract_id_tests {
 
     #[test]
     fn lone_or_empty_backticks_sad() {
+        // A parsed RecordId is taken as is: a caller-chosen id with backticks keeps them.
+        assert_eq!(
+            extract_id_from_record(&RecordId::new("team", "`x`")).unwrap(),
+            "`x`"
+        );
         assert_eq!(extract_id_from_record_display("t:`abc").unwrap(), "`abc");
         assert!(extract_id_from_record_display("t:``").is_err());
     }

@@ -1,5 +1,6 @@
 //! Ownership write paths: ensure, status transitions, and transfers.
 
+use chrono::Utc;
 use serde_json::json;
 
 use crate::error::{Error, Result};
@@ -12,7 +13,8 @@ use super::helpers::{
 use super::OwnershipService;
 
 impl OwnershipService {
-    /// Insert or replace the active ownership row for `valence_model` / `record_id`.
+    /// Insert or replace the active ownership row for `valence_model` / `record_id`, stamping
+    /// `created_at` with the current time on every call, including a re-save of an existing row.
     /// # Errors
     ///
     /// Returns an error when the requested operation cannot be completed.
@@ -36,6 +38,7 @@ impl OwnershipService {
             "owner_id": owner.owner_id,
             "owner_type": owner.owner_kind.as_str(),
             "status": "active",
+            "created_at": Utc::now().timestamp_millis(),
         });
         backend
             .upsert_record("valence_data_ownership", id.as_str(), row)

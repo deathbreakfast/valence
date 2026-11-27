@@ -26,9 +26,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   runs on each row. An empty list matches nothing. Every backend gets it: the SQL emitter ORs
   the per-id terms into one group the in-memory row filter already reads, and the SurrealQL
   emitter ORs its record matches.
+- `OwnershipService::list_owner_record_ids` pages the `record_id`s an owner holds in one
+  model, by ownership status, most recently saved first, with `limit` / `offset` (clamped to
+  `MAX_QUERY_LIMIT` / `MAX_QUERY_OFFSET`). It runs one indexed query on the ownership table,
+  built like the `owner_data_summary` count query
+  (`compiled_query_factory::list_ownership_record_ids_for_schema`), so a caller no longer
+  scans every readable row and checks each ownership row.
 
 ### Changed
 
+- `OwnershipService::ensure_active_ownership` stamps `created_at` (unix milliseconds) on
+  ownership rows. Rows written before this change have no `created_at` and sort last in
+  `list_owner_record_ids` until they are rewritten. A re-save stamps a new `created_at`.
 - `QueryCore::get_record_json` now applies the table's Read policy for the calling actor. A
   row the actor can't read returns `Ok(None)`, fields hidden by their own read policy are left
   out, and a table with no registered schema returns `Error::NotFound`. Framework code that

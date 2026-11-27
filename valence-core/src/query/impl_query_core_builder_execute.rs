@@ -415,6 +415,99 @@ impl QueryCore {
     }
 
 
+    /// Sum an integer or currency `field` over every row the actor can read, optionally
+    /// grouped by `group_by`.
+    ///
+    /// The query's filters apply. Rows are read in windows of [`super::MAX_QUERY_LIMIT`]
+    /// through [`Self::execute_with_stats`] and [`Self::resume_at`], so the same connection,
+    /// hop, pending-deletion, entity and field read privacy as [`Self::execute`] decides
+    /// which rows count, and the total is not capped at one window. Rows without the field
+    /// (including rows whose field privacy hid it) are skipped. Groups come back in the
+    /// order their first row was read; an ungrouped sum returns one group with key `None`.
+    ///
+    /// The query's projection, ordering, grouping, limit and offset are ignored.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::Validation`] for an unsafe field name, a trait-union query, a value that is
+    /// neither an integer nor a currency amount, currencies mixed within one group, or a sum
+    /// that overflows `i64`; otherwise any error [`Self::execute_with_stats`] returns.
+    pub async fn sum_values(
+        mut self,
+        field: &str,
+        group_by: Option<&str>,
+        valence: &Valence,
+        purpose: crate::data_use::DataUsePurpose,
+    ) -> Result<Vec<SumGroup>> {
+        crate::safe_ident::assert_safe_ident(field)?;
+        if let Some(group) = group_by {
+            crate::safe_ident::assert_safe_ident(group)?;
+        }
+        if self.table.contains(',') {
+            return Err(Error::Validation(
+                "sum_values does not support trait-union queries".into(),
+            ));
+        }
+        self.projection = None;
+        self.group_by.clear();
+        // A fixed order keeps resumed windows from skipping or repeating rows.
+        self.order_by = vec![OrderBy {
+            field: "id".into(),
+            direction: SortDirection::Asc,
+        }];
+        self.limit = Some(super::MAX_QUERY_LIMIT);
+        self.offset = None;
+        self.resume_at = None;
+
+        let mut groups: Vec<SumGroup> = Vec::new();
+        let mut index: std::collections::HashMap<Option<String>, usize> =
+            std::collections::HashMap::new();
+        loop {
+            let (rows, stats) = self
+                .clone()
+                .execute_with_stats::<serde_json::Value>(valence, purpose)
+                .await?;
+            for row in rows {
+                let Some((amount, currency)) = sum_operand(field, row.get(field))? else {
+                    continue;
+                };
+                let key = group_by.and_then(|g| sum_group_key(row.get(g)));
+                let slot = *index.entry(key.clone()).or_insert_with(|| {
+                    groups.push(SumGroup {
+                        key,
+                        sum: 0,
+                        currency,
+                        rows: 0,
+                    });
+                    groups.len() - 1
+                });
+                let group = &mut groups[slot];
+                if group.currency != currency {
+                    return Err(Error::Validation(format!(
+                        "sum_values: {field} mixes currencies within one group"
+                    )));
+                }
+                group.sum = group.sum.checked_add(amount).ok_or_else(|| {
+                    Error::Validation(format!("sum_values: {field} sum overflowed i64"))
+                })?;
+                group.rows += 1;
+            }
+            match stats.resume {
+                Some(position) => self.resume_at = Some(position),
+                None => break,
+            }
+        }
+        if group_by.is_none() && groups.is_empty() {
+            groups.push(SumGroup {
+                key: None,
+                sum: 0,
+                currency: None,
+                rows: 0,
+            });
+        }
+        Ok(groups)
+    }
+
     async fn post_filter_connection_privacy<T>(
         &self,
         results: Vec<(usize, T)>,
@@ -621,4 +714,44 @@ impl QueryCore {
         Ok(kept)
     }
 
+}
+
+/// Integer amount and currency of one summed cell; `None` when the row has no value.
+fn sum_operand(
+    field: &str,
+    value: Option<&serde_json::Value>,
+) -> Result<Option<(i64, Option<crate::currency::CurrencyCode>)>> {
+    let not_summable = || {
+        Error::Validation(format!(
+            "sum_values: {field} must hold integers or currency amounts"
+        ))
+    };
+    match value {
+        None | Some(serde_json::Value::Null) => Ok(None),
+        Some(serde_json::Value::Number(n)) => {
+            n.as_i64().map(|i| Some((i, None))).ok_or_else(not_summable)
+        }
+        Some(other @ serde_json::Value::Object(_)) => {
+            let amount: crate::currency::Currency =
+                serde_json::from_value(other.clone()).map_err(|_| not_summable())?;
+            Ok(Some((amount.amount_minor(), Some(amount.code()))))
+        }
+        // SQL backends may hand a currency cell back as its JSON text.
+        Some(serde_json::Value::String(text)) => {
+            let amount: crate::currency::Currency =
+                serde_json::from_str(text).map_err(|_| not_summable())?;
+            Ok(Some((amount.amount_minor(), Some(amount.code()))))
+        }
+        Some(_) => Err(not_summable()),
+    }
+}
+
+/// Group key for one row: strings as-is, record refs as their id, null or missing as `None`.
+fn sum_group_key(value: Option<&serde_json::Value>) -> Option<String> {
+    match value? {
+        serde_json::Value::Null => None,
+        serde_json::Value::String(s) => Some(s.clone()),
+        v @ serde_json::Value::Object(_) => extract_id_from_fk_value(Some(v)),
+        other => Some(other.to_string()),
+    }
 }

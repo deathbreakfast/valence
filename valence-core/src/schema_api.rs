@@ -81,6 +81,9 @@ pub struct SchemaField {
     pub policies: Option<SchemaPolicies>,
     #[serde(default, skip_serializing_if = "is_false")]
     pub encrypted: bool,
+    /// Holds personal data about a person (`personal: true` in the schema DSL).
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub personal: bool,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub enum_variants: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -270,10 +273,48 @@ pub struct Schema {
     pub meta: SchemaMeta,
 }
 
+impl Schema {
+    /// Fields marked `personal: true`, in declaration order, for the Data uses pages.
+    pub fn personal_fields(&self) -> impl Iterator<Item = &SchemaField> {
+        self.fields.iter().filter(|f| f.personal)
+    }
+}
+
 #[allow(
     clippy::trivially_copy_pass_by_ref,
     reason = "serde's `skip_serializing_if` callback signature passes field values by reference"
 )]
 fn is_false(value: &bool) -> bool {
     !*value
+}
+
+#[cfg(test)]
+mod personal_tests {
+    use super::SchemaField;
+
+    fn field(personal: bool) -> SchemaField {
+        serde_json::from_value(serde_json::json!({
+            "name": "email", "field_type": "string", "primary": false,
+            "nullable": false, "indexed": false, "personal": personal,
+        }))
+        .expect("field json")
+    }
+
+    #[test]
+    fn personal_serializes_only_when_set() {
+        let on = serde_json::to_value(field(true)).expect("to json");
+        assert_eq!(on["personal"], true);
+        let off = serde_json::to_value(field(false)).expect("to json");
+        assert!(off.get("personal").is_none());
+    }
+
+    #[test]
+    fn personal_defaults_to_false_when_absent() {
+        let f: SchemaField = serde_json::from_value(serde_json::json!({
+            "name": "id", "field_type": "string", "primary": true,
+            "nullable": false, "indexed": false,
+        }))
+        .expect("field json");
+        assert!(!f.personal);
+    }
 }

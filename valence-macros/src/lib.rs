@@ -170,6 +170,7 @@ pub fn valence_schema(input: TokenStream) -> TokenStream {
 /// | `validations` | no | Validator expression list |
 /// | `policies` | no | Field-level policy bundle |
 /// | `encrypted` | no | Whether storage should treat the field as encrypted (default `false`) |
+/// | `personal` | no | Marks the field as personal data; Data uses pages list it (default `false`) |
 ///
 /// ## Policy fields
 ///

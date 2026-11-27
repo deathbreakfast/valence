@@ -40,6 +40,7 @@ fn field(name: &str, primary: bool) -> SchemaField {
         validations: Vec::new(),
         policies: None,
         encrypted: false,
+        personal: false,
         enum_variants: Vec::new(),
         enum_type: None,
         model_path: None,

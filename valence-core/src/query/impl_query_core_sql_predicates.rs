@@ -115,30 +115,37 @@ impl QueryCore {
         pred: &RecordPredicate,
         param_counter: &mut usize,
     ) -> (String, Vec<(String, serde_json::Value)>) {
-        let param_key = Self::next_param_key(param_counter);
-        match pred {
-            RecordPredicate::Equals(rid) => {
-                let tb_key = format!("{param_key}_tb");
-                let id_key = format!("{param_key}_id");
-                let rid_key = format!("{param_key}_rid");
-                let params = vec![
-                    (tb_key.clone(), serde_json::json!(rid.table())),
-                    (id_key.clone(), serde_json::json!(rid.id())),
-                    (
-                        rid_key.clone(),
-                        serde_json::json!(format!("{}:{}", rid.table(), rid.id())),
-                    ),
-                ];
-                (
-                    format!(
-                        "({field} = type::record(${tb_key}, ${id_key}) \
-                         OR {field} = ${rid_key} \
-                         OR {field} = ${id_key} \
-                         OR {field}.id = ${id_key})"
-                    ),
-                    params,
-                )
-            }
+        let rids = match pred {
+            RecordPredicate::Equals(rid) => std::slice::from_ref(rid),
+            RecordPredicate::In(rids) => rids.as_slice(),
+        };
+        if rids.is_empty() {
+            return ("false".to_string(), Vec::new());
+        }
+        let mut terms = Vec::with_capacity(rids.len());
+        let mut params = Vec::with_capacity(rids.len() * 3);
+        for rid in rids {
+            let param_key = Self::next_param_key(param_counter);
+            let tb_key = format!("{param_key}_tb");
+            let id_key = format!("{param_key}_id");
+            let rid_key = format!("{param_key}_rid");
+            terms.push(format!(
+                "({field} = type::record(${tb_key}, ${id_key}) \
+                 OR {field} = ${rid_key} \
+                 OR {field} = ${id_key} \
+                 OR {field}.id = ${id_key})"
+            ));
+            params.push((tb_key, serde_json::json!(rid.table())));
+            params.push((id_key, serde_json::json!(rid.id())));
+            params.push((
+                rid_key,
+                serde_json::json!(format!("{}:{}", rid.table(), rid.id())),
+            ));
+        }
+        if terms.len() == 1 {
+            (terms.remove(0), params)
+        } else {
+            (format!("({})", terms.join(" OR ")), params)
         }
     }
 

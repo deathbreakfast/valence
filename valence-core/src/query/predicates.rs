@@ -60,6 +60,11 @@ pub enum DateTimePredicate {
 pub enum RecordPredicate {
     /// Field equals value
     Equals(crate::RecordId),
+    /// Field equals any of the listed ids. An empty list matches no rows.
+    ///
+    /// Each id becomes one bound parameter pair, so keep the list within the backend's
+    /// parameter limit (SQLite allows 32,766 per statement).
+    In(Vec<crate::RecordId>),
 }
 
 /// Predicate for checking null/not-null on optional fields.

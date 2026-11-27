@@ -165,6 +165,65 @@ impl OwnershipService {
         Ok(rows.first().map_or(0, parse_count_from_row))
     }
 
+    /// One page of `record_id`s `owner_id` / `owner_type` owns in `valence_model` with the given
+    /// ownership `status` (`active` or `pending_deletion`), newest first.
+    ///
+    /// Orders by `created_at` then ownership row id, both descending. `created_at` is stamped
+    /// by every [`OwnershipService::ensure_active_ownership`] call, and that call runs again
+    /// when a record is re-saved, so this is most recently saved first, not first created.
+    /// Rows written before `created_at` existed sort last until they are rewritten. On a table
+    /// created before the column existed, the query fails with "no such column" until the next
+    /// ownership write adds it, and the SQL backends report that as an empty list. `limit` and `offset` are clamped to
+    /// [`MAX_QUERY_LIMIT`](crate::query::MAX_QUERY_LIMIT) and
+    /// [`MAX_QUERY_OFFSET`](crate::query::MAX_QUERY_OFFSET).
+    ///
+    /// # Security
+    ///
+    /// Privileged: reads ownership rows under a system-scoped valence and applies no privacy
+    /// policy, for any `owner_id`. Callers must pass the session actor's own owner id (as the
+    /// Your data page does), never an id taken from a request, or a member could list another
+    /// member's record ids. Authorize the caller before invoking.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the backend has no compiled form for the query or the query fails.
+    pub async fn list_owner_record_ids(
+        owner_id: &str,
+        owner_type: &str,
+        valence_model: &str,
+        status: &str,
+        limit: u32,
+        offset: u32,
+        v: &Valence,
+    ) -> Result<Vec<String>> {
+        let sys = system_valence(v);
+        let backend = Self::ownership_backend(valence_model, &sys)?;
+        super::ensure_lookup_index_once(&backend).await;
+        let owner_ids = owner_id_query_values(owner_id, owner_type);
+        let compiled = crate::compiled_query_factory::list_ownership_record_ids_for_schema(
+            backend.engine_id(),
+            valence_model,
+            &owner_ids,
+            owner_type,
+            status,
+            limit,
+            offset,
+        )?;
+        let rows = backend
+            .execute_compiled_query(&compiled)
+            .await
+            .map_err(|e| Error::database(e.to_string()))?;
+        Ok(rows
+            .into_iter()
+            .filter_map(|row| {
+                // SurrealQL `SELECT VALUE` yields the string; SQL yields `{ record_id }`.
+                row.as_str()
+                    .or_else(|| row.get("record_id").and_then(Value::as_str))
+                    .map(normalize_pending_deletion_query_value)
+            })
+            .collect())
+    }
+
     /// Roll up ownership sidecar rows for `owner_id` / `owner_type` across registered schemas.
     /// # Errors
     ///

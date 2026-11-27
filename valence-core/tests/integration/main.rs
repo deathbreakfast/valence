@@ -12,6 +12,7 @@ mod defer_to_edge;
 mod delete_now;
 mod delete_side_effects;
 mod deletion_set_null_apply;
+mod ownership_list;
 mod port_extensions;
 mod query_stats;
 mod register_logical;

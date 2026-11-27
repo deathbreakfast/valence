@@ -325,6 +325,95 @@ pub fn count_ownership_rows_for_schema(
     ))
 }
 
+/// Page of ownership `record_id`s for one schema / owner / status, newest first.
+///
+/// Orders by `created_at` then `id`, both descending; rows written before `created_at` was
+/// stamped have no value and come last. The SQL form sorts on `created_at IS NULL` first
+/// because Postgres puts NULLs first in a descending sort. `limit` and `offset` are clamped to
+/// [`MAX_QUERY_LIMIT`](crate::query::MAX_QUERY_LIMIT) and
+/// [`MAX_QUERY_OFFSET`](crate::query::MAX_QUERY_OFFSET) and inlined as integers.
+///
+/// # Errors
+///
+/// Returns an error when the requested operation cannot be completed.
+pub fn list_ownership_record_ids_for_schema(
+    engine_id: &str,
+    valence_model: &str,
+    owner_ids: &[String],
+    owner_type: &str,
+    status: &str,
+    limit: u32,
+    offset: u32,
+) -> Result<CompiledQuery> {
+    require_compiler(engine_id, "list_ownership_record_ids_for_schema")?;
+    let limit = limit.min(crate::query::MAX_QUERY_LIMIT);
+    let offset = offset.min(crate::query::MAX_QUERY_OFFSET);
+    if is_surreal(engine_id) {
+        let q = format!(
+            "SELECT VALUE record_id FROM valence_data_ownership \
+             WHERE valence_model = $model AND owner_id IN $owner_ids \
+             AND owner_type = $owner_type AND status = $status \
+             ORDER BY created_at DESC, id DESC LIMIT {limit} START {offset}"
+        );
+        return Ok(CompiledQuery::new(
+            q,
+            vec![
+                (
+                    "model".to_string(),
+                    Value::String(valence_model.to_string()),
+                ),
+                (
+                    "owner_ids".to_string(),
+                    Value::Array(owner_ids.iter().cloned().map(Value::String).collect()),
+                ),
+                (
+                    "owner_type".to_string(),
+                    Value::String(owner_type.to_string()),
+                ),
+                ("status".to_string(), Value::String(status.to_string())),
+            ],
+        ));
+    }
+    if is_sql_family(engine_id) {
+        let mut params = vec![
+            (
+                "model".to_string(),
+                Value::String(valence_model.to_string()),
+            ),
+            (
+                "owner_type".to_string(),
+                Value::String(owner_type.to_string()),
+            ),
+            ("status".to_string(), Value::String(status.to_string())),
+        ];
+        let mut owner_ors = Vec::with_capacity(owner_ids.len());
+        for (i, owner_id) in owner_ids.iter().enumerate() {
+            let key = format!("owner_id_{i}");
+            owner_ors.push(format!("owner_id = ${key}"));
+            params.push((key, Value::String(owner_id.clone())));
+        }
+        let owner_clause = match owner_ors.as_slice() {
+            [] => "0".to_string(),
+            [only] => only.clone(),
+            many => format!("({})", many.join(" OR ")),
+        };
+        let q = format!(
+            "SELECT record_id FROM valence_data_ownership \
+             WHERE valence_model = $model \
+               AND {owner_clause} \
+               AND owner_type = $owner_type \
+               AND status = $status \
+             ORDER BY created_at IS NULL, created_at DESC, id DESC \
+             LIMIT {limit} OFFSET {offset}"
+        );
+        return Ok(CompiledQuery::new(q, params));
+    }
+    Ok(CompiledQuery::new(
+        format!("/* list_ownership_record_ids_for_schema unsupported for {engine_id} */"),
+        vec![],
+    ))
+}
+
 /// Ownership `record_id`s among `record_ids` whose status is `pending_deletion`.
 ///
 /// Returns `None` for engines without a compiler here; callers fall back to point lookups.
@@ -467,6 +556,86 @@ mod tests {
         assert!(cq.query_string.contains("owner_id ="));
         assert!(!cq.query_string.contains("json_extract(body"));
         assert_eq!(cq.params.len(), 5);
+    }
+
+    #[test]
+    fn ownership_list_sql_orders_newest_first_and_clamps_paging_happy() {
+        let cq = list_ownership_record_ids_for_schema(
+            KnownEngines::SQLITE,
+            "task",
+            &["user:abc".into(), "abc".into()],
+            "user",
+            "active",
+            u32::MAX,
+            u32::MAX,
+        )
+        .expect("compile");
+        let q = &cq.query_string;
+        assert!(
+            q.contains("ORDER BY created_at IS NULL, created_at DESC, id DESC"),
+            "{q}"
+        );
+        assert!(q.contains("LIMIT 1000 OFFSET 1000000"), "{q}");
+        assert!(q.starts_with("SELECT record_id"), "{q}");
+        assert_eq!(cq.params.len(), 5);
+    }
+
+    #[test]
+    fn ownership_list_sql_sorts_missing_created_at_last_on_every_sql_engine_happy() {
+        for engine in [KnownEngines::SQLITE, KnownEngines::POSTGRES] {
+            let cq = list_ownership_record_ids_for_schema(
+                engine,
+                "task",
+                &["abc".into()],
+                "user",
+                "active",
+                10,
+                0,
+            )
+            .expect("compile");
+            let q = cq
+                .query_string
+                .split_whitespace()
+                .collect::<Vec<_>>()
+                .join(" ");
+            assert!(
+                q.contains("ORDER BY created_at IS NULL, created_at DESC, id DESC LIMIT 10"),
+                "{engine}: {q}"
+            );
+        }
+    }
+
+    #[test]
+    fn ownership_list_sql_without_owner_ids_matches_nothing_sad() {
+        let cq = list_ownership_record_ids_for_schema(
+            KnownEngines::SQLITE,
+            "task",
+            &[],
+            "user",
+            "active",
+            10,
+            0,
+        )
+        .expect("compile");
+        assert!(cq.query_string.contains("AND 0 AND"), "{}", cq.query_string);
+    }
+
+    #[test]
+    #[cfg(feature = "compiler-surreal")]
+    fn ownership_list_surreal_uses_start_happy() {
+        let cq = list_ownership_record_ids_for_schema(
+            KnownEngines::SURREALDB,
+            "task",
+            &["user:abc".into()],
+            "user",
+            "active",
+            25,
+            50,
+        )
+        .expect("compile");
+        let q = &cq.query_string;
+        assert!(q.contains("LIMIT 25 START 50"), "{q}");
+        assert!(q.contains("owner_id IN $owner_ids"), "{q}");
     }
 
     #[test]

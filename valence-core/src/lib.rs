@@ -177,7 +177,7 @@ pub use privacy::{
 };
 pub use query::{
     DateTimePredicate, HopSource, HopType, IdOnlyRecord, IntPredicate, NullPredicate, QueryCore,
-    QueryStats, RecordPredicate, SortDirection, StringPredicate, MAX_QUERY_HIDDEN_SCAN,
+    QueryStats, RecordPredicate, SortDirection, StringPredicate, SumGroup, MAX_QUERY_HIDDEN_SCAN,
     MAX_QUERY_LIMIT, MAX_QUERY_OFFSET,
 };
 pub use query_compiler::QueryCompiler;

@@ -87,6 +87,21 @@ pub struct QueryStats {
     pub resume: Option<u32>,
 }
 
+/// One group of a [`QueryCore::sum_values`] result.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct SumGroup {
+    /// Group field value as a string (record refs as their id), or `None` for rows where
+    /// it is missing or null. Always `None` for an ungrouped sum.
+    pub key: Option<String>,
+    /// Sum of the field over the group's readable rows (minor units for currency fields).
+    pub sum: i64,
+    /// Currency of the summed values when the field is a currency field.
+    pub currency: Option<crate::currency::CurrencyCode>,
+    /// Readable rows that contributed a value.
+    pub rows: u64,
+}
+
 /// Core query builder that compiles per registered engine.
 #[derive(Debug, Clone)]
 pub struct QueryCore {

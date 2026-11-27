@@ -34,10 +34,10 @@ pub async fn ensure_edges_postgres(pool: &PgPool) -> Result<()> {
     Ok(())
 }
 
-pub async fn ensure_table_postgres(pool: &PgPool, table: &str) -> Result<()> {
+pub async fn ensure_table_postgres(conn: &mut sqlx::PgConnection, table: &str) -> Result<()> {
     assert_safe_table(table)?;
     sqlx::query(sqlx::AssertSqlSafe(ensure_table_ddl_postgres(table)))
-        .execute(pool)
+        .execute(&mut *conn)
         .await
         .map_err(|e| Error::database(e.to_string()))?;
     Ok(())
@@ -135,33 +135,37 @@ pub async fn execute_select_postgres(
         .collect())
 }
 
-pub async fn get_record_postgres(pool: &PgPool, table: &str, id: &str) -> Result<Option<Value>> {
-    get_record_typed_postgres(pool, table, id).await
+pub async fn get_record_postgres(
+    conn: &mut sqlx::PgConnection,
+    table: &str,
+    id: &str,
+) -> Result<Option<Value>> {
+    get_record_typed_postgres(&mut *conn, table, id).await
 }
 
 pub async fn create_record_postgres(
-    pool: &PgPool,
+    conn: &mut sqlx::PgConnection,
     table: &str,
     content: Value,
     ensured: &WriteEnsureCache,
 ) -> Result<Value> {
     let layout = StorageLayout::resolve_for_write(table, &content)?;
-    create_record_typed_postgres(pool, &layout, content, ensured).await
+    create_record_typed_postgres(&mut *conn, &layout, content, ensured).await
 }
 
 pub async fn update_record_postgres(
-    pool: &PgPool,
+    conn: &mut sqlx::PgConnection,
     table: &str,
     id: &str,
     content: Value,
     ensured: &WriteEnsureCache,
 ) -> Result<Value> {
     let layout = StorageLayout::resolve_for_write(table, &content)?;
-    update_record_typed_postgres(pool, &layout, id, content, ensured).await
+    update_record_typed_postgres(&mut *conn, &layout, id, content, ensured).await
 }
 
 pub async fn merge_record_postgres(
-    pool: &PgPool,
+    conn: &mut sqlx::PgConnection,
     table: &str,
     id: &str,
     patch: Value,
@@ -177,7 +181,7 @@ pub async fn merge_record_postgres(
         // has. Fall back to the old fetch-then-full-update path for this case —
         // registered tables (the real Model CRUD path) skip this branch entirely
         // and get the atomic sparse write below.
-        let existing = get_record_postgres(pool, table, id)
+        let existing = get_record_postgres(&mut *conn, table, id)
             .await?
             .ok_or_else(|| Error::NotFound(format!("{table}:{id}")))?;
         let mut base = existing.as_object().cloned().unwrap_or_default();
@@ -185,13 +189,17 @@ pub async fn merge_record_postgres(
         if let Some(patch_obj) = patch.as_object() {
             json_merge(&mut base, patch_obj);
         }
-        return update_record_postgres(pool, table, id, Value::Object(base), ensured).await;
+        return update_record_postgres(&mut *conn, table, id, Value::Object(base), ensured).await;
     }
     let layout = StorageLayout::resolve_for_write(table, &patch)?;
-    merge_record_typed_postgres(pool, &layout, id, patch, ensured).await
+    merge_record_typed_postgres(&mut *conn, &layout, id, patch, ensured).await
 }
 
-pub async fn delete_record_postgres(pool: &PgPool, table: &str, id: &str) -> Result<()> {
+pub async fn delete_record_postgres(
+    conn: &mut sqlx::PgConnection,
+    table: &str,
+    id: &str,
+) -> Result<()> {
     assert_safe_table(table)?;
     let q = format!(
         "DELETE FROM {} WHERE id = $1",
@@ -199,7 +207,7 @@ pub async fn delete_record_postgres(pool: &PgPool, table: &str, id: &str) -> Res
     );
     sqlx::query(sqlx::AssertSqlSafe(q))
         .bind(id)
-        .execute(pool)
+        .execute(&mut *conn)
         .await
         .map_err(|e| Error::database(e.to_string()))?;
     Ok(())
@@ -326,12 +334,14 @@ pub async fn define_unique_index_postgres(
     field: &str,
     ensured: &WriteEnsureCache,
 ) -> Result<()> {
+    let mut conn = crate::typed_table::acquire(pool).await?;
+    let conn = &mut *conn;
     assert_safe_table(table)?;
     valence_core::safe_ident::assert_safe_ident(field)?;
     if let Ok(layout) = StorageLayout::from_registry_table(table) {
-        ensure_layout_for_write_postgres(pool, &layout, ensured).await?;
+        ensure_layout_for_write_postgres(&mut *conn, &layout, ensured).await?;
     } else {
-        ensure_table_postgres(pool, table).await?;
+        ensure_table_postgres(&mut *conn, table).await?;
         let layout = StorageLayout {
             table: table.to_string(),
             fields: vec![
@@ -358,9 +368,9 @@ pub async fn define_unique_index_postgres(
             ],
             retired: Vec::new(),
         };
-        ensure_layout_for_write_postgres(pool, &layout, ensured).await?;
+        ensure_layout_for_write_postgres(&mut *conn, &layout, ensured).await?;
     }
-    define_unique_index_column_postgres(pool, table, field).await
+    define_unique_index_column_postgres(&mut *conn, table, field).await
 }
 
 /// Idempotent non-unique index over `fields`, adding the columns first when the table
@@ -371,15 +381,17 @@ pub async fn define_index_postgres(
     fields: &[&str],
     ensured: &WriteEnsureCache,
 ) -> Result<()> {
+    let mut conn = crate::typed_table::acquire(pool).await?;
+    let conn = &mut *conn;
     let q = crate::sqlite_ops::composite_index_ddl(table, fields)?;
     if let Ok(layout) = StorageLayout::from_registry_table(table) {
-        ensure_layout_for_write_postgres(pool, &layout, ensured).await?;
+        ensure_layout_for_write_postgres(&mut *conn, &layout, ensured).await?;
     } else {
         let layout = crate::sqlite_ops::adhoc_index_layout(table, fields);
-        ensure_layout_for_write_postgres(pool, &layout, ensured).await?;
+        ensure_layout_for_write_postgres(&mut *conn, &layout, ensured).await?;
     }
     sqlx::query(sqlx::AssertSqlSafe(q))
-        .execute(pool)
+        .execute(&mut *conn)
         .await
         .map_err(|e| Error::database(e.to_string()))?;
     Ok(())
@@ -392,11 +404,13 @@ pub async fn apply_ttl_policy_postgres(
     _policy: &valence_core::ttl::SchemaTtlPolicy,
     ensured: &WriteEnsureCache,
 ) -> Result<()> {
+    let mut conn = crate::typed_table::acquire(pool).await?;
+    let conn = &mut *conn;
     assert_safe_table(table)?;
     if let Ok(layout) = StorageLayout::from_registry_table(table) {
-        ensure_layout_for_write_postgres(pool, &layout, ensured).await?;
+        ensure_layout_for_write_postgres(&mut *conn, &layout, ensured).await?;
     } else {
-        ensure_table_postgres(pool, table).await?;
+        ensure_table_postgres(&mut *conn, table).await?;
         let field = valence_core::ttl::EXPIRE_AT_FIELD;
         let layout = StorageLayout {
             table: table.to_string(),
@@ -424,7 +438,7 @@ pub async fn apply_ttl_policy_postgres(
             ],
             retired: Vec::new(),
         };
-        ensure_layout_for_write_postgres(pool, &layout, ensured).await?;
+        ensure_layout_for_write_postgres(&mut *conn, &layout, ensured).await?;
     }
     let field = valence_core::ttl::EXPIRE_AT_FIELD;
     valence_core::safe_ident::assert_safe_ident(field)?;
@@ -434,7 +448,7 @@ pub async fn apply_ttl_policy_postgres(
         valence_core::safe_ident::quote_sql_ident(table)
     );
     sqlx::query(sqlx::AssertSqlSafe(q))
-        .execute(pool)
+        .execute(&mut *conn)
         .await
         .map_err(|e| Error::database(e.to_string()))?;
     Ok(())

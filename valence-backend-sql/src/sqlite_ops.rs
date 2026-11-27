@@ -135,46 +135,46 @@ pub async fn ensure_edges_sqlite(pool: &sqlx::SqlitePool) -> Result<()> {
     Ok(())
 }
 
-pub async fn ensure_table_sqlite(pool: &sqlx::SqlitePool, table: &str) -> Result<()> {
+pub async fn ensure_table_sqlite(conn: &mut sqlx::SqliteConnection, table: &str) -> Result<()> {
     assert_safe_table(table)?;
     sqlx::query(sqlx::AssertSqlSafe(ensure_table(table)))
-        .execute(pool)
+        .execute(&mut *conn)
         .await
         .map_err(|e| Error::database(e.to_string()))?;
     Ok(())
 }
 
 pub async fn get_record_sqlite(
-    pool: &sqlx::SqlitePool,
+    conn: &mut sqlx::SqliteConnection,
     table: &str,
     id: &str,
 ) -> Result<Option<Value>> {
-    get_record_typed_sqlite(pool, table, id).await
+    get_record_typed_sqlite(&mut *conn, table, id).await
 }
 
 pub async fn create_record_sqlite(
-    pool: &sqlx::SqlitePool,
+    conn: &mut sqlx::SqliteConnection,
     table: &str,
     content: Value,
     ensured: &WriteEnsureCache,
 ) -> Result<Value> {
     let layout = StorageLayout::resolve_for_write(table, &content)?;
-    create_record_typed_sqlite(pool, &layout, content, ensured).await
+    create_record_typed_sqlite(&mut *conn, &layout, content, ensured).await
 }
 
 pub async fn update_record_sqlite(
-    pool: &sqlx::SqlitePool,
+    conn: &mut sqlx::SqliteConnection,
     table: &str,
     id: &str,
     content: Value,
     ensured: &WriteEnsureCache,
 ) -> Result<Value> {
     let layout = StorageLayout::resolve_for_write(table, &content)?;
-    update_record_typed_sqlite(pool, &layout, id, content, ensured).await
+    update_record_typed_sqlite(&mut *conn, &layout, id, content, ensured).await
 }
 
 pub async fn merge_record_sqlite(
-    pool: &sqlx::SqlitePool,
+    conn: &mut sqlx::SqliteConnection,
     table: &str,
     id: &str,
     patch: Value,
@@ -190,7 +190,7 @@ pub async fn merge_record_sqlite(
         // has. Fall back to the old fetch-then-full-update path for this case —
         // registered tables (the real Model CRUD path) skip this branch entirely
         // and get the atomic sparse write below.
-        let existing = get_record_sqlite(pool, table, id)
+        let existing = get_record_sqlite(&mut *conn, table, id)
             .await?
             .ok_or_else(|| Error::NotFound(format!("{table}:{id}")))?;
         let mut base = existing.as_object().cloned().unwrap_or_default();
@@ -198,10 +198,10 @@ pub async fn merge_record_sqlite(
         if let Some(patch_obj) = patch.as_object() {
             json_merge(&mut base, patch_obj);
         }
-        return update_record_sqlite(pool, table, id, Value::Object(base), ensured).await;
+        return update_record_sqlite(&mut *conn, table, id, Value::Object(base), ensured).await;
     }
     let layout = StorageLayout::resolve_for_write(table, &patch)?;
-    merge_record_typed_sqlite(pool, &layout, id, patch, ensured).await
+    merge_record_typed_sqlite(&mut *conn, &layout, id, patch, ensured).await
 }
 
 /// Compare-and-set merge on a table with a registered schema.
@@ -212,7 +212,7 @@ pub async fn merge_record_sqlite(
 /// the guard can't be checked in one statement); otherwise see
 /// the typed `compare_and_merge_record_typed_sqlite` (`NotFound`, `Conflict`, `Validation`).
 pub async fn compare_and_merge_record_sqlite(
-    pool: &sqlx::SqlitePool,
+    conn: &mut sqlx::SqliteConnection,
     table: &str,
     id: &str,
     field: &str,
@@ -229,10 +229,15 @@ pub async fn compare_and_merge_record_sqlite(
         )));
     }
     let layout = StorageLayout::resolve_for_write(table, &patch)?;
-    compare_and_merge_record_typed_sqlite(pool, &layout, id, field, expected, patch, ensured).await
+    compare_and_merge_record_typed_sqlite(&mut *conn, &layout, id, field, expected, patch, ensured)
+        .await
 }
 
-pub async fn delete_record_sqlite(pool: &sqlx::SqlitePool, table: &str, id: &str) -> Result<()> {
+pub async fn delete_record_sqlite(
+    conn: &mut sqlx::SqliteConnection,
+    table: &str,
+    id: &str,
+) -> Result<()> {
     assert_safe_table(table)?;
     let q = format!(
         "DELETE FROM {} WHERE {} = ?",
@@ -241,7 +246,7 @@ pub async fn delete_record_sqlite(pool: &sqlx::SqlitePool, table: &str, id: &str
     );
     sqlx::query(sqlx::AssertSqlSafe(q))
         .bind(id)
-        .execute(pool)
+        .execute(&mut *conn)
         .await
         .map_err(|e| Error::database(e.to_string()))?;
     Ok(())
@@ -370,13 +375,15 @@ pub async fn define_unique_index_sqlite(
     field: &str,
     ensured: &WriteEnsureCache,
 ) -> Result<()> {
+    let mut conn = crate::typed_table::acquire(pool).await?;
+    let conn = &mut *conn;
     assert_safe_table(table)?;
     valence_core::safe_ident::assert_safe_ident(field)?;
     // Ensure column exists: registry layout or placeholder table + column add via sync.
     if let Ok(layout) = StorageLayout::from_registry_table(table) {
-        ensure_layout_for_write_sqlite(pool, &layout, ensured).await?;
+        ensure_layout_for_write_sqlite(&mut *conn, &layout, ensured).await?;
     } else {
-        ensure_table_sqlite(pool, table).await?;
+        ensure_table_sqlite(&mut *conn, table).await?;
         let layout = StorageLayout {
             table: table.to_string(),
             fields: vec![
@@ -403,9 +410,9 @@ pub async fn define_unique_index_sqlite(
             ],
             retired: Vec::new(),
         };
-        ensure_layout_for_write_sqlite(pool, &layout, ensured).await?;
+        ensure_layout_for_write_sqlite(&mut *conn, &layout, ensured).await?;
     }
-    define_unique_index_column_sqlite(pool, table, field).await
+    define_unique_index_column_sqlite(&mut *conn, table, field).await
 }
 
 /// Columns for an index on a table with no registry layout: `id` plus each field as a
@@ -474,14 +481,17 @@ pub async fn define_index_sqlite(
     fields: &[&str],
     ensured: &WriteEnsureCache,
 ) -> Result<()> {
+    let mut conn = crate::typed_table::acquire(pool).await?;
+    let conn = &mut *conn;
     let q = composite_index_ddl(table, fields)?;
     if let Ok(layout) = StorageLayout::from_registry_table(table) {
-        ensure_layout_for_write_sqlite(pool, &layout, ensured).await?;
+        ensure_layout_for_write_sqlite(&mut *conn, &layout, ensured).await?;
     } else {
-        ensure_layout_for_write_sqlite(pool, &adhoc_index_layout(table, fields), ensured).await?;
+        ensure_layout_for_write_sqlite(&mut *conn, &adhoc_index_layout(table, fields), ensured)
+            .await?;
     }
     sqlx::query(sqlx::AssertSqlSafe(q))
-        .execute(pool)
+        .execute(&mut *conn)
         .await
         .map_err(|e| Error::database(e.to_string()))?;
     Ok(())
@@ -498,11 +508,13 @@ pub async fn apply_ttl_policy_sqlite(
     _policy: &valence_core::ttl::SchemaTtlPolicy,
     ensured: &WriteEnsureCache,
 ) -> Result<()> {
+    let mut conn = crate::typed_table::acquire(pool).await?;
+    let conn = &mut *conn;
     assert_safe_table(table)?;
     if let Ok(layout) = StorageLayout::from_registry_table(table) {
-        ensure_layout_for_write_sqlite(pool, &layout, ensured).await?;
+        ensure_layout_for_write_sqlite(&mut *conn, &layout, ensured).await?;
     } else {
-        ensure_table_sqlite(pool, table).await?;
+        ensure_table_sqlite(&mut *conn, table).await?;
         let field = valence_core::ttl::EXPIRE_AT_FIELD;
         let layout = StorageLayout {
             table: table.to_string(),
@@ -530,14 +542,14 @@ pub async fn apply_ttl_policy_sqlite(
             ],
             retired: Vec::new(),
         };
-        ensure_layout_for_write_sqlite(pool, &layout, ensured).await?;
+        ensure_layout_for_write_sqlite(&mut *conn, &layout, ensured).await?;
     }
     let field = valence_core::ttl::EXPIRE_AT_FIELD;
     valence_core::safe_ident::assert_safe_ident(field)?;
     let idx = format!("valence_ttl_expire_at_{table}");
     let q = format!("CREATE INDEX IF NOT EXISTS {idx} ON {table} ({field})");
     sqlx::query(sqlx::AssertSqlSafe(q))
-        .execute(pool)
+        .execute(&mut *conn)
         .await
         .map_err(|e| Error::database(e.to_string()))?;
     Ok(())
@@ -547,7 +559,7 @@ pub const fn sql_capabilities(label: &'static str) -> valence_core::BackendCapab
     valence_core::BackendCapabilities {
         supports_merge: true,
         supports_graph_edges: true,
-        supports_transactions: false,
+        supports_transactions: true,
         telemetry_label: label,
     }
 }

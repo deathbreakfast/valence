@@ -3,7 +3,7 @@
 use sqlx::postgres::PgPool;
 
 use valence_backend_sql::{
-    apply_ttl_policy_postgres, create_record_postgres, define_index_postgres,
+    apply_batch_postgres, apply_ttl_policy_postgres, create_record_postgres, define_index_postgres,
     define_unique_index_postgres, delete_record_postgres, ensure_edges_postgres,
     ensure_table_postgres, ensure_typed_table_postgres, execute_select_postgres,
     get_edge_sources_postgres, get_edge_targets_postgres, get_record_postgres,
@@ -12,7 +12,7 @@ use valence_backend_sql::{
     sync_typed_table_postgres, ttl_deferred, unrelate_edge_postgres, update_record_postgres,
     write_schema_version_postgres, WriteEnsureCache,
 };
-use valence_core::backend::{DatabaseBackend, EdgeRow};
+use valence_core::backend::{DatabaseBackend, EdgeRow, WriteOp};
 use valence_core::compiled_query::CompiledQuery;
 use valence_core::error::{Error, Result};
 use valence_core::record_id::RecordId;
@@ -103,6 +103,14 @@ impl PostgresBackend {
     pub fn pool(&self) -> &PgPool {
         &self.pool
     }
+
+    /// Check out one pool connection for a single backend op.
+    async fn conn(&self) -> Result<sqlx::pool::PoolConnection<sqlx::Postgres>> {
+        self.pool
+            .acquire()
+            .await
+            .map_err(|e| Error::database(e.to_string()))
+    }
 }
 
 #[async_trait::async_trait]
@@ -123,21 +131,21 @@ impl DatabaseBackend for PostgresBackend {
     }
 
     async fn ensure_schemaless_table(&self, table: &str) -> Result<()> {
-        ensure_table_postgres(&self.pool, table).await
+        ensure_table_postgres(&mut *self.conn().await?, table).await
     }
 
     async fn inspect_typed_layout(
         &self,
         table: &str,
     ) -> Result<Option<valence_core::storage_layout::StorageLayout>> {
-        inspect_typed_layout_postgres(&self.pool, table).await
+        inspect_typed_layout_postgres(&mut *self.conn().await?, table).await
     }
 
     async fn ensure_typed_table(
         &self,
         layout: &valence_core::storage_layout::StorageLayout,
     ) -> Result<()> {
-        ensure_typed_table_postgres(&self.pool, layout).await
+        ensure_typed_table_postgres(&mut *self.conn().await?, layout).await
     }
 
     async fn sync_typed_table(
@@ -156,7 +164,7 @@ impl DatabaseBackend for PostgresBackend {
     }
 
     async fn get_record(&self, table: &str, id: &str) -> Result<Option<serde_json::Value>> {
-        get_record_postgres(&self.pool, table, id).await
+        get_record_postgres(&mut *self.conn().await?, table, id).await
     }
 
     async fn create_record(
@@ -164,7 +172,13 @@ impl DatabaseBackend for PostgresBackend {
         table: &str,
         content: serde_json::Value,
     ) -> Result<serde_json::Value> {
-        create_record_postgres(&self.pool, table, content, &self.layout_ensured).await
+        create_record_postgres(
+            &mut *self.conn().await?,
+            table,
+            content,
+            &self.layout_ensured,
+        )
+        .await
     }
 
     async fn update_record(
@@ -173,7 +187,14 @@ impl DatabaseBackend for PostgresBackend {
         id: &str,
         content: serde_json::Value,
     ) -> Result<serde_json::Value> {
-        update_record_postgres(&self.pool, table, id, content, &self.layout_ensured).await
+        update_record_postgres(
+            &mut *self.conn().await?,
+            table,
+            id,
+            content,
+            &self.layout_ensured,
+        )
+        .await
     }
 
     async fn merge_record(
@@ -182,7 +203,14 @@ impl DatabaseBackend for PostgresBackend {
         id: &str,
         patch: serde_json::Value,
     ) -> Result<serde_json::Value> {
-        merge_record_postgres(&self.pool, table, id, patch, &self.layout_ensured).await
+        merge_record_postgres(
+            &mut *self.conn().await?,
+            table,
+            id,
+            patch,
+            &self.layout_ensured,
+        )
+        .await
     }
 
     async fn upsert_record(
@@ -203,7 +231,7 @@ impl DatabaseBackend for PostgresBackend {
     }
 
     async fn delete_record(&self, table: &str, id: &str) -> Result<()> {
-        delete_record_postgres(&self.pool, table, id).await
+        delete_record_postgres(&mut *self.conn().await?, table, id).await
     }
 
     async fn relate_edge(&self, from: &RecordId, edge_table: &str, to: &RecordId) -> Result<()> {
@@ -254,5 +282,9 @@ impl DatabaseBackend for PostgresBackend {
 
     async fn apply_ttl_policy(&self, table: &str, policy: &SchemaTtlPolicy) -> Result<()> {
         apply_ttl_policy_postgres(&self.pool, table, policy, &self.layout_ensured).await
+    }
+
+    async fn apply_batch(&self, ops: Vec<WriteOp>) -> Result<Vec<serde_json::Value>> {
+        apply_batch_postgres(&self.pool, ops, &self.layout_ensured).await
     }
 }

@@ -35,6 +35,7 @@ pub fn is_declared_data_use_method(method: &str) -> bool {
         | "query"
         | "execute"
         | "distinct_values"
+        | "sum_values"
         | "get_id_only"
         | "get_record_json"
         | "get_stored_record_json"
@@ -55,7 +56,8 @@ pub fn is_declared_data_use_method(method: &str) -> bool {
         m if m.starts_with("get_")
             || m.starts_with("relate_to_")
             || m.starts_with("unrelate_from_")
-            || m.starts_with("distinct_") =>
+            || m.starts_with("distinct_")
+            || m.starts_with("sum_") =>
         {
             true
         }
@@ -292,6 +294,10 @@ mod tests {
         assert!(is_declared_data_use_method("get_user"));
         assert!(is_declared_data_use_method("relate_to_owner_record"));
         assert!(is_declared_data_use_method("query"));
+        assert!(is_declared_data_use_method("distinct_status"));
+        assert!(is_declared_data_use_method("sum_values"));
+        assert!(is_declared_data_use_method("sum_amount"));
+        assert!(is_declared_data_use_method("sum_amount_by"));
         assert!(!is_declared_data_use_method("build"));
         assert!(!is_declared_data_use_method("commit"));
         assert!(!is_declared_data_use_method("where_name_eq"));

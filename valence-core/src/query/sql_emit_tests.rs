@@ -214,3 +214,37 @@ fn two_many_to_many_exists_clauses_keep_distinct_params() {
     let (sql, params) = query.to_sql().expect("sql");
     assert_distinct_bindings(&sql, &params, &["one", "two"]);
 }
+
+#[test]
+fn record_in_ors_one_record_match_per_id() {
+    use crate::query::RecordPredicate;
+    use crate::RecordId;
+    let query = QueryCore::new("dispute".to_string()).where_record(
+        "topic".to_string(),
+        RecordPredicate::In(vec![
+            RecordId::new("topic", "a"),
+            RecordId::new("topic", "b"),
+        ]),
+    );
+    let (sql, params) = query.to_surrealql().expect("compile");
+    assert!(
+        sql.contains("topic = type::record($param_0_tb, $param_0_id)"),
+        "{sql}"
+    );
+    assert!(
+        sql.contains("topic = type::record($param_1_tb, $param_1_id)"),
+        "{sql}"
+    );
+    assert!(sql.contains(") OR ("), "{sql}");
+    assert_eq!(params.len(), 6);
+}
+
+#[test]
+fn record_in_with_no_ids_emits_false() {
+    use crate::query::RecordPredicate;
+    let query = QueryCore::new("dispute".to_string())
+        .where_record("topic".to_string(), RecordPredicate::In(Vec::new()));
+    let (sql, params) = query.to_surrealql().expect("compile");
+    assert!(sql.contains("WHERE false"), "{sql}");
+    assert_eq!(params, Vec::<(String, serde_json::Value)>::new());
+}

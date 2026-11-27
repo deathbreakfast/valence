@@ -18,6 +18,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   loads the parent under the viewer's own handle and evaluates the parent's policy as the
   viewer, as before.
 
+### Added
+
+- `RecordPredicate::In(Vec<RecordId>)` filters a record field by a set of ids, and
+  `QueryCore::where_id_in` (plus a generated `where_id_in` on every model query builder) does
+  the same for the primary key. A known set of rows loads in one query, and read privacy still
+  runs on each row. An empty list matches nothing. Every backend gets it: the SQL emitter ORs
+  the per-id terms into one group the in-memory row filter already reads, and the SurrealQL
+  emitter ORs its record matches.
+
 ### Changed
 
 - `QueryCore::get_record_json` now applies the table's Read policy for the calling actor. A

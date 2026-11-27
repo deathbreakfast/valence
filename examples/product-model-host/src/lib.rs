@@ -175,6 +175,58 @@ mod tests {
         assert_eq!(ids(&rows), ids(&awaited));
     }
 
+    #[tokio::test]
+    async fn generated_where_id_in_loads_listed_rows_and_applies_read_privacy() {
+        use valence::DatabaseBackend;
+
+        use super::OwnedNote;
+
+        let backend: Arc<dyn DatabaseBackend> = Arc::new(InMemoryBackend::new());
+        for (id, owner) in [
+            ("n1", "alice"),
+            ("n2", "bob"),
+            ("n3", "alice"),
+            ("n4", "alice"),
+        ] {
+            backend
+                .create_record(
+                    "owned_note",
+                    serde_json::json!({"id": {"table": "owned_note", "id": id}, "user": owner}),
+                )
+                .await
+                .unwrap();
+        }
+        let valence = Valence::builder()
+            .add_backend("default", backend)
+            .with_actor(Actor::User {
+                user_id: "alice".into(),
+            })
+            .build()
+            .expect("build");
+
+        // n2 is bob's, so read privacy drops it; n4 is alice's but not in the list.
+        let wanted = ["n1", "n2", "n3"]
+            .iter()
+            .map(|id| RecordId::new("owned_note", *id))
+            .collect();
+        let rows = OwnedNote::query(&valence, valence::use_!(r"When the **product-model-host** suite loads a known list of sample notes, we **fetch them by id in one query** so the test can check the id filter and per-row read privacy. Developers running that example suite use this result."))
+            .where_id_in(wanted)
+            .await
+            .expect("where_id_in");
+        let mut ids: Vec<String> = rows
+            .iter()
+            .map(|n| n.id().expect("id").id().to_string())
+            .collect();
+        ids.sort();
+        assert_eq!(ids, ["n1", "n3"]);
+
+        let none = OwnedNote::query(&valence, valence::use_!(r"When the **product-model-host** suite loads a known list of sample notes, we **fetch them by id in one query** so the test can check the id filter and per-row read privacy. Developers running that example suite use this result."))
+            .where_id_in(Vec::new())
+            .await
+            .expect("empty where_id_in");
+        assert_eq!(none.len(), 0);
+    }
+
     /// Raw-seed one `edge_doc` owned by alice and an `edge_label` each for alice and bob.
     async fn seed_edge_rows() -> std::sync::Arc<dyn valence::DatabaseBackend> {
         use valence::DatabaseBackend;

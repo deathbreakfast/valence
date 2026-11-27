@@ -30,6 +30,15 @@ impl QueryCore {
         self
     }
 
+    /// Keep only rows whose primary key is one of `ids`. An empty list matches no rows.
+    ///
+    /// Loads a known set of rows in one query instead of one get each; read privacy still
+    /// runs on every returned row.
+    #[must_use]
+    pub fn where_id_in(self, ids: Vec<crate::RecordId>) -> Self {
+        self.where_record("id".to_string(), RecordPredicate::In(ids))
+    }
+
     /// Add a WHERE clause for null/not-null check on optional fields
     #[must_use]
     pub fn where_null(mut self, field: String, predicate: NullPredicate) -> Self {

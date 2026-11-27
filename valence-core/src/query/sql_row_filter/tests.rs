@@ -603,6 +603,90 @@ mod clause_matching {
         let params = vec![("param_10", "y".into()), ("param_1", "x".into())];
         assert_eq!(run(sql, params), ["r1", "r2"]);
     }
+
+    fn team_in_query(teams: &[&str], user: Option<&str>) -> CompiledQuery {
+        let rids = teams.iter().map(|t| RecordId::new("team", *t)).collect();
+        let mut q = QueryCore::new("team_member".to_string())
+            .where_record("team_id".into(), RecordPredicate::In(rids));
+        if let Some(u) = user {
+            q = q.where_record(
+                "user_id".into(),
+                RecordPredicate::Equals(RecordId::new("user", u)),
+            );
+        }
+        let (sql, params) = q.to_sql().expect("compile");
+        CompiledQuery::new(sql, params)
+    }
+
+    #[test]
+    fn record_in_emits_one_flat_or_group_with_two_params_per_id() {
+        let cq = team_in_query(&["t1", "t2"], None);
+        assert!(
+            cq.query_string.contains(
+                "(team_id = $param_0 OR team_id = $param_1 OR team_id = $param_2 OR team_id = $param_3)"
+            ),
+            "{}",
+            cq.query_string
+        );
+        let values: Vec<_> = cq.params.iter().map(|(_, v)| v.clone()).collect();
+        assert_eq!(
+            values,
+            [
+                serde_json::json!("team:t1"),
+                serde_json::json!("t1"),
+                serde_json::json!("team:t2"),
+                serde_json::json!("t2"),
+            ]
+        );
+    }
+
+    #[test]
+    fn record_in_keeps_rows_whose_field_is_any_listed_id() {
+        let out = apply_equality_where(edges(), &team_in_query(&["t2", "t9"], None));
+        assert_eq!(ids(&out), ["e3"]);
+        let out = apply_equality_where(edges(), &team_in_query(&["t1", "t2"], None));
+        assert_eq!(ids(&out), ["e1", "e2", "e3"]);
+    }
+
+    #[test]
+    fn record_in_matches_bare_string_foreign_keys() {
+        let rows = vec![
+            serde_json::json!({"id": "e1", "team_id": "t1"}),
+            serde_json::json!({"id": "e2", "team_id": "team:t2"}),
+            serde_json::json!({"id": "e3", "team_id": "t3"}),
+        ];
+        let out = apply_equality_where(rows, &team_in_query(&["t1", "t2"], None));
+        assert_eq!(ids(&out), ["e1", "e2"]);
+    }
+
+    #[test]
+    fn record_in_with_no_ids_matches_nothing() {
+        let cq = team_in_query(&[], None);
+        assert!(cq.query_string.contains("1 = 0"), "{}", cq.query_string);
+        let out = apply_equality_where(edges(), &cq);
+        assert!(out.is_empty(), "got {:?}", ids(&out));
+    }
+
+    #[test]
+    fn record_in_and_a_second_predicate_both_apply() {
+        let out = apply_equality_where(edges(), &team_in_query(&["t1", "t2"], Some("uA")));
+        assert_eq!(ids(&out), ["e1", "e3"]);
+        let out = apply_equality_where(edges(), &team_in_query(&["t2"], Some("uB")));
+        assert!(out.is_empty(), "got {:?}", ids(&out));
+    }
+
+    #[test]
+    fn where_id_in_filters_the_primary_key() {
+        let (sql, params) = QueryCore::new("team_member".to_string())
+            .where_id_in(vec![
+                RecordId::new("team_member", "e1"),
+                RecordId::new("team_member", "e3"),
+            ])
+            .to_sql()
+            .expect("compile");
+        let out = apply_equality_where(edges(), &CompiledQuery::new(sql, params));
+        assert_eq!(ids(&out), ["e1", "e3"]);
+    }
 }
 
 fn ids(rows: &[serde_json::Value]) -> Vec<&str> {

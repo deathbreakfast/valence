@@ -83,6 +83,7 @@ pub(super) fn schema_field_and_edge_tokens(
     };
 
     let encrypted = field.encrypted;
+    let personal = field.personal;
     let unique = field.unique;
     let indexed = field.indexed;
     let policies_code = generate_policies_code(field_policies);
@@ -117,6 +118,7 @@ pub(super) fn schema_field_and_edge_tokens(
             validations: #validations_code,
             policies: #policies_code,
             encrypted: #encrypted,
+            personal: #personal,
             enum_variants: Vec::new(),
             enum_type: None,
             model_path: #model_path_code,

@@ -23,6 +23,8 @@ pub struct ParsedField {
     pub validations: Vec<String>,
     pub policies: Option<ParsedPolicies>,
     pub encrypted: bool,
+    /// Holds personal data about a person; listed on the Data uses pages.
+    pub personal: bool,
 }
 
 pub struct FieldsConfig {
@@ -69,6 +71,7 @@ pub enum FieldAttr {
     Validations(ValidatorList),
     Policies(PoliciesConfig),
     Encrypted(LitBool),
+    Personal(LitBool),
 }
 
 impl Parse for FieldAttr {
@@ -92,6 +95,7 @@ impl Parse for FieldAttr {
             "validations" => Ok(FieldAttr::Validations(input.parse()?)),
             "policies" => Ok(FieldAttr::Policies(input.parse()?)),
             "encrypted" => Ok(FieldAttr::Encrypted(input.parse()?)),
+            "personal" => Ok(FieldAttr::Personal(input.parse()?)),
             _ => Err(syn::Error::new(
                 key.span(),
                 format!("Unknown field attribute: {key}"),
@@ -160,6 +164,7 @@ pub(super) fn parse_fields(config: &FieldsConfig) -> Result<Vec<ParsedField>> {
         let mut validations = Vec::new();
         let mut policies = None;
         let mut encrypted = false;
+        let mut personal = false;
 
         for attr in &field.attrs {
             match attr {
@@ -182,6 +187,7 @@ pub(super) fn parse_fields(config: &FieldsConfig) -> Result<Vec<ParsedField>> {
                 }
                 FieldAttr::Policies(p) => policies = Some(parse_policies_config(p)?),
                 FieldAttr::Encrypted(b) => encrypted = b.value,
+                FieldAttr::Personal(b) => personal = b.value,
             }
         }
 
@@ -204,6 +210,7 @@ pub(super) fn parse_fields(config: &FieldsConfig) -> Result<Vec<ParsedField>> {
             validations,
             policies,
             encrypted,
+            personal,
         });
     }
 

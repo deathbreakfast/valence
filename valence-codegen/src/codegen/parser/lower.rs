@@ -181,6 +181,7 @@ fn lower_fields(fields: &[ParsedField]) -> (Vec<SchemaField>, Vec<SchemaEdge>) {
             // tell which fields a viewer may not be able to read.
             policies: field.policies.as_ref().map(lower_policies_names_only),
             encrypted: field.encrypted,
+            personal: field.personal,
             enum_variants,
             enum_type,
             model_path: field.model_path.clone(),

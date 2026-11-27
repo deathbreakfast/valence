@@ -1499,20 +1499,21 @@ impl ScoreTrackerSchema {
                         valence::SchemaField { name : "id".to_string(), field_type :
                         "string".to_string(), primary : true, nullable : false, indexed :
                         false, unique : false, default : None, fk : None, validations :
-                        Vec::new(), policies : None, encrypted : false, enum_variants :
-                        Vec::new(), enum_type : None, model_path : None, },
-                        valence::SchemaField { name : "user".to_string(), field_type :
+                        Vec::new(), policies : None, encrypted : false, personal : false,
+                        enum_variants : Vec::new(), enum_type : None, model_path : None,
+                        }, valence::SchemaField { name : "user".to_string(), field_type :
                         "record(user)".to_string(), primary : false, nullable : false,
                         indexed : false, unique : false, default : None, fk :
                         Some(valence::ForeignKeyRef { ref_table : "user".to_string(),
                         field : "id".to_string(), }), validations : Vec::new(), policies
-                        : None, encrypted : false, enum_variants : Vec::new(), enum_type
-                        : None, model_path : None, }, valence::SchemaField { name :
-                        "value".to_string(), field_type : "integer".to_string(), primary
-                        : false, nullable : false, indexed : false, unique : false,
-                        default : None, fk : None, validations : Vec::new(), policies :
-                        None, encrypted : false, enum_variants : Vec::new(), enum_type :
-                        None, model_path : None, }
+                        : None, encrypted : false, personal : false, enum_variants :
+                        Vec::new(), enum_type : None, model_path : None, },
+                        valence::SchemaField { name : "value".to_string(), field_type :
+                        "integer".to_string(), primary : false, nullable : false, indexed
+                        : false, unique : false, default : None, fk : None, validations :
+                        Vec::new(), policies : None, encrypted : false, personal : false,
+                        enum_variants : Vec::new(), enum_type : None, model_path : None,
+                        }
                     ],
                     edges: vec![
                         valence::SchemaEdge { from_field : "user".to_string(), to_table :

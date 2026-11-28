@@ -5,6 +5,7 @@ use serde_json::{json, Value};
 use uuid::Uuid;
 
 use crate::actor::Actor;
+use crate::admin_entity_delete::{DeletionRequestMeta, DELETION_DUE_DAYS};
 use crate::data_use::DataUsePurpose;
 use crate::error::{Error, Result};
 use crate::query::{QueryCore, SortDirection, StringPredicate};
@@ -19,6 +20,8 @@ fn system_valence(v: &Valence) -> Valence {
 pub struct DeletionService;
 
 impl DeletionService {
+    /// Create a queued run with no reason or ticket; see [`Self::create_run_with_request`].
+    ///
     /// # Errors
     ///
     /// Returns an error when the requested operation cannot be completed.
@@ -28,10 +31,36 @@ impl DeletionService {
         actor_json: Value,
         v: &Valence,
     ) -> Result<String> {
+        Self::create_run_with_request(
+            root_table,
+            root_record_id,
+            actor_json,
+            &DeletionRequestMeta::default(),
+            v,
+        )
+        .await
+    }
+
+    /// Create a queued run that also records why it was asked for (`reason`, `ticket`) and
+    /// `due_at`, [`DELETION_DUE_DAYS`] after `requested_at`. The due date is fixed here and
+    /// never recomputed.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the requested operation cannot be completed.
+    pub async fn create_run_with_request(
+        root_table: &str,
+        root_record_id: &str,
+        actor_json: Value,
+        meta: &DeletionRequestMeta,
+        v: &Valence,
+    ) -> Result<String> {
         let run_id = Uuid::new_v4().to_string();
         let requested_by = actor_json.to_string();
         let sys = system_valence(v);
         let backend = sys.backend_for_table("valence_deletion_run")?;
+        let requested_at = Utc::now();
+        let due_at = requested_at + chrono::Duration::days(DELETION_DUE_DAYS);
         let row = json!({
             "id": run_id,
             "root_table": root_table,
@@ -41,7 +70,10 @@ impl DeletionService {
             "completed_steps": 0,
             "failed_steps": 0,
             "requested_by": requested_by,
-            "requested_at": Utc::now(),
+            "requested_at": requested_at,
+            "due_at": due_at,
+            "reason": meta.reason,
+            "ticket": meta.ticket,
         });
         backend
             .create_record("valence_deletion_run", row)

@@ -10,6 +10,44 @@ use std::collections::BTreeMap;
 use super::PrivacyEvaluator;
 use crate::privacy::types::{PrivacyOperation, PrivacyPolicy, PrivacyRule};
 
+/// Policy name reported when no allow rule matched.
+const DEFAULT_DENY: &str = "default_deny";
+
+/// Outcome of an entity access check, keeping the denying policy's name.
+enum AccessDecision {
+    Allow,
+    Deny { policy: String, message: String },
+}
+
+impl AccessDecision {
+    fn deny_default(message: String) -> Self {
+        Self::Deny {
+            policy: DEFAULT_DENY.to_string(),
+            message,
+        }
+    }
+}
+
+/// Schema name of the field read rule that denied `viewer`, given that `policy` (parsed from
+/// `rules`, bucket by bucket in the same order) already denied.
+fn field_denial_policy(
+    rules: &SchemaPolicyRules,
+    policy: &PrivacyPolicy,
+    record: &serde_json::Value,
+    viewer: &crate::actor::Actor,
+) -> String {
+    rules
+        .always_block
+        .iter()
+        .zip(&policy.always_block)
+        .chain(rules.block.iter().zip(&policy.block))
+        .find(|(_, rule)| (rule.check)(record, viewer))
+        .map(|(named, _)| named)
+        .or_else(|| rules.allow.first())
+        .or_else(|| rules.always_allow.first())
+        .map_or_else(|| DEFAULT_DENY.to_string(), |rule| rule.name.clone())
+}
+
 impl PrivacyEvaluator {
     /// Filter fields from a record based on field-level privacy policies.
     /// # Errors
@@ -20,8 +58,35 @@ impl PrivacyEvaluator {
         raw_data: &serde_json::Value,
         viewer: &crate::actor::Actor,
     ) -> Result<(BTreeMap<String, JsonValue>, Vec<String>)> {
+        let (filtered, hidden, _) =
+            Self::filter_entity_fields_with_policies(schema, raw_data, viewer)?;
+        Ok((filtered, hidden))
+    }
+
+    /// Like [`Self::filter_entity_fields`], and also names the read policy that hid each
+    /// hidden field (field name to policy name).
+    ///
+    /// The name is the field's matching `always_block`/`block` rule, else its first allow
+    /// rule (the one the viewer didn't satisfy), else `default_deny`.
+    /// # Errors
+    ///
+    /// Returns an error when a field policy rule cannot run synchronously.
+    #[allow(
+        clippy::type_complexity,
+        reason = "visible fields, hidden field names, and hidden field policies"
+    )]
+    pub fn filter_entity_fields_with_policies(
+        schema: &SchemaMetadata,
+        raw_data: &serde_json::Value,
+        viewer: &crate::actor::Actor,
+    ) -> Result<(
+        BTreeMap<String, JsonValue>,
+        Vec<String>,
+        BTreeMap<String, String>,
+    )> {
         let mut filtered = BTreeMap::new();
         let mut hidden = Vec::new();
+        let mut hidden_policies = BTreeMap::new();
 
         for field in &schema.schema.fields {
             let field_name = field.name.as_str();
@@ -33,22 +98,23 @@ impl PrivacyEvaluator {
                 continue;
             };
 
-            if let Some(field_value) = raw_data.get(field_name) {
-                match Self::evaluate(&field_policy, raw_data, viewer) {
-                    Ok(()) => {
-                        filtered.insert(field_name.to_string(), field_value.clone());
-                    }
-                    Err(_) => {
-                        hidden.push(field_name.to_string());
-                    }
+            if Self::evaluate(&field_policy, raw_data, viewer).is_ok() {
+                if let Some(field_value) = raw_data.get(field_name) {
+                    filtered.insert(field_name.to_string(), field_value.clone());
                 }
             } else {
-                match Self::evaluate(&field_policy, raw_data, viewer) {
-                    Ok(()) => {}
-                    Err(_) => {
-                        hidden.push(field_name.to_string());
-                    }
-                }
+                hidden.push(field_name.to_string());
+                hidden_policies.insert(
+                    field_name.to_string(),
+                    field
+                        .policies
+                        .as_ref()
+                        .and_then(|p| p.read.as_ref())
+                        .map_or_else(
+                            || DEFAULT_DENY.to_string(),
+                            |rules| field_denial_policy(rules, &field_policy, raw_data, viewer),
+                        ),
+                );
             }
         }
 
@@ -63,7 +129,7 @@ impl PrivacyEvaluator {
         let table = schema.table_name;
         crate::instrumentation::privacy::record_field_redactions(table, &hidden);
 
-        Ok((filtered, hidden))
+        Ok((filtered, hidden, hidden_policies))
     }
 
     /// Enforce field-level `update` policies on a write to an existing row.
@@ -195,9 +261,69 @@ impl PrivacyEvaluator {
         v: &Valence,
         ctx: &mut super::defer_to_edge::DeferCtx,
     ) -> Result<()> {
+        match Self::decide_entity_access_with_ctx(schema, op, raw_data, v, ctx).await? {
+            AccessDecision::Allow => Ok(()),
+            AccessDecision::Deny { message, .. } => Err(Error::Privacy(message)),
+        }
+    }
+
+    /// Entity Read check that names the policy which denied, for
+    /// [`crate::query::QueryCore::get_entity_read`].
+    ///
+    /// Returns `Ok(None)` when the actor may read the row and `Ok(Some(policy))` when a
+    /// policy denies it. `policy` is the matching `always_block`/`block` rule's name,
+    /// `default_deny` when no allow rule matched, or `defer_to_edge:<edge>` when the
+    /// denial came from the parent the read defers to.
+    /// # Errors
+    ///
+    /// Policy evaluation errors other than a denial.
+    pub async fn entity_read_denial(
+        schema: &SchemaMetadata,
+        raw_data: &serde_json::Value,
+        v: &Valence,
+    ) -> Result<Option<String>> {
+        let mut ctx = super::defer_to_edge::DeferCtx::default();
+        match Self::decide_entity_access_with_ctx(
+            schema,
+            PrivacyOperation::Read,
+            raw_data,
+            v,
+            &mut ctx,
+        )
+        .await?
+        {
+            AccessDecision::Allow => Ok(None),
+            AccessDecision::Deny { policy, .. } => Ok(Some(policy)),
+        }
+    }
+
+    /// First rule in `rules` that matches, short-circuiting like `eval_rules_any_match`.
+    async fn first_matching_rule<'a>(
+        rules: &[&'a crate::schema_api::SchemaPolicyRule],
+        op: PrivacyOperation,
+        raw_data: &serde_json::Value,
+        v: &Valence,
+        table: &str,
+        rule_phase: &str,
+    ) -> Result<Option<&'a crate::schema_api::SchemaPolicyRule>> {
+        for rule in rules {
+            if Self::evaluate_policy_rule(rule, op, raw_data, v, table, rule_phase).await? {
+                return Ok(Some(rule));
+            }
+        }
+        Ok(None)
+    }
+
+    async fn decide_entity_access_with_ctx(
+        schema: &SchemaMetadata,
+        op: PrivacyOperation,
+        raw_data: &serde_json::Value,
+        v: &Valence,
+        ctx: &mut super::defer_to_edge::DeferCtx,
+    ) -> Result<AccessDecision> {
         // Bench/test seam only — never enable in production hosts.
         if crate::privacy::privacy_bypass_active() {
-            return Ok(());
+            return Ok(AccessDecision::Allow);
         }
 
         let mut always_block = Vec::<&crate::schema_api::SchemaPolicyRule>::new();
@@ -228,7 +354,8 @@ impl PrivacyEvaluator {
             .active_backend()
             .map_or("unknown", |b| b.capabilities().telemetry_label);
 
-        if Self::eval_rules_any_match(&always_block, op, raw_data, v, table, "always_block").await?
+        if let Some(matched) =
+            Self::first_matching_rule(&always_block, op, raw_data, v, table, "always_block").await?
         {
             let rule_name = always_block
                 .first()
@@ -240,15 +367,20 @@ impl PrivacyEvaluator {
                 telemetry_label,
                 &msg,
             );
-            return Err(Error::Privacy(msg));
+            return Ok(AccessDecision::Deny {
+                policy: matched.name.clone(),
+                message: msg,
+            });
         }
 
         if Self::eval_rules_any_match(&always_allow, op, raw_data, v, table, "always_allow").await?
         {
-            return Ok(());
+            return Ok(AccessDecision::Allow);
         }
 
-        if Self::eval_rules_any_match(&block, op, raw_data, v, table, "block").await? {
+        if let Some(matched) =
+            Self::first_matching_rule(&block, op, raw_data, v, table, "block").await?
+        {
             let msg = "Access denied by block policy".to_string();
             crate::instrumentation::privacy::record_privacy_denial(
                 table,
@@ -256,15 +388,18 @@ impl PrivacyEvaluator {
                 telemetry_label,
                 &msg,
             );
-            return Err(Error::Privacy(msg));
+            return Ok(AccessDecision::Deny {
+                policy: matched.name.clone(),
+                message: msg,
+            });
         }
 
         if Self::eval_rules_any_match(&allow, op, raw_data, v, table, "allow").await? {
-            return Ok(());
+            return Ok(AccessDecision::Allow);
         }
 
         if let Some(ref edge) = Self::resolve_defer_to_edge(schema, op) {
-            return Self::evaluate_defer_to_edge(
+            return match Self::evaluate_defer_to_edge(
                 schema,
                 op,
                 raw_data,
@@ -273,7 +408,15 @@ impl PrivacyEvaluator {
                 ctx,
                 telemetry_label,
             )
-            .await;
+            .await
+            {
+                Ok(()) => Ok(AccessDecision::Allow),
+                Err(Error::Privacy(message)) => Ok(AccessDecision::Deny {
+                    policy: format!("defer_to_edge:{edge}"),
+                    message,
+                }),
+                Err(e) => Err(e),
+            };
         }
 
         if always_allow.is_empty()
@@ -284,26 +427,26 @@ impl PrivacyEvaluator {
             // Default-deny for missing entity policies. System retains access so platform/bootstrap
             // paths on unpolicied internal tables keep working; declare explicit policies for data.
             if v.actor().is_system() {
-                return Ok(());
+                return Ok(AccessDecision::Allow);
             }
             let msg = "Access denied: no privacy policies configured (default deny)".to_string();
             crate::instrumentation::privacy::record_privacy_denial(
                 table,
-                "default_deny",
+                DEFAULT_DENY,
                 telemetry_label,
                 &msg,
             );
-            return Err(Error::Privacy(msg));
+            return Ok(AccessDecision::deny_default(msg));
         }
 
         let msg = "Access denied: no matching allow policy".to_string();
         crate::instrumentation::privacy::record_privacy_denial(
             table,
-            "default_deny",
+            DEFAULT_DENY,
             telemetry_label,
             &msg,
         );
-        Err(Error::Privacy(msg))
+        Ok(AccessDecision::deny_default(msg))
     }
 
     /// Convenience wrapper for the read operation (used by `QueryCore::get_entity`).

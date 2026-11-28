@@ -32,6 +32,7 @@ fn leak_retired_schema(table: &str) -> &'static Schema {
             validations: Vec::new(),
             policies: None,
             encrypted: false,
+            personal: false,
             enum_variants: Vec::new(),
             enum_type: None,
             model_path: None,

@@ -1389,17 +1389,18 @@ impl TestNotificationSchema {
                         valence::SchemaField { name : "id".to_string(), field_type :
                         "string".to_string(), primary : true, nullable : false, indexed :
                         false, unique : false, default : None, fk : None, validations :
-                        Vec::new(), policies : None, encrypted : false, enum_variants :
-                        Vec::new(), enum_type : None, model_path : None, },
-                        valence::SchemaField { name : "message".to_string(), field_type :
-                        "string".to_string(), primary : false, nullable : false, indexed
-                        : false, unique : false, default : None, fk : None, validations :
-                        Vec::new(), policies : None, encrypted : false, enum_variants :
-                        Vec::new(), enum_type : None, model_path : None, },
-                        valence::SchemaField { name : "read_at".to_string(), field_type :
-                        "timestamptz".to_string(), primary : false, nullable : true,
-                        indexed : false, unique : false, default : None, fk : None,
-                        validations : Vec::new(), policies : None, encrypted : false,
+                        Vec::new(), policies : None, encrypted : false, personal : false,
+                        enum_variants : Vec::new(), enum_type : None, model_path : None,
+                        }, valence::SchemaField { name : "message".to_string(),
+                        field_type : "string".to_string(), primary : false, nullable :
+                        false, indexed : false, unique : false, default : None, fk :
+                        None, validations : Vec::new(), policies : None, encrypted :
+                        false, personal : false, enum_variants : Vec::new(), enum_type :
+                        None, model_path : None, }, valence::SchemaField { name :
+                        "read_at".to_string(), field_type : "timestamptz".to_string(),
+                        primary : false, nullable : true, indexed : false, unique :
+                        false, default : None, fk : None, validations : Vec::new(),
+                        policies : None, encrypted : false, personal : false,
                         enum_variants : Vec::new(), enum_type : None, model_path : None,
                         }
                     ],

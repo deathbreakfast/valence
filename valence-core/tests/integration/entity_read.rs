@@ -53,6 +53,7 @@ fn field(name: &str, policies: Option<SchemaPolicies>) -> SchemaField {
         enum_variants: vec![],
         enum_type: None,
         model_path: None,
+        personal: false,
     }
 }
 

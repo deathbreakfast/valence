@@ -7,6 +7,10 @@ pub fn thing_to_id_only(mut s: String) -> String {
         .replace(['⟩', '⟨', '›', '‹', '»', '«'], "")
         .trim()
         .to_string();
+    // SurrealDB 3 wraps ids that need escaping (hyphenated UUIDs) in backticks.
+    if let Some(bare) = s.strip_prefix('`').and_then(|rest| rest.strip_suffix('`')) {
+        s = bare.to_string();
+    }
     s
 }
 
@@ -33,4 +37,24 @@ pub fn record_id_json(table: &str, id: &str) -> serde_json::Value {
         "table": table,
         "id": id,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn thing_to_id_only_strips_backticks_happy() {
+        let uuid = "aa90d993-a8e9-4433-bdcb-db51b35ceb9d";
+        assert_eq!(thing_to_id_only(format!("team:`{uuid}`")), uuid);
+        assert_eq!(thing_to_id_only("team:⟨abc⟩".into()), "abc");
+        let mut row = serde_json::json!({"id": format!("team:`{uuid}`")});
+        normalize_record_id_field("team", &mut row);
+        assert_eq!(row["id"], serde_json::json!({"table": "team", "id": uuid}));
+    }
+
+    #[test]
+    fn thing_to_id_only_keeps_lone_backtick_sad() {
+        assert_eq!(thing_to_id_only("team:`abc".into()), "`abc");
+    }
 }

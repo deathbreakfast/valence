@@ -46,6 +46,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `OwnershipService::ensure_active_ownership` stamps `created_at` (unix milliseconds) on
   ownership rows. Rows written before this change have no `created_at` and sort last in
   `list_owner_record_ids` until they are rewritten. A re-save stamps a new `created_at`.
+
+- `InMemoryBackend::define_unique_index` now succeeds and enforces the index: every write path
+  (create, update, merge, compare-and-merge, upsert and batches) checks the table's unique fields
+  under the table write lock and returns `Error::unique_violation` on a duplicate, so racing
+  writes can't both land. Before, it returned `Error::Internal`, and any `unique: true` write
+  failed on plain mem.
+
 - `QueryCore::get_record_json` now applies the table's Read policy for the calling actor. A
   row the actor can't read returns `Ok(None)`, fields hidden by their own read policy are left
   out, and a table with no registered schema returns `Error::NotFound`. Framework code that
@@ -59,6 +66,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `AUTHENTICATED` would also open the records to every signed-in user.
 
 ### Fixed
+
+- Record ids that SurrealDB 3 quotes in backticks (hyphenated UUIDs, for one) now come back bare
+  from `extract_id_from_record_display`, `row_json::thing_to_id_only`
+  (so rows read from Surreal carry the bare id) and the Surreal backend's id helpers. Before, the backticks stayed in the id and the next lookup by it found nothing.
 
 - A bare `Model::update` (or an existing-row `upsert`) by a caller who can't read an optional
   field no longer nulls it. Fields hidden from the caller on the stored row and left unset in
@@ -86,6 +97,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   no TTL path still warn. The once-per-table emit counter and metric are unchanged.
 
 ### Added
+
+- `Error::is_hidden_conflict()` matches the error a `unique: true` write gets when the clashing
+  row is one the caller can't read (`Error::conflict()`). Callers no longer need to compare its
+  message.
 
 - `ModelBatch` and the generated `batch_create` / `batch_update` methods write several model
   rows all-or-nothing under the session actor. Each row passes the same privacy,

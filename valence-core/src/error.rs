@@ -118,13 +118,26 @@ impl Error {
     ///
     /// The message names no table, field or row, so it never varies with what the hidden
     /// row holds. A conflict is still visible as a failure: a unique value is global.
+    /// Match it with [`Error::is_hidden_conflict`].
     #[must_use]
     pub fn conflict() -> Self {
-        Self::Validation("Write conflicts with an existing record".to_string())
+        Self::Validation(HIDDEN_CONFLICT_MESSAGE.to_string())
+    }
+
+    /// True for the error [`Error::conflict`] builds: a `unique: true` write clashed
+    /// with a row the actor cannot read.
+    ///
+    /// The error carries no table or field, so callers with more than one unique field
+    /// can't tell which one clashed. A clash on a readable row is an
+    /// [`Error::unique_violation`] instead.
+    #[must_use]
+    pub fn is_hidden_conflict(&self) -> bool {
+        matches!(self, Error::Validation(message) if message == HIDDEN_CONFLICT_MESSAGE)
     }
 
     /// The `(table, field)` named by an [`Error::unique_violation`], or `None`
-    /// for any other error.
+    /// for any other error, including [`Error::conflict`] (see
+    /// [`Error::is_hidden_conflict`]).
     #[must_use]
     pub fn as_unique_violation(&self) -> Option<(&str, &str)> {
         let Error::Validation(message) = self else {
@@ -137,6 +150,7 @@ impl Error {
 }
 
 const UNIQUE_VIOLATION_PREFIX: &str = "Unique constraint violation on ";
+const HIDDEN_CONFLICT_MESSAGE: &str = "Write conflicts with an existing record";
 
 impl From<&str> for Error {
     fn from(s: &str) -> Self {
@@ -189,6 +203,26 @@ mod tests {
         assert_eq!(
             Error::database("Unique constraint violation on tag.name_key").as_unique_violation(),
             None
+        );
+    }
+
+    #[test]
+    fn conflict_is_hidden_conflict_happy() {
+        let err = Error::conflict();
+        assert!(err.is_hidden_conflict());
+        assert_eq!(err.as_unique_violation(), None);
+        assert_eq!(
+            err.to_string(),
+            "Validation error: Write conflicts with an existing record"
+        );
+    }
+
+    #[test]
+    fn is_hidden_conflict_ignores_other_errors_sad() {
+        assert!(!Error::unique_violation("tag", "name_key").is_hidden_conflict());
+        assert!(!Error::Validation("name is required".into()).is_hidden_conflict());
+        assert!(
+            !Error::Conflict("Write conflicts with an existing record".into()).is_hidden_conflict()
         );
     }
 
